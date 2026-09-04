@@ -7,6 +7,12 @@ export type SimulationResult = S["SimulationResult"];
 export type GeometryPayload = S["GeometryPayload"];
 export type ComparisonTable = S["ComparisonTable"];
 export type MeshSurface = S["MeshSurface"];
+export type LayoutPayload = S["LayoutPayload"];
+export type RoomPayload = S["RoomPayload"];
+export type PartitionPayload = S["PartitionPayload"];
+export type ShelterUseSummary = S["ShelterUseSummary"];
+export type DesignSummary = S["DesignSummary"];
+export type ComfortModel = S["ComfortModel"];
 export type SurfaceSeries = S["SurfaceSeries"];
 export type SurfaceResults = S["SurfaceResults"];
 export type HourlySeries = S["HourlySeries"];
@@ -71,6 +77,10 @@ const post = <T,>(path: string, payload: unknown) =>
 export const api = {
   meta: () => get<MetaResponse>("/api/meta"),
   materials: () => get<Material[]>("/api/materials"),
+  shelterUses: () => get<ShelterUseSummary[]>("/api/shelter-uses"),
+  designs: () => get<DesignSummary[]>("/api/designs"),
+  comfortModels: () => get<ComfortModel[]>("/api/comfort-models"),
+  design: (identifier: string) => get<DesignSpec>(`/api/designs/${identifier}`),
   references: () => get<DesignSpec[]>("/api/references"),
   reference: (name: string) => get<DesignSpec>(`/api/references/${name}`),
   validation: () => get<ValidationEvidence>("/api/validation"),
@@ -85,12 +95,14 @@ export const api = {
     surface_output?: boolean;
     with_uncertainty?: boolean;
     with_reference?: boolean;
+    comfort_model_id?: string | null;
   }) => post<SimulationResult>("/api/simulate", payload),
   compare: (payload: {
     designs: DesignSpec[];
     site_id?: string | null;
     period: Window;
     conditioned_run?: boolean;
+    comfort_model_id?: string | null;
   }) => post<ComparisonTable>("/api/compare", payload),
   cfd: (designHash: string) =>
     get<CFDExport | CFDAbsent>(`/api/cfd/${designHash}`),

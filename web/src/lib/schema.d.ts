@@ -123,6 +123,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/designs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Designs */
+        get: operations["designs_api_designs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/designs/{identifier}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Design */
+        get: operations["design_api_designs__identifier__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/comfort-models": {
         parameters: {
             query?: never;
@@ -149,6 +183,23 @@ export interface paths {
         };
         /** Comfort Targets */
         get: operations["comfort_targets_api_comfort_targets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/shelter-uses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Shelter Uses */
+        get: operations["shelter_uses_api_shelter_uses_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -873,6 +924,8 @@ export interface components {
             conditioned_run: boolean;
             /** Reference */
             reference?: string | null;
+            /** Comfort Model Id */
+            comfort_model_id?: string | null;
         };
         /** ComparisonRow */
         ComparisonRow: {
@@ -1008,6 +1061,7 @@ export interface components {
             /** @default single_room */
             arrangement: components["schemas"]["Arrangement"];
             /** @default {
+             *       "use": "barrack",
              *       "floor_area_m2": 40,
              *       "aspect_ratio": 1.6,
              *       "ceiling_height_m": 2.7,
@@ -1073,6 +1127,23 @@ export interface components {
              * @default []
              */
             tags: string[];
+        };
+        /** DesignSummary */
+        DesignSummary: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Use */
+            use: string;
+            /** Arrangement */
+            arrangement: string;
+            /** Floor Area M2 */
+            floor_area_m2: number;
+            /** Occupants */
+            occupants: number;
+            /** Is Reference */
+            is_reference: boolean;
         };
         /** DesignVariable */
         DesignVariable: {
@@ -1204,6 +1275,7 @@ export interface components {
             zone_volumes_m3: {
                 [key: string]: number;
             };
+            layout?: components["schemas"]["LayoutPayload"] | null;
             /**
              * Warnings
              * @default []
@@ -1215,6 +1287,8 @@ export interface components {
             design: components["schemas"]["DesignSpec"];
             /** Site Id */
             site_id?: string | null;
+            /** Comfort Model Id */
+            comfort_model_id?: string | null;
         };
         /** GlazingSystem */
         GlazingSystem: {
@@ -1341,6 +1415,28 @@ export interface components {
             material_id: string;
             /** Thickness M */
             thickness_m: number;
+        };
+        /** LayoutPayload */
+        LayoutPayload: {
+            use: components["schemas"]["ShelterUse"];
+            /** Label */
+            label: string;
+            /** Description */
+            description: string;
+            /** Rooms */
+            rooms: components["schemas"]["RoomPayload"][];
+            /** Partitions */
+            partitions: components["schemas"]["PartitionPayload"][];
+            /** Partition Area M2 */
+            partition_area_m2: number;
+            /** Thermal Zoning */
+            thermal_zoning: string;
+            /**
+             * Notes
+             * @default []
+             */
+            notes: string[];
+            source: components["schemas"]["SourceRef"];
         };
         /** Material */
         Material: {
@@ -1709,6 +1805,24 @@ export interface components {
             /** Knee Hash */
             knee_hash?: string | null;
         };
+        /** PartitionPayload */
+        PartitionPayload: {
+            /** X0 */
+            x0: number;
+            /** Y0 */
+            y0: number;
+            /** X1 */
+            x1: number;
+            /** Y1 */
+            y1: number;
+            /** Height M */
+            height_m: number;
+            /** Between */
+            between: [
+                string,
+                string
+            ];
+        };
         /** PhaseChangeMaterial */
         PhaseChangeMaterial: {
             /** Id */
@@ -1742,6 +1856,8 @@ export interface components {
         };
         /** PlanSpec */
         PlanSpec: {
+            /** @default barrack */
+            use: components["schemas"]["ShelterUse"];
             /**
              * Floor Area M2
              * @default 40
@@ -1829,6 +1945,26 @@ export interface components {
             /** Delta Cost Inr */
             delta_cost_inr?: number | null;
         };
+        /** RoomPayload */
+        RoomPayload: {
+            /** Name */
+            name: string;
+            /** X0 */
+            x0: number;
+            /** Y0 */
+            y0: number;
+            /** X1 */
+            x1: number;
+            /** Y1 */
+            y1: number;
+            /** Area M2 */
+            area_m2: number;
+            /**
+             * Heated
+             * @default true
+             */
+            heated: boolean;
+        };
         /** RunPeriod */
         RunPeriod: {
             /**
@@ -1852,6 +1988,34 @@ export interface components {
          * @enum {string}
          */
         Severity: "info" | "warning" | "severe" | "fatal";
+        /**
+         * ShelterUse
+         * @enum {string}
+         */
+        ShelterUse: "barrack" | "medical_post" | "command_post" | "kitchen_mess" | "workshop" | "store" | "relief_shelter";
+        /** ShelterUseSummary */
+        ShelterUseSummary: {
+            use: components["schemas"]["ShelterUse"];
+            /** Label */
+            label: string;
+            /** Description */
+            description: string;
+            /** Area Per Person M2 */
+            area_per_person_m2: number;
+            /** Default Occupants */
+            default_occupants: number;
+            /** Default Floor Area M2 */
+            default_floor_area_m2: number;
+            /** Ceiling Height M */
+            ceiling_height_m: number;
+            /** Aspect Ratio */
+            aspect_ratio: number;
+            /** Room Names */
+            room_names: string[];
+            plan: components["schemas"]["PlanSpec"];
+            occupancy: components["schemas"]["OccupancySpec"];
+            source: components["schemas"]["SourceRef"];
+        };
         /** ShutterSpec */
         ShutterSpec: {
             /**
@@ -1924,6 +2088,8 @@ export interface components {
             with_reference: boolean;
             /** Reference */
             reference?: string | null;
+            /** Comfort Model Id */
+            comfort_model_id?: string | null;
             /** Shutter Compliance Override */
             shutter_compliance_override?: number | null;
         };
@@ -2129,6 +2295,8 @@ export interface components {
             design: components["schemas"]["DesignSpec"];
             /** Site Id */
             site_id?: string | null;
+            /** Comfort Model Id */
+            comfort_model_id?: string | null;
             /** @default {
              *       "start": "2019-01-01",
              *       "end": "2019-01-31"
@@ -2199,6 +2367,19 @@ export interface components {
              * @default
              */
             note: string;
+            /** Elevation Min M */
+            elevation_min_m?: number | null;
+            /** Elevation Max M */
+            elevation_max_m?: number | null;
+            /** Site Elevation M */
+            site_elevation_m?: number | null;
+            /** Sample Spacing M */
+            sample_spacing_m?: number | null;
+            /**
+             * Vertex Count
+             * @default 0
+             */
+            vertex_count: number;
         };
         /** UncertainRange */
         UncertainRange: {
@@ -2525,6 +2706,57 @@ export interface operations {
             };
         };
     };
+    designs_api_designs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DesignSummary"][];
+                };
+            };
+        };
+    };
+    design_api_designs__identifier__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                identifier: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DesignSpec"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     comfort_models_api_comfort_models_get: {
         parameters: {
             query?: never;
@@ -2561,6 +2793,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FixedComfortTarget"][];
+                };
+            };
+        };
+    };
+    shelter_uses_api_shelter_uses_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShelterUseSummary"][];
                 };
             };
         };
@@ -2904,6 +3156,8 @@ export interface operations {
                 site_id?: string | null;
                 inner_radius_m?: number;
                 outer_radius_m?: number;
+                /** @description return the ring built from the horizon table instead of the measured elevation model */
+                skyline_only?: boolean;
             };
             header?: never;
             path?: never;

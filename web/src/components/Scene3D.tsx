@@ -4,7 +4,9 @@ import type { GeometryPayload, SunPath, SurfaceResults, TerrainMesh } from "../l
 import {
   COLD_TO_HOT,
   SOLAR_SCALE,
+  TURBO,
   lerpColour,
+  rampCss,
   num,
 } from "../lib/format";
 import {
@@ -13,6 +15,7 @@ import {
   createSky,
   createSunDisc,
   createSunPathArc,
+  createLayout,
   createTerrain,
   disposeObject,
   makeLabel,
@@ -20,6 +23,20 @@ import {
 } from "../lib/scene";
 
 export type DisplayMode = "construction" | "surface_temperature" | "incident_solar";
+
+export type RampName = "diverging" | "spectral" | "solar";
+
+const RAMP_LABEL: Record<RampName, string> = {
+  diverging: "Cold to hot",
+  spectral: "Spectral",
+  solar: "Night to sun",
+};
+
+function rampStops(mode: DisplayMode, ramp: RampName): [number, number, number][] {
+  if (ramp === "spectral") return TURBO;
+  if (ramp === "solar") return SOLAR_SCALE;
+  return mode === "incident_solar" ? SOLAR_SCALE : COLD_TO_HOT;
+}
 
 const MODE_LABEL: Record<DisplayMode, string> = {
   construction: "Construction",
@@ -133,6 +150,12 @@ export function Scene3D({
 
   const [playing, setPlaying] = useState(false);
   const [cut, setCut] = useState(false);
+  const [showRooms, setShowRooms] = useState(true);
+  const [ramp, setRamp] = useState<RampName>("diverging");
+  const [rooms, setRooms] = useState<
+    { name: string; colour: string; area: number }[]
+  >([]);
+  const layoutRef = useRef<THREE.Group | null>(null);
   const [hover, setHover] = useState<Hover | null>(null);
   const [engagedHint, setEngagedHint] = useState(false);
 
@@ -247,9 +270,12 @@ export function Scene3D({
       ? sceneRadius / terrain.outer_radius_m
       : 1;
 
+    const measured = Boolean(
+      terrain && terrain.positions.length > 0 && !terrain.derived_from_horizon,
+    );
     const sky = createSky(sceneRadius * 3.2);
     scene.add(sky.mesh);
-    scene.add(createGround(sceneRadius * 1.4));
+    scene.add(createGround(measured ? buildingRadius * 1.9 : sceneRadius * 1.4));
     scene.add(createCompass(buildingRadius * 2.1));
 
     for (const [text, azimuth] of [
@@ -274,8 +300,22 @@ export function Scene3D({
         Array.from(terrain.positions),
         Array.from(terrain.indices),
         terrainScale,
+        measured,
       );
       if (mesh) scene.add(mesh);
+    }
+
+    if (geometry.layout) {
+      const built = createLayout(geometry.layout, {
+        x: -centre.x,
+        y: -centre.y,
+      });
+      layoutRef.current = built.group;
+      setRooms(built.rooms);
+      scene.add(built.group);
+    } else {
+      layoutRef.current = null;
+      setRooms([]);
     }
 
     const sunGroup = new THREE.Group();
@@ -454,7 +494,7 @@ export function Scene3D({
 
   useEffect(() => {
     const meshes = meshesRef.current;
-    const stops = mode === "incident_solar" ? SOLAR_SCALE : COLD_TO_HOT;
+    const stops = rampStops(mode, ramp);
     meshes.forEach((mesh, name) => {
       const material = mesh.material as THREE.MeshLambertMaterial;
       if (mode === "construction" || !extent) {
@@ -468,7 +508,11 @@ export function Scene3D({
       }
       material.color.set(lerpColour((value - extent.min) / (extent.max - extent.min), stops));
     });
-  }, [mode, safeIndex, valuesBySurface, extent, geometry]);
+  }, [mode, ramp, safeIndex, valuesBySurface, extent, geometry]);
+
+  useEffect(() => {
+    if (layoutRef.current) layoutRef.current.visible = showRooms;
+  }, [showRooms, geometry]);
 
   useEffect(() => {
     const box = new THREE.Box3();
@@ -535,6 +579,33 @@ export function Scene3D({
         >
           Section
         </button>
+        {geometry.layout && (
+          <button
+            type="button"
+            onClick={() => setShowRooms((value) => !value)}
+            className={`rounded-md border px-2.5 py-1 text-xs ${
+              showRooms
+                ? "border-[var(--color-ink)] bg-[var(--color-ink)] text-white"
+                : "border-[var(--color-line)] bg-white text-[var(--color-ink-faint)]"
+            }`}
+          >
+            Rooms
+          </button>
+        )}
+        {mode !== "construction" && (
+          <select
+            value={ramp}
+            onChange={(event) => setRamp(event.target.value as RampName)}
+            className="rounded-md border border-[var(--color-line)] bg-white px-2 py-1 text-xs text-[var(--color-ink-faint)]"
+            aria-label="Colour scale"
+          >
+            {(Object.keys(RAMP_LABEL) as RampName[]).map((item) => (
+              <option key={item} value={item}>
+                {RAMP_LABEL[item]}
+              </option>
+            ))}
+          </select>
+        )}
         {hours.length > 0 && (
           <>
             <button
@@ -690,6 +761,35 @@ export function Scene3D({
         </div>
       )}
 
+      {geometry.layout && showRooms && rooms.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+            <span className="font-medium text-[var(--color-ink)]">
+              {geometry.layout.label}
+            </span>
+            {rooms.map((room) => (
+              <span
+                key={room.name}
+                className="flex items-center gap-1.5 text-[var(--color-ink-faint)]"
+              >
+                <i
+                  className="inline-block h-2.5 w-2.5 rounded-sm"
+                  style={{ background: room.colour }}
+                />
+                {room.name}
+                <span className="tabular-nums">{num(room.area, 1)} m²</span>
+              </span>
+            ))}
+          </div>
+          <p className="text-xs text-[var(--color-ink-faint)]">
+            {geometry.layout.thermal_zoning}{" "}
+            {num(geometry.layout.partition_area_m2, 1)} m² of partition enters the
+            simulation as internal mass.
+            {geometry.layout.notes.length > 1 ? ` ${geometry.layout.notes[0]}` : ""}
+          </p>
+        </div>
+      )}
+
       {painted && extent && (
         <div className="flex items-center gap-2 text-xs text-[var(--color-ink-faint)]">
           <span className="tabular-nums">
@@ -697,13 +797,7 @@ export function Scene3D({
           </span>
           <span
             className="h-2.5 flex-1 rounded"
-            style={{
-              background: `linear-gradient(to right, ${[0, 0.25, 0.5, 0.75, 1]
-                .map((t) =>
-                  lerpColour(t, mode === "incident_solar" ? SOLAR_SCALE : COLD_TO_HOT),
-                )
-                .join(", ")})`,
-            }}
+            style={{ background: rampCss(rampStops(mode, ramp)) }}
           />
           <span className="tabular-nums">
             {num(extent.max)} {unit}
@@ -715,9 +809,11 @@ export function Scene3D({
         {painted
           ? "Every painted face is one number EnergyPlus reported for that surface at that hour, and the face names come from the simulation, so the value sits on the surface it belongs to."
           : "Material colours come from the Layer 0 database. The geometry drawn here is the geometry that was simulated, built from one description."}{" "}
-        {terrain?.derived_from_horizon
-          ? "The skyline is the terrain horizon table the simulation shades with, so what blocks the sun on screen is what blocked it in the run."
-          : "No terrain horizon is attached, so the simulation assumed a flat skyline in every direction."}{" "}
+        {terrain && terrain.positions.length > 0
+          ? terrain.derived_from_horizon
+            ? "The skyline is the terrain horizon table the simulation shades with, so what blocks the sun on screen is what blocked it in the run."
+            : `The ground is the measured elevation model, ${terrain.vertex_count.toLocaleString()} points out to ${Math.round((terrain.outer_radius_m ?? 0) / 1000)} km, shaded by height above the site. It is the same ground the horizon profile the simulation shades with was measured from, and it is scaled uniformly so every skyline angle is the angle the run used. Heights are not exaggerated, and the colour is a display ramp over real elevation rather than observed snow.`
+          : "No terrain is attached, so the simulation assumed a flat skyline in every direction."}{" "}
         There is no air temperature or velocity field here because the engine computes
         neither; those live in the detailed analysis tab and come from a fluid dynamics
         solver.

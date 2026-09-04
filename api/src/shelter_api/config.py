@@ -18,6 +18,7 @@ def _path(name: str, default: Path) -> Path:
 
 @dataclass
 class Settings:
+    designs_dir: Path | None = None
     data_dir: Path = field(default_factory=lambda: _path("SHELTER_DATA_DIR",
                                                          DEFAULT_DATA_DIR))
     database_path: Path | None = None
@@ -51,6 +52,8 @@ class Settings:
                                    or self.data_dir / "runs.db")
         self.cfd_dir = _path("SHELTER_CFD_DIR", self.cfd_dir
                              or self.data_dir / "cfd")
+        self.designs_dir = Path(self.designs_dir
+                                or self.data_dir / "designs")
         self.validation_dir = _path("SHELTER_VALIDATION_DIR",
                                     self.validation_dir
                                     or self.data_dir / "validation")

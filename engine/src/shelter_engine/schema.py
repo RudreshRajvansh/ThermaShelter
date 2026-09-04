@@ -20,6 +20,16 @@ class Arrangement(str, Enum):
     VESTIBULE = "vestibule"
 
 
+class ShelterUse(str, Enum):
+    BARRACK = "barrack"
+    MEDICAL_POST = "medical_post"
+    COMMAND_POST = "command_post"
+    KITCHEN_MESS = "kitchen_mess"
+    WORKSHOP = "workshop"
+    STORE = "store"
+    RELIEF_SHELTER = "relief_shelter"
+
+
 class Facade(str, Enum):
     NORTH = "north"
     SOUTH = "south"
@@ -339,6 +349,7 @@ class VentilationSpec(Frozen):
 
 
 class PlanSpec(Frozen):
+    use: ShelterUse = ShelterUse.BARRACK
     floor_area_m2: float = Field(default=40.0, ge=4.0, le=2000.0)
     aspect_ratio: float = Field(default=1.60, ge=0.25, le=6.0)
     ceiling_height_m: float = Field(default=2.70, ge=1.8, le=6.0)
@@ -703,6 +714,11 @@ class TerrainMesh(Frozen):
     derived_from_horizon: bool
     source: SourceRef
     note: str = ""
+    elevation_min_m: float | None = None
+    elevation_max_m: float | None = None
+    site_elevation_m: float | None = None
+    sample_spacing_m: float | None = None
+    vertex_count: int = 0
 
 
 class ClimateMonth(Frozen):
@@ -830,6 +846,37 @@ class MeshSurface(Frozen):
         return self
 
 
+class RoomPayload(Frozen):
+    name: str
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+    area_m2: float = Field(ge=0.0)
+    heated: bool = True
+
+
+class PartitionPayload(Frozen):
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+    height_m: float = Field(gt=0.0)
+    between: tuple[str, str]
+
+
+class LayoutPayload(Frozen):
+    use: ShelterUse
+    label: str
+    description: str
+    rooms: tuple[RoomPayload, ...]
+    partitions: tuple[PartitionPayload, ...]
+    partition_area_m2: float = Field(ge=0.0)
+    thermal_zoning: str
+    notes: tuple[str, ...] = ()
+    source: SourceRef
+
+
 class GeometryPayload(Frozen):
     design_hash: str
     arrangement: Arrangement
@@ -838,6 +885,7 @@ class GeometryPayload(Frozen):
     bounds_max: tuple[float, float, float]
     surfaces: tuple[MeshSurface, ...]
     zone_volumes_m3: dict[str, float]
+    layout: LayoutPayload | None = None
     warnings: tuple[EngineWarning, ...] = ()
 
     @property

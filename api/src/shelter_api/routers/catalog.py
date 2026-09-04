@@ -13,8 +13,11 @@ from shelter_engine.schema import (ClimateObjective, ComfortModel, DesignSpec,
                                    Material, PhaseChangeMaterial, SourceStatus)
 
 from ..deps import Context, get_context
-from ..schemas import (HealthResponse, MetaResponse, SiteSummary,
-                       ValidationEvidence)
+from shelter_engine.programme import PROGRAMMES, occupancy_for, plan_for
+
+from ..schemas import (DesignSummary, HealthResponse, MetaResponse,
+                       ShelterUseSummary,
+                       SiteSummary, ValidationEvidence)
 
 router = APIRouter()
 
@@ -141,6 +144,55 @@ def reference(name: str, context: Context = Depends(get_context)) -> DesignSpec:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
+def _design_files(context: Context) -> dict[str, Path]:
+    directory = Path(context.settings.designs_dir)
+    if not directory.is_dir():
+        return {}
+    return {path.stem: path for path in sorted(directory.glob("*.json"))}
+
+
+def _load_design(path: Path) -> DesignSpec:
+    return DesignSpec.model_validate(json.loads(path.read_text(encoding="utf-8")))
+
+
+@router.get("/designs", response_model=list[DesignSummary], tags=["catalogue"])
+def designs(context: Context = Depends(get_context)) -> list[DesignSummary]:
+    reference_names = {design.name for design in context.references.designs}
+    summaries: list[DesignSummary] = []
+    for identifier, path in _design_files(context).items():
+        try:
+            design = _load_design(path)
+        except (OSError, ValueError):
+            continue
+        summaries.append(DesignSummary(
+            id=identifier,
+            name=design.name,
+            use=design.plan.use.value,
+            arrangement=design.arrangement.value,
+            floor_area_m2=design.plan.floor_area_m2,
+            occupants=design.occupancy.occupants,
+            is_reference=design.name in reference_names,
+        ))
+    return summaries
+
+
+@router.get("/designs/{identifier}", response_model=DesignSpec, tags=["catalogue"])
+def design(identifier: str, context: Context = Depends(get_context)) -> DesignSpec:
+    path = _design_files(context).get(identifier)
+    if path is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(f"There is no stored design called {identifier!r}. "
+                    f"The library holds {sorted(_design_files(context))}."))
+    try:
+        return _load_design(path)
+    except (OSError, ValueError) as error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"The stored design {identifier!r} could not be read: {error}",
+        ) from error
+
+
 @router.get("/comfort-models", response_model=list[ComfortModel], tags=["catalogue"])
 def comfort_models(context: Context = Depends(get_context)) -> list[ComfortModel]:
     return list(context.catalogue.adaptive)
@@ -150,6 +202,20 @@ def comfort_models(context: Context = Depends(get_context)) -> list[ComfortModel
             tags=["catalogue"])
 def comfort_targets(context: Context = Depends(get_context)) -> list[FixedComfortTarget]:
     return list(context.catalogue.fixed)
+
+
+@router.get("/shelter-uses", response_model=list[ShelterUseSummary],
+            tags=["catalogue"])
+def shelter_uses() -> list[ShelterUseSummary]:
+    return [ShelterUseSummary(
+        use=spec.use, label=spec.label, description=spec.description,
+        area_per_person_m2=spec.area_per_person_m2,
+        default_occupants=spec.occupants,
+        default_floor_area_m2=spec.floor_area_m2,
+        ceiling_height_m=spec.ceiling_height_m, aspect_ratio=spec.aspect_ratio,
+        room_names=tuple(room.name for room in spec.rooms),
+        plan=plan_for(spec.use), occupancy=occupancy_for(spec.use),
+        source=spec.source) for spec in PROGRAMMES.values()]
 
 
 @router.get("/fuels", response_model=list[FuelModel], tags=["catalogue"])

@@ -47,6 +47,8 @@ type State = {
   period: Window;
   surfacePeriod: Window;
   liveMode: boolean;
+  comfortModelId: string | null;
+  setComfortModelId: (value: string | null) => void;
   setLiveMode: (value: boolean) => void;
 };
 
@@ -55,13 +57,14 @@ const Context = createContext<State | null>(null);
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [step, setStep] = useState<Step>("Site Input");
   const [siteId, setSiteId] = useState<string | null>(null);
-  const [designName, setDesignName] = useState("candidate_single_room");
+  const [designName, setDesignName] = useState("single_room");
   const [design, setDesign] = useState<DesignSpec | null>(null);
   const [overrides, setOverrides] = useState<DesignSpec | null>(null);
   const [displayMode, setDisplayMode] = useState<DisplayMode>("construction");
   const [hourIndex, setHourIndex] = useState(0);
   const [cooling, setCooling] = useState(false);
   const [liveMode, setLiveMode] = useState(false);
+  const [comfortModelId, setComfortModelId] = useState<string | null>(null);
 
   const applyOverride = useCallback((next: DesignSpec) => setOverrides(next), []);
   const clearOverride = useCallback(() => setOverrides(null), []);
@@ -91,6 +94,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       period: cooling ? SUMMER : WINTER,
       surfacePeriod: cooling ? SURFACE_SUMMER : SURFACE_WINTER,
       liveMode,
+      comfortModelId,
+      setComfortModelId,
       setLiveMode,
     }),
     [
@@ -105,6 +110,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       hourIndex,
       cooling,
       liveMode,
+      comfortModelId,
     ],
   );
 

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from datetime import date as date_type
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -36,7 +35,7 @@ def _translate(error: Exception) -> HTTPException:
 @router.post("/geometry", response_model=GeometryPayload, tags=["design"])
 def geometry(request: GeometryRequest,
              context: Context = Depends(get_context)) -> GeometryPayload:
-    engine = context.engine(request.site_id)
+    engine = context.engine(request.site_id, request.comfort_model_id)
     try:
         return engine.geometry(request.design)
     except Exception as error:
@@ -46,7 +45,7 @@ def geometry(request: GeometryRequest,
 @router.post("/simulate", response_model=SimulationResult, tags=["design"])
 def simulate(request: SimulateRequest,
              context: Context = Depends(get_context)) -> SimulationResult:
-    engine = context.engine(request.site_id)
+    engine = context.engine(request.site_id, request.comfort_model_id)
     try:
         result = engine.simulate(request.design, request.to_options(),
                                  reference=request.reference,
@@ -61,7 +60,7 @@ def simulate(request: SimulateRequest,
 @router.post("/surface-results", response_model=SurfaceResults, tags=["design"])
 def surface_results(request: SurfaceRequest,
                     context: Context = Depends(get_context)) -> SurfaceResults:
-    engine = context.engine(request.site_id)
+    engine = context.engine(request.site_id, request.comfort_model_id)
     options = request.to_options()
     try:
         result = engine.surface_results(request.design, options)
@@ -78,7 +77,7 @@ def surface_results(request: SurfaceRequest,
 @router.post("/compare", response_model=ComparisonTable, tags=["design"])
 def compare(request: CompareRequest,
             context: Context = Depends(get_context)) -> ComparisonTable:
-    engine = context.engine(request.site_id)
+    engine = context.engine(request.site_id, request.comfort_model_id)
     try:
         table = engine.compare(request.designs, request.to_options(),
                                reference=request.reference)
@@ -146,13 +145,24 @@ def sun_path(site_id: str | None = None, day: str | None = None,
 def terrain(site_id: str | None = None,
             inner_radius_m: float = Query(default=45.0, gt=0.0, le=5000.0),
             outer_radius_m: float = Query(default=320.0, gt=0.0, le=20000.0),
+            skyline_only: bool = Query(
+                default=False,
+                description="return the ring built from the horizon table instead "
+                            "of the measured elevation model"),
             context: Context = Depends(get_context)) -> TerrainMesh:
     if inner_radius_m >= outer_radius_m:
         raise HTTPException(
             status_code=422,
             detail="inner_radius_m must be smaller than outer_radius_m")
     from shelter_engine.solar import terrain_mesh
-    return terrain_mesh(context.site(site_id), inner_radius_m, outer_radius_m)
+    from shelter_engine.terrain import load_terrain_obj
+    site = context.site(site_id)
+    if not skyline_only:
+        measured = load_terrain_obj(
+            Path(context.settings.data_dir) / "terrain" / "terrain_mesh.obj", site)
+        if measured is not None:
+            return measured
+    return terrain_mesh(site, inner_radius_m, outer_radius_m)
 
 
 @router.post("/cfd", response_model=CFDExport | CFDAbsent, tags=["cfd"])

@@ -8,7 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from shelter_engine.schema import (Assumption, ClimateObjective, DesignSpec,
                                    DesignVariable, EngineWarning,
                                    OptimisationConstraints, ParetoResult,
-                                   RunOptions, RunPeriod)
+                                   OccupancySpec, PlanSpec, RunOptions,
+                                   RunPeriod, ShelterUse, SourceRef)
 
 DEFAULT_START = date(2019, 1, 1)
 DEFAULT_END = date(2019, 1, 31)
@@ -37,6 +38,17 @@ class Window(Body):
 class GeometryRequest(Body):
     design: DesignSpec
     site_id: str | None = None
+    comfort_model_id: str | None = None
+
+
+class DesignSummary(Body):
+    id: str
+    name: str
+    use: str
+    arrangement: str
+    floor_area_m2: float
+    occupants: int
+    is_reference: bool
 
 
 class SimulateRequest(Body):
@@ -50,6 +62,7 @@ class SimulateRequest(Body):
     with_uncertainty: bool = True
     with_reference: bool = True
     reference: str | None = None
+    comfort_model_id: str | None = None
     shutter_compliance_override: float | None = Field(default=None, ge=0.0, le=1.0)
 
     def to_options(self) -> RunOptions:
@@ -66,6 +79,7 @@ class SimulateRequest(Body):
 class SurfaceRequest(Body):
     design: DesignSpec
     site_id: str | None = None
+    comfort_model_id: str | None = None
     period: Window = Window()
     surface_period: Window | None = None
     timestep_per_hour: int = Field(default=6, ge=1, le=60)
@@ -85,6 +99,7 @@ class CompareRequest(Body):
     period: Window = Window()
     conditioned_run: bool = True
     reference: str | None = None
+    comfort_model_id: str | None = None
 
     def to_options(self) -> RunOptions:
         return RunOptions(period=self.period.to_period(),
@@ -183,3 +198,18 @@ class ValidationEvidence(Body):
     available: bool = False
     detail: str = ""
     assumptions: list[Assumption] = Field(default_factory=list)
+
+
+class ShelterUseSummary(BaseModel):
+    use: ShelterUse
+    label: str
+    description: str
+    area_per_person_m2: float
+    default_occupants: int
+    default_floor_area_m2: float
+    ceiling_height_m: float
+    aspect_ratio: float
+    room_names: tuple[str, ...]
+    plan: PlanSpec
+    occupancy: OccupancySpec
+    source: SourceRef

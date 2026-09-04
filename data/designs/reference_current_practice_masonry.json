@@ -3,6 +3,7 @@
   "description": "Current construction practice: uninsulated solid brick wall, corrugated galvanised sheet roof on timber, single glazed steel framed windows, unheated concrete floor on grade. This is the object every reported difference is measured against.",
   "arrangement": "single_room",
   "plan": {
+    "use": "barrack",
     "floor_area_m2": 40.0,
     "aspect_ratio": 1.6,
     "ceiling_height_m": 2.7,

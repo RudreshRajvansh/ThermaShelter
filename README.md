@@ -26,18 +26,55 @@ construction build-up as tabs over one geometry.
 
 ## Run the whole thing
 
-### One command, no network
+### One command
 
 ```bash
+python scripts/start.py
+```
+
+That is the whole cycle from a cold checkout. It verifies the install, finds EnergyPlus,
+turns the Layer 0 delivery into `data/`, precomputes a few results so the first screen is
+not empty, starts the API, regenerates the front end types from the running API, starts
+the interface, and then prints how a number travels from the six questions on Site Input
+to the figures on Results.
+
+It refuses rather than guesses. No EnergyPlus, no Layer 0 delivery, a port already taken:
+each stops the script with the specific remedy, and nothing is invented in place of a
+missing input.
+
+| flag | what it does |
+| --- | --- |
+| `--check` | verify the install and the data, then stop |
+| `--layer0 path` | point at the Layer 0 zip or its extracted directory |
+| `--reingest` | rebuild `data/` from the delivery |
+| `--recompute` | run the precomputed simulations again |
+| `--quick` | fewer precomputed designs, no uncertainty sweep |
+| `--api-only` | skip the interface |
+| `--api-port`, `--web-port` | move off 8000 and 5173 |
+| `--serve-built` | serve the production build instead of the dev server |
+
+EnergyPlus is a separate install and is required. The script looks at `ENERGYPLUS_DIR`,
+then `tools/EnergyPlus`, then the usual system locations. Without it the API still starts,
+`/api/health` reports `degraded`, and every simulation request returns 503 with an
+explanation.
+
+### In containers
+
+```bash
+python scripts/start.py --check
 docker compose up --build
 ```
 
-The API is on http://localhost:8000 with its documentation at `/docs`, and the interface is
-on http://localhost:8080. The image carries EnergyPlus 24.2.0 inside it and reads the
-weather file, material database and pre computed results from `data/`, which is mounted in.
+The `--check` first is not optional: the compose file mounts `./data` into the API
+container, so the delivery has to be ingested on the host before the container can read
+it. The API is then on http://localhost:8000 with its documentation at `/docs`, and the
+interface is on http://localhost:8080. The image carries EnergyPlus 24.2.0 inside it.
 Nothing in the demo path reaches the network.
 
-### Without Docker, for development
+The image build runs `energyplus --version` as its last step, so a missing shared library
+fails the build rather than surfacing as a solver exit code during a demo.
+
+### Piece by piece, for development
 
 ```bash
 # once
@@ -46,18 +83,16 @@ cd engine && python -m venv .venv && .venv/Scripts/python -m pip install -e ".[d
 .venv/Scripts/python -m pip install "fastapi>=0.110,<1" "uvicorn[standard]>=0.27,<1" httpx
 cd ../web && npm install
 
-# generate the synthetic development inputs, and precompute a few results
-cd .. && ENERGYPLUS_DIR=... engine/.venv/Scripts/python scripts/build_data.py
+# turn the Layer 0 delivery into the data directory
+cd .. && engine/.venv/Scripts/python scripts/ingest_layer0.py     --source build/layer0/layer_0 --out data
+
+# run every stored design once and keep the results
+ENERGYPLUS_DIR=... engine/.venv/Scripts/python scripts/precompute.py
 
 # two terminals
-SHELTER_DATA_DIR=./data ENERGYPLUS_DIR=... engine/.venv/Scripts/python -m uvicorn shelter_api.main:app --port 8000
+SHELTER_DATA_DIR=./data ENERGYPLUS_DIR=... engine/.venv/Scripts/python     -m uvicorn shelter_api.main:app --port 8000
 cd web && npm run dev
 ```
-
-EnergyPlus is a separate install and is required. Point `ENERGYPLUS_DIR` at the directory
-holding `energyplus` and `Energy+.idd`. Without it the API still starts, `/api/health`
-reports `degraded`, and every simulation request returns 503 with an explanation. It will
-not fabricate a result.
 
 ---
 
@@ -114,40 +149,61 @@ updating.
 
 ## What is real and what is not, right now
 
-The machinery is complete and tested. The **data is not**, and the tool says so on every
-screen rather than hiding it.
+The Layer 0 delivery has landed and `data/` is built from it. What follows is the exact
+state, and `data/layer0_manifest.json` is the machine readable version of the same thing.
 
-Running `scripts/build_data.py` generates a synthetic weather year from a sinusoid and a
-clear sky model, and a material database of placeholder properties. Every record carries
-`source_status: pending`. `/api/meta` returns a `provenance_gaps` list, the interface shows
-it, and `SimulationResult.warnings` repeats it on every run. Nothing produced from these
-inputs is a result.
+**Real, and verified:**
 
-What has to be replaced before a number is presentable:
+- The **weather file**, a TMYx 2011&ndash;2025 year for Leh at 3,255.9 m. 8,760 hours, no
+  loader warnings. Annual mean &minus;0.84 &deg;C, 6,878 heating degree days, zero cooling
+  degree days. The engine checks the pressure column against the site elevation, because at
+  this altitude a sea level column would make every air related heat transfer roughly a
+  third too large and EnergyPlus would not warn. It reads 69,287 Pa against 67,857 expected,
+  2.1 % apart, so Layer 0 got the altitude correction right.
+- The **terrain**: a USGS SRTM elevation model, 10 km square at 200 m spacing, ridges to
+  1,151 m above the site, plus the 36 direction horizon profile measured from it. The
+  simulation shades with the horizon table and the 3D view stands on the mesh, so what
+  blocks the sun on screen is what blocked it in the run.
+- The **ground temperatures**, from the EPW header at 0.5 m depth.
+- The **phase change materials**, four Rubitherm products.
 
-1. **The weather file.** A real Leh EPW from climate.onebuilding.org, or one built from
-   NASA POWER. The engine checks the pressure column against the site elevation and refuses
-   to be quiet about a mismatch, because at 3,500 m a sea level pressure column makes every
-   air related heat transfer roughly a third too large and EnergyPlus will not warn.
-2. **The material database.** Real properties with real citations. The engine rejects any
-   material with no source and no display colour rather than defaulting them.
-3. **The comfort model coefficients.** `imac_2016_nv` carries the widely quoted IMAC
-   relation marked pending, and `imac_r_2022_nv` is a placeholder holding the same numbers
-   until the residential paper is read.
-4. **The reference design citations.** All three are uncited. The current practice assembly
-   is the single most important citation in the project, because every headline difference
-   is measured against it.
-5. **The fuel price**, which is deliberately zero so a missing procurement figure shows as
-   a withheld number instead of a plausible invented one.
-6. **Layer 1 evidence.** Standard 140 results, the ANSYS junction psi values and any
+**Not real yet, and stated as such on every screen:**
+
+1. **Eleven of the fifteen materials** and **all three glazing systems** are filled from the
+   ASHRAE Handbook of Fundamentals and carry `source_status: pending`. Layer 0 supplied five
+   material rows.
+2. **Delivered costs, availability and mason skill** were not supplied at all. The Layer 0
+   source file says these must be replaced with locally sourced values, so every rupee
+   figure is provisional.
+3. **Absorptances** were not supplied. Every material carries the schema defaults. Surface
+   colour changes solar gain on an exposed wall by a large fraction, so a painted Trombe
+   absorber needs its own measured value.
+4. **One Layer 0 row is wrong and was corrected.** Clay brick arrived at 0.17 W/mK and
+   330&ndash;440 J/kgK at 1,980 kg/m&sup3;. Fired brick at that density conducts near 0.9 and
+   stores near 800. It fails the engine's plausibility check on load. Because it is the
+   baseline wall, an implausibly low conductivity would make current construction look
+   insulated and shrink every headline difference, so ASHRAE values were substituted and the
+   substitution is recorded in the manifest rather than made quietly.
+5. **The reference design citations.** All three are uncited. The current practice assembly
+   is the single most important citation in the project, because every headline difference is
+   measured against it.
+6. **The comfort model coefficients.** `imac_2016_nv` carries the widely quoted IMAC relation
+   marked pending, and `imac_r_2022_nv` holds the same numbers until the residential paper is
+   read.
+7. **The fuel price**, deliberately zero, so a missing procurement figure shows as a withheld
+   number instead of a plausible invented one.
+8. **Layer 1 evidence.** Standard 140 results, the ANSYS junction psi values and any
    calibration, committed as files in `data/validation/`.
+
+`/api/meta` returns these as a `provenance_gaps` list, the interface shows it, and
+`SimulationResult.warnings` repeats the relevant ones on every run.
 
 ---
 
 ## Tests
 
 ```bash
-cd engine && ENERGYPLUS_DIR=... .venv/Scripts/python -m pytest -q   # 233
+cd engine && ENERGYPLUS_DIR=... .venv/Scripts/python -m pytest -q   # 235
 cd api    && ENERGYPLUS_DIR=... ../engine/.venv/Scripts/python -m pytest -q   # 33
 cd web    && npx tsc --noEmit && npm run build
 ```

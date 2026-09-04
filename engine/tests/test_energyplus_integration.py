@@ -408,3 +408,34 @@ def test_self_check_reports_pending_provenance(engine):
     codes = {item.code for item in warnings}
     assert "materials_unsourced" in codes
     assert "reference_designs_uncited" in codes
+
+
+def test_internal_partitions_reach_the_input_file(site, library):
+    design = fixtures.design()
+    built = build_constructions(design, library)
+    model = build_geometry(design, built.names, horizon=site.horizon)
+    text = build_idf(design, site, model, built, options()).text
+    assert "INTERNALMASS," in text
+    assert "ROOM_PARTITIONS" in text
+
+
+def test_a_larger_programme_damps_the_daily_swing(engine):
+    from shelter_engine.programme import layout_for, plan_for
+    from shelter_engine.schema import ShelterUse
+
+    open_plan = fixtures.design(plan=plan_for(ShelterUse.STORE, floor_area_m2=40.0))
+    partitioned = fixtures.design(
+        plan=plan_for(ShelterUse.MEDICAL_POST, floor_area_m2=40.0))
+    assert (layout_for(partitioned.plan).partition_area_m2
+            > layout_for(open_plan.plan).partition_area_m2)
+    swings = []
+    for design in (open_plan, partitioned):
+        design = design.variant(occupancy=fixtures.design().occupancy)
+        result = engine.simulate(design, options(), with_uncertainty=False,
+                                 with_reference=False)
+        series = {item.name: item for item in result.hourly}
+        values = [value for value
+                  in series["operative_temperature_c"].values
+                  if value is not None]
+        swings.append(max(values) - min(values))
+    assert swings[1] < swings[0]

@@ -1,5 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { api, type DesignSpec, type MetaResponse } from "../lib/api";
+import {
+  api,
+  type DesignSpec,
+  type MetaResponse,
+  type ShelterUseSummary,
+} from "../lib/api";
 import { Accordion, Field, Loading, Panel } from "../components/Kit";
 import { activeDesign, useStore } from "../lib/store";
 import { num } from "../lib/format";
@@ -16,12 +21,83 @@ export function SiteInput({ meta }: { meta: MetaResponse | undefined }) {
     queryFn: api.materials,
     staleTime: Infinity,
   });
+  const uses = useQuery({
+    queryKey: ["shelter-uses"],
+    queryFn: api.shelterUses,
+    staleTime: Infinity,
+  });
+  const comfortModels = useQuery({
+    queryKey: ["comfort-models"],
+    queryFn: api.comfortModels,
+    staleTime: Infinity,
+  });
 
   if (!design || !meta) return <Loading label="loading the design library…" />;
 
   const site = meta.sites.find((item) => item.id === store.siteId);
   const update = (patch: Partial<DesignSpec>) =>
     store.applyOverride(set(design, patch));
+
+  const programme: ShelterUseSummary | undefined = (uses.data ?? []).find(
+    (item) => item.use === design.plan.use,
+  );
+
+  const applyUse = (value: string) => {
+    const chosen = (uses.data ?? []).find((item) => item.use === value);
+    if (!chosen) return;
+    update({
+      plan: set(design.plan, {
+        use: chosen.plan.use,
+        floor_area_m2: chosen.plan.floor_area_m2,
+        aspect_ratio: chosen.plan.aspect_ratio,
+        ceiling_height_m: chosen.plan.ceiling_height_m,
+      }),
+      occupancy: chosen.occupancy,
+    });
+  };
+
+  const applyOccupants = (people: number) => {
+    const count = Number.isFinite(people) ? Math.max(0, Math.round(people)) : 0;
+    if (!programme) {
+      update({ occupancy: set(design.occupancy, { occupants: count }) });
+      return;
+    }
+    const area = Math.max(4, programme.area_per_person_m2 * Math.max(count, 1));
+    update({
+      plan: set(design.plan, { floor_area_m2: Number(area.toFixed(1)) }),
+      occupancy: set(design.occupancy, {
+        occupants: count,
+        equipment_w: Number(
+          (programme.occupancy.equipment_w / Math.max(programme.default_occupants, 1) * count).toFixed(1),
+        ),
+        lighting_w: Number(
+          (programme.occupancy.lighting_w / Math.max(programme.default_floor_area_m2, 1) * area).toFixed(1),
+        ),
+        additional_moisture_g_h: Number(
+          (programme.occupancy.additional_moisture_g_h / Math.max(programme.default_occupants, 1) * count).toFixed(1),
+        ),
+        unoccupied: count === 0,
+      }),
+    });
+  };
+
+  const chosenComfort = store.comfortModelId ?? meta.comfort_model_id;
+  const comfortBand = (comfortModels.data ?? []).find(
+    (item) => item.id === chosenComfort,
+  );
+  const comfortTwins = (comfortModels.data ?? []).filter(
+    (item) =>
+      comfortBand !== undefined &&
+      item.id !== comfortBand.id &&
+      item.intercept_c === comfortBand.intercept_c &&
+      item.slope === comfortBand.slope &&
+      item.band_half_width_k === comfortBand.band_half_width_k,
+  );
+  const comfortHint = comfortBand
+    ? comfortTwins.length > 0
+      ? `Scored against ${comfortBand.intercept_c} + ${comfortBand.slope} × running mean outdoor, ±${comfortBand.band_half_width_k} K. It carries exactly the same coefficients as ${comfortTwins.map((item) => item.id).join(", ")}, so switching between them cannot change a single number yet. One is a placeholder until its paper is read.`
+      : `Scored against ${comfortBand.intercept_c} + ${comfortBand.slope} × running mean outdoor, ±${comfortBand.band_half_width_k} K. This changes the comfort verdict, not the physics: the same hourly temperatures are judged against a different band.`
+    : "The adaptive band the run is judged against. Fixed setpoints are not used for a free running shelter.";
 
   const glazingIds = Array.from(
     new Set(Object.values(design.windows ?? {}).map((w) => w.glazing_id)),
@@ -51,43 +127,54 @@ export function SiteInput({ meta }: { meta: MetaResponse | undefined }) {
             </select>
           </Field>
 
-          <Field label="What the shelter is for">
+          <Field
+            label="What the shelter is for"
+            hint={
+              programme
+                ? `${programme.description} ${programme.area_per_person_m2} m² per person, ${programme.ceiling_height_m.toFixed(2)} m ceiling, ${programme.room_names.length} rooms.`
+                : "Sets the floor area, ceiling height, room layout and internal heat gains."
+            }
+          >
             <select
-              value={design.description ?? "forward post accommodation"}
-              onChange={(event) => update({ description: event.target.value })}
+              value={design.plan.use}
+              onChange={(event) => applyUse(event.target.value)}
+              disabled={!uses.data}
               className="w-full px-2 py-1.5 text-sm"
             >
-              {[
-                "forward post accommodation",
-                "family residence",
-                "medical shelter",
-                "storage and workshop",
-              ].map((item) => (
-                <option key={item} value={item}>
-                  {item}
+              {(uses.data ?? []).map((item) => (
+                <option key={item.use} value={item.use}>
+                  {item.label}
                 </option>
               ))}
             </select>
           </Field>
 
-          <Field label="Occupants" hint="Nine soldiers put roughly a kilowatt into the room.">
+          <Field
+            label="Occupants"
+            hint={
+              programme
+                ? `${programme.default_occupants} is the programme figure. Changing it rescales equipment, lighting and moisture.`
+                : "Occupants drive metabolic, equipment and moisture gains."
+            }
+          >
             <input
               type="number"
               min={0}
               max={60}
               value={design.occupancy.occupants}
-              onChange={(event) =>
-                update({
-                  occupancy: set(design.occupancy, {
-                    occupants: Number(event.target.value),
-                  }),
-                })
-              }
+              onChange={(event) => applyOccupants(Number(event.target.value))}
               className="w-full px-2 py-1.5 text-sm"
             />
           </Field>
 
-          <Field label="Floor area" hint="square metres">
+          <Field
+            label="Floor area"
+            hint={
+              programme
+                ? `square metres. The programme gives ${programme.default_floor_area_m2} m² for ${design.occupancy.occupants} people.`
+                : "square metres"
+            }
+          >
             <input
               type="number"
               min={4}
@@ -129,12 +216,12 @@ export function SiteInput({ meta }: { meta: MetaResponse | undefined }) {
 
           <Field
             label="Comfort target"
-            hint={`Adaptive model in use: ${meta.comfort_model_id}. Fixed setpoints are not used for a free running shelter.`}
+            hint={comfortHint}
           >
             <select
-              value={meta.comfort_model_id}
-              disabled
-              className="w-full px-2 py-1.5 text-sm opacity-70"
+              value={store.comfortModelId ?? meta.comfort_model_id}
+              onChange={(event) => store.setComfortModelId(event.target.value)}
+              className="w-full px-2 py-1.5 text-sm"
             >
               {meta.comfort_models.map((item) => (
                 <option key={item} value={item}>

@@ -26,6 +26,12 @@ _MATERIAL_TABLE = "materials"
 _GLAZING_TABLE = "glazing_systems"
 _PCM_TABLE = "phase_change_materials"
 
+DENSE_SOLID_KG_M3 = 1500.0
+MIN_DENSE_CONDUCTIVITY_W_MK = 0.40
+MIN_MINERAL_SPECIFIC_HEAT_J_KGK = 600.0
+MAX_LIGHT_CONDUCTIVITY_W_MK = 0.20
+METAL_CONDUCTIVITY_W_MK = 5.0
+
 _APPEARANCE_KEYS = ("colour", "color", "display_colour", "display_color")
 _FINISH_KEYS = ("finish", "surface_finish", "roughness_finish")
 
@@ -214,6 +220,27 @@ class LayerProperties:
         return self.thickness_m * self.material.density_kg_m3
 
 
+def implausible(material: Material) -> list[str]:
+    problems: list[str] = []
+    metal = material.conductivity_w_mk >= METAL_CONDUCTIVITY_W_MK
+    dense = material.density_kg_m3 >= DENSE_SOLID_KG_M3 and not metal
+    if dense and material.conductivity_w_mk < MIN_DENSE_CONDUCTIVITY_W_MK:
+        problems.append(
+            f"conductivity {material.conductivity_w_mk} W/mK is implausibly low for a "
+            f"solid at {material.density_kg_m3:.0f} kg/m3; masonry and stone at that "
+            f"density normally sit above {MIN_DENSE_CONDUCTIVITY_W_MK} W/mK")
+    if dense and material.specific_heat_j_kgk < MIN_MINERAL_SPECIFIC_HEAT_J_KGK:
+        problems.append(
+            f"specific heat {material.specific_heat_j_kgk} J/kgK is implausibly low for "
+            f"a mineral solid; brick, stone and concrete sit near 800 to 950 J/kgK")
+    if (material.density_kg_m3 < 200.0
+            and material.conductivity_w_mk > MAX_LIGHT_CONDUCTIVITY_W_MK):
+        problems.append(
+            f"conductivity {material.conductivity_w_mk} W/mK is implausibly high for a "
+            f"material at {material.density_kg_m3:.0f} kg/m3")
+    return problems
+
+
 class MaterialLibrary:
     def __init__(self, materials: Iterable[Material],
                  glazing: Iterable[GlazingSystem] = (),
@@ -320,6 +347,14 @@ class MaterialLibrary:
     @property
     def phase_change_materials(self) -> tuple[PhaseChangeMaterial, ...]:
         return tuple(self._pcm.values())
+
+    def implausible(self) -> dict[str, list[str]]:
+        found: dict[str, list[str]] = {}
+        for material in self._materials.values():
+            problems = implausible(material)
+            if problems:
+                found[material.id] = problems
+        return found
 
     def unsourced(self) -> tuple[str, ...]:
         pending: list[str] = []

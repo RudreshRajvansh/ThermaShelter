@@ -28,11 +28,13 @@ from .mesh import build_mesh
 from .metrics import (ZoneSeries, condensation, energy_metrics, heat_balance,
                       solar_gain_by_facade, surface_frames, zone_series)
 from .optimize import Metrics, optimise
+from .programme import layout_for
 from .recommend import RecommendationInputs, generate_recommendations
 from .results import SimulationOutput, blocking
 from .runner import simulate as run_simulation
 from .solar import daylight_lost_to_terrain_h, sun_path, terrain_mesh
-from .schema import (Assumption, BuildabilityMetrics, CFDExport, ClimateObjective,
+from .schema import (Arrangement, Assumption, BuildabilityMetrics, CFDExport,
+                     ClimateObjective,
                      ClimateSummary,
                      ComfortModel, ComfortMetrics, CondensationMetrics,
                      ComparisonRow, ComparisonTable, CostBreakdown, DesignSpec,
@@ -120,7 +122,8 @@ class Engine:
         model = build_geometry(design, constructions.names,
                                design_hash=stable_hash(design),
                                horizon=self.site.horizon)
-        payload = build_mesh(model, constructions, self.library)
+        payload = build_mesh(model, constructions, self.library,
+                             layout=layout_for(design.plan), use=design.plan.use)
         self._cache.set(key, payload)
         return payload
 
@@ -258,7 +261,8 @@ class Engine:
 
         reference_comparison = None
         if with_reference:
-            reference_result = self._reference_result(reference, options)
+            reference_result = self._reference_result(reference, options,
+                                                      design)
             if reference_result is not None:
                 reference_comparison = compare_to_reference(
                     self._provisional(design, comfort, energy, cost, options),
@@ -439,7 +443,9 @@ class Engine:
         return bands
 
     def _reference_result(self, reference: str | DesignSpec | None,
-                          options: RunOptions) -> SimulationResult | None:
+                          options: RunOptions,
+                          design: DesignSpec | None = None
+                          ) -> SimulationResult | None:
         if reference is None:
             spec = self.references.default
         elif isinstance(reference, DesignSpec):
@@ -448,6 +454,10 @@ class Engine:
             spec = self.references.get(reference)
         if not spec.is_reference:
             spec = spec.variant(is_reference=True)
+        if design is not None:
+            spec = spec.variant(plan=design.plan, occupancy=design.occupancy,
+                                arrangement=Arrangement.SINGLE_ROOM,
+                                arrangement_params=spec.arrangement_params)
         return self.simulate(spec, options, with_uncertainty=False,
                              with_reference=False)
 
@@ -493,6 +503,18 @@ class Engine:
 
     def _integrity_warnings(self) -> list[EngineWarning]:
         warnings: list[EngineWarning] = []
+        suspect = self.library.implausible()
+        if suspect:
+            detail = "; ".join(
+                f"{name}: {' and '.join(problems)}"
+                for name, problems in sorted(suspect.items()))
+            warnings.append(EngineWarning(
+                code="material_properties_implausible", severity=Severity.SEVERE,
+                origin="materials", count=len(suspect),
+                message=("These material properties fail a physical plausibility check "
+                         "and will silently corrupt every result built on them. "
+                         f"{detail}. Confirm them against the ASHRAE Handbook of "
+                         "Fundamentals before any reported number depends on them.")))
         pending = self.library.unsourced()
         if pending:
             warnings.append(EngineWarning(
@@ -511,6 +533,21 @@ class Engine:
                          f"{self.comfort_model.source.status.value}. Its coefficients "
                          "must be checked against the paper before any comfort number "
                          "is published.")))
+        twins = [model.id for model in self.catalogue.adaptive
+                 if model.id != self.comfort_model.id
+                 and model.intercept_c == self.comfort_model.intercept_c
+                 and model.slope == self.comfort_model.slope
+                 and model.band_half_width_k == self.comfort_model.band_half_width_k]
+        if twins:
+            warnings.append(EngineWarning(
+                code="comfort_model_duplicates_another", severity=Severity.WARNING,
+                origin="engine", count=len(twins),
+                message=(f"The comfort model {self.comfort_model.id} carries exactly "
+                         f"the same coefficients as {', '.join(sorted(twins))}, so "
+                         "choosing between them cannot change a single comfort number. "
+                         "One of them is a placeholder standing in until its paper is "
+                         "read. Treat the choice as having no effect until the "
+                         "coefficients differ.")))
         uncited = self.references.uncited()
         if uncited:
             warnings.append(EngineWarning(
@@ -541,11 +578,24 @@ class Engine:
 
     def compare(self, designs: Sequence[DesignSpec], options: RunOptions,
                 reference: str | DesignSpec | None = None) -> ComparisonTable:
-        reference_result = self._reference_result(reference, options)
+        if not designs:
+            raise EngineError("a comparison needs at least one design")
+        reference_result = self._reference_result(reference, options, designs[0])
         if reference_result is None:
             raise EngineError("a comparison needs a reference design")
         rows = [self._comparison_row(reference_result, reference_result)]
         warnings: list[EngineWarning] = []
+        footprints = {round(design.plan.floor_area_m2, 2) for design in designs}
+        if len(footprints) > 1:
+            warnings.append(EngineWarning(
+                code="comparison_mixes_floor_areas", severity=Severity.SEVERE,
+                origin="engine", count=len(footprints),
+                message=("These designs do not all have the same floor area "
+                         f"({', '.join(f'{value:g}' for value in sorted(footprints))} "
+                         "square metres), and the reference is matched to the first "
+                         "one. Energy and cost totals scale with size, so the rows "
+                         "are not comparable to one another on those columns. Compare "
+                         "temperatures, or give the designs the same plan.")))
         for design in designs:
             result = self.simulate(design, options, reference=reference,
                                    with_uncertainty=True)

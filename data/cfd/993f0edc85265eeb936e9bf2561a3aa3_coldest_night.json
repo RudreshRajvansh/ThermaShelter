@@ -1,0 +1,290 @@
+{
+  "design_hash": "993f0edc85265eeb936e9bf2561a3aa3",
+  "zone": "ROOM",
+  "label": "coldest_night",
+  "timestamp": "2019-01-28T07:00:00",
+  "zone_air_temperature_c": 2.5242853436001838,
+  "zone_relative_humidity_percent": 73.18038284525566,
+  "outdoor_air_temperature_c": -12.833333333333334,
+  "air_pressure_pa": 67183.58333333333,
+  "zone_volume_m3": 234.0,
+  "surfaces": [
+    {
+      "name": "ROOM_FLOOR",
+      "kind": "floor",
+      "facade": null,
+      "positions": [
+        7.035623639735145,
+        3.1980107453341566,
+        0.0,
+        7.035623639735145,
+        -3.1980107453341566,
+        0.0,
+        -7.035623639735145,
+        -3.1980107453341566,
+        0.0,
+        -7.035623639735145,
+        3.1980107453341566,
+        0.0
+      ],
+      "indices": [
+        0,
+        1,
+        2,
+        0,
+        2,
+        3
+      ],
+      "area_m2": 90.00000000000001,
+      "inside_face_temperature_c": 3.1246526354821618,
+      "emissivity": 0.9
+    },
+    {
+      "name": "ROOM_ROOF",
+      "kind": "roof",
+      "facade": null,
+      "positions": [
+        -7.035623639735145,
+        3.1980107453341566,
+        2.6,
+        -7.035623639735145,
+        -3.1980107453341566,
+        2.6,
+        7.035623639735145,
+        -3.1980107453341566,
+        2.6,
+        7.035623639735145,
+        3.1980107453341566,
+        2.6
+      ],
+      "indices": [
+        0,
+        1,
+        2,
+        0,
+        2,
+        3
+      ],
+      "area_m2": 90.00000000000001,
+      "inside_face_temperature_c": 2.39784286695473,
+      "emissivity": 0.9
+    },
+    {
+      "name": "ROOM_WALL_NORTH",
+      "kind": "wall",
+      "facade": "north",
+      "positions": [
+        7.035623639735145,
+        3.1980107453341566,
+        2.6,
+        7.035623639735145,
+        3.1980107453341566,
+        0.0,
+        -7.035623639735145,
+        3.1980107453341566,
+        0.0,
+        -7.035623639735145,
+        3.1980107453341566,
+        2.6
+      ],
+      "indices": [
+        0,
+        1,
+        2,
+        0,
+        2,
+        3
+      ],
+      "area_m2": 36.585242926622755,
+      "inside_face_temperature_c": 3.5654383509604597,
+      "emissivity": 0.9
+    },
+    {
+      "name": "ROOM_WALL_EAST",
+      "kind": "wall",
+      "facade": "east",
+      "positions": [
+        7.035623639735145,
+        -3.1980107453341566,
+        2.6,
+        7.035623639735145,
+        -3.1980107453341566,
+        0.0,
+        7.035623639735145,
+        3.1980107453341566,
+        0.0,
+        7.035623639735145,
+        3.1980107453341566,
+        2.6
+      ],
+      "indices": [
+        0,
+        1,
+        2,
+        0,
+        2,
+        3
+      ],
+      "area_m2": 16.629655875737615,
+      "inside_face_temperature_c": 3.7439073725787533,
+      "emissivity": 0.9
+    },
+    {
+      "name": "ROOM_WALL_EAST_WIN",
+      "kind": "window",
+      "facade": "east",
+      "positions": [
+        7.035623639735145,
+        -0.5767088672066283,
+        1.6208860840082853,
+        7.035623639735145,
+        -0.5767088672066283,
+        0.9,
+        7.035623639735145,
+        0.5767088672066283,
+        0.9,
+        7.035623639735145,
+        0.5767088672066283,
+        1.6208860840082853
+      ],
+      "indices": [
+        0,
+        1,
+        2,
+        0,
+        2,
+        3
+      ],
+      "area_m2": 0.831482793786881,
+      "inside_face_temperature_c": -2.7912600042802844,
+      "emissivity": 0.9
+    },
+    {
+      "name": "ROOM_WALL_WEST",
+      "kind": "wall",
+      "facade": "west",
+      "positions": [
+        -7.035623639735145,
+        3.1980107453341566,
+        2.6,
+        -7.035623639735145,
+        3.1980107453341566,
+        0.0,
+        -7.035623639735145,
+        -3.1980107453341566,
+        0.0,
+        -7.035623639735145,
+        -3.1980107453341566,
+        2.6
+      ],
+      "indices": [
+        0,
+        1,
+        2,
+        0,
+        2,
+        3
+      ],
+      "area_m2": 16.629655875737615,
+      "inside_face_temperature_c": 3.7712769973322646,
+      "emissivity": 0.9
+    },
+    {
+      "name": "ROOM_WALL_WEST_WIN",
+      "kind": "window",
+      "facade": "west",
+      "positions": [
+        -7.035623639735145,
+        0.5767088672066283,
+        1.6208860840082853,
+        -7.035623639735145,
+        0.5767088672066283,
+        0.9,
+        -7.035623639735145,
+        -0.5767088672066283,
+        0.9,
+        -7.035623639735145,
+        -0.5767088672066283,
+        1.6208860840082853
+      ],
+      "indices": [
+        0,
+        1,
+        2,
+        0,
+        2,
+        3
+      ],
+      "area_m2": 0.831482793786881,
+      "inside_face_temperature_c": -3.083402868380375,
+      "emissivity": 0.9
+    },
+    {
+      "name": "ROOM_WALL_SOUTH",
+      "kind": "partition",
+      "facade": "south",
+      "positions": [
+        -7.035623639735145,
+        -3.1980107453341566,
+        2.6,
+        -7.035623639735145,
+        -3.1980107453341566,
+        0.0,
+        7.035623639735145,
+        -3.1980107453341566,
+        0.0,
+        7.035623639735145,
+        -3.1980107453341566,
+        2.6
+      ],
+      "indices": [
+        0,
+        1,
+        2,
+        0,
+        2,
+        3
+      ],
+      "area_m2": 36.585242926622755,
+      "inside_face_temperature_c": 3.787970625762515,
+      "emissivity": 0.9
+    },
+    {
+      "name": "ROOM_WALL_SOUTH_WIN",
+      "kind": "window",
+      "facade": "south",
+      "positions": [
+        -3.1641291179781836,
+        -3.1980107453341566,
+        2.45,
+        -3.1641291179781836,
+        -3.1980107453341566,
+        0.6,
+        3.1641291179781836,
+        -3.1980107453341566,
+        0.6,
+        3.1641291179781836,
+        -3.1980107453341566,
+        2.45
+      ],
+      "indices": [
+        0,
+        1,
+        2,
+        0,
+        2,
+        3
+      ],
+      "area_m2": 11.70727773651928,
+      "inside_face_temperature_c": 1.4664656035796877,
+      "emissivity": 0.9
+    }
+  ],
+  "units": "SI",
+  "notes": [
+    "Boundary conditions come from an EnergyPlus whole building run at the stated hour. Surface temperatures are inside face values; the zone air temperature is a single well mixed value and is provided as an initial condition, not as a target.",
+    "EnergyPlus computes no air temperature field and no air velocity inside the room. Anything of that kind must come from this fluid dynamics run and must be labelled with the hour and the solver on screen.",
+    "Coordinates are in metres in the same world frame as the display mesh, x east, y north, z up, with the building rotated to its real orientation."
+  ],
+  "source_run": "C:\\Users\\rudre\\.shelter_engine\\runs\\barrack_sunspace_free_mbkk2jv2\\eplusout.sql"
+}

@@ -1,15 +1,16 @@
 {
-  "name": "candidate_sunspace",
+  "name": "barrack_sunspace",
   "description": null,
   "arrangement": "sunspace",
   "plan": {
-    "floor_area_m2": 42.0,
-    "aspect_ratio": 1.8,
-    "ceiling_height_m": 2.7,
+    "use": "barrack",
+    "floor_area_m2": 90.0,
+    "aspect_ratio": 2.2,
+    "ceiling_height_m": 2.6,
     "azimuth_deg": 180.0
   },
   "wall": {
-    "name": "massive_insulated",
+    "name": "rammed_earth_insulated",
     "layers": [
       {
         "material_id": "cement_plaster",
@@ -17,7 +18,7 @@
       },
       {
         "material_id": "eps_thermocol",
-        "thickness_m": 0.08
+        "thickness_m": 0.1
       },
       {
         "material_id": "rammed_earth",
@@ -30,15 +31,15 @@
     ]
   },
   "roof": {
-    "name": "insulated_roof",
+    "name": "insulated_light_roof",
     "layers": [
       {
         "material_id": "gi_sheet",
         "thickness_m": 0.0006
       },
       {
-        "material_id": "eps_thermocol",
-        "thickness_m": 0.12
+        "material_id": "rockwool",
+        "thickness_m": 0.16
       },
       {
         "material_id": "timber_softwood",
@@ -47,15 +48,15 @@
     ]
   },
   "floor": {
-    "name": "insulated_floor",
+    "name": "insulated_slab_on_gravel",
     "layers": [
       {
         "material_id": "gravel_bed",
-        "thickness_m": 0.15
+        "thickness_m": 0.2
       },
       {
-        "material_id": "eps_thermocol",
-        "thickness_m": 0.05
+        "material_id": "xps_board",
+        "thickness_m": 0.06
       },
       {
         "material_id": "concrete_dense",
@@ -64,26 +65,26 @@
     ]
   },
   "partition": {
-    "name": "mass_partition",
+    "name": "mud_brick_partition",
     "layers": [
       {
         "material_id": "mud_plaster",
-        "thickness_m": 0.02
+        "thickness_m": 0.015
       },
       {
-        "material_id": "rammed_earth",
-        "thickness_m": 0.3
+        "material_id": "mud_brick",
+        "thickness_m": 0.15
       },
       {
         "material_id": "mud_plaster",
-        "thickness_m": 0.02
+        "thickness_m": 0.015
       }
     ]
   },
   "windows": {
     "south": {
-      "wwr": 0.3,
-      "glazing_id": "double_clear_6_12_6",
+      "wwr": 0.32,
+      "glazing_id": "double_lowe_argon",
       "sill_height_m": 0.6,
       "shutter": {
         "present": true,
@@ -94,10 +95,26 @@
         "cost_inr_m2": 0.0,
         "source": null
       },
-      "overhang_depth_m": 0.0,
+      "overhang_depth_m": 0.45,
       "overhang_offset_m": 0.1
     },
     "east": {
+      "wwr": 0.05,
+      "glazing_id": "double_clear_6_12_6",
+      "sill_height_m": 0.9,
+      "shutter": {
+        "present": false,
+        "thermal_resistance_m2k_w": 0.35,
+        "closed_from_hour": 17,
+        "closed_until_hour": 8,
+        "compliance": 1.0,
+        "cost_inr_m2": 0.0,
+        "source": null
+      },
+      "overhang_depth_m": 0.0,
+      "overhang_offset_m": 0.1
+    },
+    "west": {
       "wwr": 0.05,
       "glazing_id": "double_clear_6_12_6",
       "sill_height_m": 0.9,
@@ -127,17 +144,22 @@
     }
   },
   "occupancy": {
-    "occupants": 9,
-    "metabolic_w_per_person": 110.0,
+    "occupants": 10,
+    "metabolic_w_per_person": 80.0,
     "equipment_w": 150.0,
-    "lighting_w": 100.0,
+    "lighting_w": 360.0,
     "cooking_w": 0.0,
-    "occupied_from_hour": 17,
-    "occupied_until_hour": 8,
-    "daytime_occupancy_fraction": 0.2,
-    "additional_moisture_g_h": 400.0,
+    "occupied_from_hour": 18,
+    "occupied_until_hour": 7,
+    "daytime_occupancy_fraction": 0.15,
+    "additional_moisture_g_h": 500.0,
     "unoccupied": false,
-    "source": null
+    "source": {
+      "citation": "Engineering assumption. No published scale of accommodation was available for this shelter type at the time of writing",
+      "status": "assumed",
+      "url": null,
+      "note": "Area per person, ceiling height and internal gains all move the answer. Replace with the establishment's own scale of accommodation before any number from this run is quoted."
+    }
   },
   "pcm": {
     "present": false,

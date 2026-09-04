@@ -21,6 +21,16 @@ SHUTTER_AIR_PERMEABILITY = 0.0
 MIN_NOMASS_RESISTANCE_M2K_W = 0.001
 PCM_CURVE_LOW_C = -30.0
 PCM_CURVE_HIGH_C = 60.0
+INTERNAL_MASS_THICKNESS_M = 0.10
+
+INTERNAL_MASS_SOURCE = SourceRef(
+    citation=("Internal partitions are modelled as a 0.10 m leaf of the innermost "
+              "wall material. No partition build up was supplied"),
+    status=SourceStatus.ASSUMED,
+    note=("Internal mass damps the swing between day and night without changing the "
+          "heat lost through the envelope. Too much of it flattens the overnight "
+          "minimum in a way the real building will not, so the partition area comes "
+          "from the drawn layout rather than from a guess."))
 
 TROMBE_ABSORPTANCE_SOURCE = SourceRef(
     citation="Dark selective absorber finish assumed for the Trombe mass wall; "
@@ -276,6 +286,16 @@ def build_constructions(design: DesignSpec, library: MaterialLibrary) -> Constru
     floor = builder.construction(f"{design.floor.name}_FLOOR", floor_layers)
     ceiling = roof
 
+    inner = design.partition.layers[-1] if design.partition else design.wall.layers[-1]
+    internal_mass = builder.construction(
+        "INTERNAL_PARTITION_MASS",
+        [builder.opaque_layer(inner.material_id, INTERNAL_MASS_THICKNESS_M,
+                              None, "_IMASS")])
+    builder.assumptions.append(Assumption(
+        name="internal_partition_thickness", value=INTERNAL_MASS_THICKNESS_M,
+        unit="m", source=INTERNAL_MASS_SOURCE,
+        provenance=Provenance.ASSUMED))
+
     needs_partition = design.arrangement is not Arrangement.SINGLE_ROOM
     partition = wall
     if needs_partition and design.partition is not None:
@@ -328,7 +348,7 @@ def build_constructions(design: DesignSpec, library: MaterialLibrary) -> Constru
         trombe_glazing = builder.construction(f"WIN_{glazing_id}", [material])
 
     names = ConstructionNames(
-        wall=wall, roof=roof, floor=floor, partition=partition, ceiling=ceiling,
+        wall=wall, roof=roof, floor=floor, partition=partition, internal_mass=internal_mass, ceiling=ceiling,
         glazing=glazing_names, sunspace_glazing=sunspace_glazing,
         trombe_glazing=trombe_glazing, trombe_wall=trombe_wall,
         sunspace_floor=floor, interior_door=partition)

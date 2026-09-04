@@ -7,7 +7,9 @@ from .errors import GeometryError
 from .geometry import (GeometryModel, Polygon, WINDOW_MESH_OFFSET_M,
                        triangulate_fan)
 from .materials import MaterialLibrary
-from .schema import (Facade, GeometryPayload, MeshSurface, SurfaceKind)
+from .programme import Layout, programme
+from .schema import (Facade, GeometryPayload, LayoutPayload, MeshSurface,
+                     PartitionPayload, RoomPayload, SurfaceKind)
 
 WINDOW_OPACITY = 0.32
 GROUND_COLOUR = "#7a6a52"
@@ -52,8 +54,32 @@ def _offset_vertices(polygon: Polygon, distance: float) -> list[tuple[float, flo
             for vertex in polygon.vertices]
 
 
+ZONING_NOTE = (
+    "One thermal zone plus any arrangement zones. The rooms below are the layout the "
+    "programme implies, not separate simulated volumes, and no room is given its own "
+    "temperature. The partition walls do enter the simulation, as internal mass.")
+
+
+def build_layout_payload(layout: Layout, use) -> LayoutPayload:
+    spec = programme(use)
+    return LayoutPayload(
+        use=use, label=spec.label, description=spec.description,
+        rooms=tuple(RoomPayload(name=room.name, x0=room.x0, y0=room.y0, x1=room.x1,
+                                y1=room.y1, area_m2=room.area_m2,
+                                heated=room.heated)
+                    for room in layout.rooms),
+        partitions=tuple(PartitionPayload(x0=run.x0, y0=run.y0, x1=run.x1, y1=run.y1,
+                                          height_m=layout.height_m,
+                                          between=run.between)
+                         for run in layout.partitions),
+        partition_area_m2=round(layout.partition_area_m2, 3),
+        thermal_zoning=ZONING_NOTE, notes=layout.notes, source=spec.source)
+
+
 def build_mesh(model: GeometryModel, constructions: ConstructionSet,
-               library: MaterialLibrary) -> GeometryPayload:
+               library: MaterialLibrary,
+               layout: Layout | None = None,
+               use=None) -> GeometryPayload:
     surfaces: list[MeshSurface] = []
     for polygon in model.polygons:
         colour, finish, opacity = _appearance_for(polygon, constructions, library)
@@ -74,6 +100,8 @@ def build_mesh(model: GeometryModel, constructions: ConstructionSet,
         design_hash=model.design_hash, arrangement=model.arrangement,
         azimuth_deg=model.azimuth_deg, bounds_min=low, bounds_max=high,
         surfaces=tuple(surfaces), zone_volumes_m3=model.zone_volumes(),
+        layout=(build_layout_payload(layout, use)
+                if layout is not None and use is not None else None),
         warnings=tuple(model.warnings))
     verify_mesh_matches_surfaces(payload, model)
     return payload

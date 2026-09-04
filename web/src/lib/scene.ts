@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import type { SunPosition } from "./api";
+import type { LayoutPayload, SunPosition } from "./api";
+import { ELEVATION, rampRgb } from "./format";
 
 export const UP = new THREE.Vector3(0, 0, 1);
 
@@ -101,6 +102,7 @@ export function createTerrain(
   positions: number[],
   indices: number[],
   scale = 1,
+  colourByElevation = false,
 ): THREE.Mesh | null {
   if (positions.length === 0 || indices.length === 0) return null;
   const geometry = new THREE.BufferGeometry();
@@ -111,17 +113,103 @@ export function createTerrain(
   );
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
-  const mesh = new THREE.Mesh(
-    geometry,
-    new THREE.MeshLambertMaterial({
-      color: new THREE.Color("#6b6250"),
-      side: THREE.DoubleSide,
-      flatShading: true,
-    }),
-  );
+
+  const material = new THREE.MeshLambertMaterial({
+    color: new THREE.Color("#6b6250"),
+    side: THREE.DoubleSide,
+    flatShading: true,
+  });
+
+  if (colourByElevation) {
+    let low = Infinity;
+    let high = -Infinity;
+    for (let i = 2; i < scaled.length; i += 3) {
+      if (scaled[i] < low) low = scaled[i];
+      if (scaled[i] > high) high = scaled[i];
+    }
+    const span = high - low;
+    if (span > 1e-6) {
+      const colours = new Float32Array((scaled.length / 3) * 3);
+      for (let v = 0, i = 2; i < scaled.length; i += 3, v += 3) {
+        const [r, g, b] = rampRgb((scaled[i] - low) / span, ELEVATION);
+        colours[v] = r / 255;
+        colours[v + 1] = g / 255;
+        colours[v + 2] = b / 255;
+      }
+      geometry.setAttribute("color", new THREE.BufferAttribute(colours, 3));
+      material.vertexColors = true;
+      material.color.set("#ffffff");
+    }
+  }
+
+  const mesh = new THREE.Mesh(geometry, material);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   return mesh;
+}
+
+const ROOM_TINTS = [
+  "#c9a227", "#2f7f9e", "#8a6fae", "#4f8f5a",
+  "#c06a3e", "#5a7d9a", "#a8556b", "#7a8b3f",
+];
+
+export function createLayout(
+  layout: LayoutPayload,
+  origin: { x: number; y: number },
+): { group: THREE.Group; rooms: { name: string; colour: string; area: number }[] } {
+  const group = new THREE.Group();
+  const legend: { name: string; colour: string; area: number }[] = [];
+
+  layout.rooms.forEach((room, index) => {
+    const colour = ROOM_TINTS[index % ROOM_TINTS.length];
+    legend.push({ name: room.name, colour, area: room.area_m2 });
+    const width = room.x1 - room.x0;
+    const depth = room.y1 - room.y0;
+    if (width <= 0 || depth <= 0) return;
+    const patch = new THREE.Mesh(
+      new THREE.PlaneGeometry(width, depth),
+      new THREE.MeshBasicMaterial({
+        color: colour,
+        transparent: true,
+        opacity: room.heated ? 0.3 : 0.15,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
+    );
+    patch.position.set(
+      origin.x + (room.x0 + room.x1) / 2,
+      origin.y + (room.y0 + room.y1) / 2,
+      0.02,
+    );
+    patch.renderOrder = 2;
+    group.add(patch);
+  });
+
+  const material = new THREE.MeshLambertMaterial({
+    color: new THREE.Color("#c8bda8"),
+    transparent: true,
+    opacity: 0.9,
+  });
+  for (const run of layout.partitions) {
+    const dx = run.x1 - run.x0;
+    const dy = run.y1 - run.y0;
+    const length = Math.hypot(dx, dy);
+    if (length <= 0) continue;
+    const wall = new THREE.Mesh(
+      new THREE.BoxGeometry(length, 0.1, run.height_m),
+      material,
+    );
+    wall.position.set(
+      origin.x + (run.x0 + run.x1) / 2,
+      origin.y + (run.y0 + run.y1) / 2,
+      run.height_m / 2,
+    );
+    wall.rotation.z = Math.atan2(dy, dx);
+    wall.castShadow = true;
+    wall.receiveShadow = true;
+    group.add(wall);
+  }
+  return { group, rooms: legend };
 }
 
 export function createSunPathArc(

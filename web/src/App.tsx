@@ -67,17 +67,17 @@ function ModeToggle() {
             ? "bg-[var(--color-good)]/20 text-[var(--color-good)]"
             : "text-[var(--color-ink-faint)]"
         }`}
-        title="Stored weather file, zero network. This is the demo path."
+        title="The stored TMYx weather year for this site, zero network. Simulations still run live against it. This is the demo path."
       >
-        ● Cached, offline
+        ● Weather: stored file
       </button>
       <button
         type="button"
         disabled
         className="cursor-not-allowed rounded px-2 py-1 text-[var(--color-ink-faint)] opacity-50"
-        title="Live fetch of recent hourly weather is a Layer 0 capability and is not wired into this build. It is shown disabled rather than faked."
+        title="Fetching a recent observed weather year from a network service is a Layer 0 capability and is not wired into this build. It is shown disabled rather than faked. It does not affect whether a simulation runs: every design you change here is solved by EnergyPlus on demand either way."
       >
-        ○ Live
+        ○ Weather: live fetch
       </button>
     </div>
   );
@@ -96,13 +96,17 @@ export default function App() {
   const catalogue = useQuery({
     queryKey: ["design-catalogue"],
     queryFn: async (): Promise<Record<string, DesignSpec>> => {
-      const files = ["single_room", "sunspace", "trombe_wall", "vestibule"];
+      const listed = await api.designs();
       const entries = await Promise.all(
-        files.map(async (name) => {
-          const response = await fetch(`/designs/${name}.json`);
-          if (!response.ok) return null;
-          return [`candidate_${name}`, (await response.json()) as DesignSpec] as const;
-        }),
+        listed
+          .filter((item) => !item.is_reference)
+          .map(async (item) => {
+            try {
+              return [item.id, await api.design(item.id)] as const;
+            } catch {
+              return null;
+            }
+          }),
       );
       return Object.fromEntries(entries.filter(Boolean) as [string, DesignSpec][]);
     },
@@ -140,7 +144,14 @@ export default function App() {
   });
 
   const simulation = useQuery({
-    queryKey: ["simulate", design, siteId, store.period.start, store.period.end],
+    queryKey: [
+      "simulate",
+      design,
+      siteId,
+      store.period.start,
+      store.period.end,
+      store.comfortModelId,
+    ],
     queryFn: () =>
       api.simulate({
         design: design!,
@@ -151,15 +162,21 @@ export default function App() {
         surface_output: true,
         with_uncertainty: true,
         with_reference: true,
+        comfort_model_id: store.comfortModelId,
       }),
     enabled: Boolean(design && siteId),
     staleTime: Infinity,
   });
 
-  const designOptions = [
-    ...Object.keys(catalogue.data ?? {}),
-    ...(references.data?.map((item) => item.name) ?? []),
-  ];
+  const candidateOptions = Object.keys(catalogue.data ?? {});
+  const referenceOptions = references.data?.map((item) => item.name) ?? [];
+  const designOptions = [...candidateOptions, ...referenceOptions];
+
+  const { designName, setDesignName } = store;
+  useEffect(() => {
+    if (designOptions.length === 0 || designOptions.includes(designName)) return;
+    setDesignName(designOptions[0]);
+  }, [designOptions, designName, setDesignName]);
 
   const blocking = (meta.data?.warnings ?? []).filter(
     (item) => item.severity === "severe" || item.severity === "fatal",
@@ -193,11 +210,20 @@ export default function App() {
               onChange={(event) => store.setDesignName(event.target.value)}
               className="px-2 py-1 text-xs"
             >
-              {designOptions.map((name) => (
-                <option key={name} value={name}>
-                  {name.replace(/_/g, " ")}
-                </option>
-              ))}
+              <optgroup label="Candidates">
+                {candidateOptions.map((name) => (
+                  <option key={name} value={name}>
+                    {name.replace(/_/g, " ")}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="References, for comparison">
+                {referenceOptions.map((name) => (
+                  <option key={name} value={name}>
+                    {name.replace(/_/g, " ")}
+                  </option>
+                ))}
+              </optgroup>
             </select>
             <ModeToggle />
           </div>

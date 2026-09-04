@@ -11,15 +11,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     SHELTER_ENGINE_WORK_DIR=/tmp/shelter_runs
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates curl tar \
+ && apt-get install -y --no-install-recommends \
+      ca-certificates curl tar libgomp1 libx11-6 libexpat1 \
  && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL "${ENERGYPLUS_URL}" -o /tmp/energyplus.tar.gz \
  && mkdir -p /opt/EnergyPlus \
  && tar -xzf /tmp/energyplus.tar.gz -C /opt/EnergyPlus --strip-components=1 \
  && rm /tmp/energyplus.tar.gz \
- && test -x /opt/EnergyPlus/energyplus \
- && test -f /opt/EnergyPlus/Energy+.idd
+ && test -f /opt/EnergyPlus/Energy+.idd \
+ && /opt/EnergyPlus/energyplus --version
 
 WORKDIR /app
 COPY engine/pyproject.toml engine/README.md ./engine/

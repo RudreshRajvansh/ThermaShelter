@@ -6,9 +6,10 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 from .config import EnergyPlusInstall, find_energyplus
-from .constructions import ConstructionSet
+from .constructions import INTERNAL_MASS_SOURCE, ConstructionSet
 from .errors import ConfigurationError, EngineError
 from .geometry import GeometryModel, Polygon, ZoneModel
+from .programme import layout_for
 from .schema import (Arrangement, Assumption, DesignSpec, EngineWarning, Facade,
                      Provenance, RunOptions, Severity, SiteSpec, SourceRef,
                      SourceStatus)
@@ -409,6 +410,23 @@ def _set_first(obj, candidates: Iterable[str], value: Any) -> str:
         f"{sorted(valid)}")
 
 
+def _add_internal_mass(idf, design: DesignSpec, model: GeometryModel,
+                       constructions: ConstructionSet,
+                       assumptions: list[Assumption]) -> float:
+    layout = layout_for(design.plan)
+    area = layout.partition_area_m2
+    if area <= 0.0 or not constructions.names.internal_mass:
+        return 0.0
+    mass = _new(idf, "InternalMass", Name="ROOM_PARTITIONS",
+                Construction_Name=constructions.names.internal_mass,
+                Surface_Area=round(area, 3))
+    _set_first(mass, ZONE_FIELD_ALIASES, model.zone("ROOM").name)
+    assumptions.append(Assumption(
+        name="internal_partition_area", value=round(area, 2), unit="m2",
+        source=INTERNAL_MASS_SOURCE, provenance=Provenance.DERIVED))
+    return area
+
+
 def _add_internal_gains(idf, design: DesignSpec, model: GeometryModel,
                         assumptions: list[Assumption]) -> None:
     occupancy = design.occupancy
@@ -791,6 +809,7 @@ def build_idf(design: DesignSpec, site: SiteSpec, model: GeometryModel,
         _add_window(idf, polygon)
     if options.include_horizon_shading:
         _add_shading(idf, model)
+    _add_internal_mass(idf, design, model, constructions, assumptions)
     _add_internal_gains(idf, design, model, assumptions)
     _add_added_moisture(idf, design, model, assumptions)
     _add_airflow(idf, design, model, assumptions)

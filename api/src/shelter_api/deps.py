@@ -28,7 +28,7 @@ class Context:
     references: ReferenceCatalogue
     catalogue: ComfortCatalogue
     startup_warnings: list[EngineWarning] = field(default_factory=list)
-    _engines: dict[str, Engine] = field(default_factory=dict)
+    _engines: dict[tuple[str, str], Engine] = field(default_factory=dict)
     _lock: threading.RLock = field(default_factory=threading.RLock)
 
     @property
@@ -56,7 +56,8 @@ class Context:
                 detail=(f"Unknown site {identifier!r}. Loaded sites: "
                         f"{sorted(self.sites)}")) from None
 
-    def engine(self, site_id: str | None = None) -> Engine:
+    def engine(self, site_id: str | None = None,
+               comfort_model_id: str | None = None) -> Engine:
         site = self.site(site_id)
         if self.library is None:
             raise HTTPException(
@@ -69,20 +70,29 @@ class Context:
                 detail=("EnergyPlus was not found. Set ENERGYPLUS_DIR or put "
                         "energyplus on PATH. Physics happens in EnergyPlus and the "
                         "API will not fabricate a result without it."))
+        model_id = comfort_model_id or self.settings.comfort_model_id
+        if self.catalogue is not None:
+            known = {model.id for model in self.catalogue.adaptive}
+            if known and model_id not in known:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(f"There is no comfort model called {model_id!r}. "
+                            f"The catalogue holds {', '.join(sorted(known))}."))
+        key = (site.id, model_id)
         with self._lock:
-            existing = self._engines.get(site.id)
+            existing = self._engines.get(key)
             if existing is not None:
                 return existing
             try:
                 engine = Engine(site, self.library,
-                                comfort_model_id=self.settings.comfort_model_id,
+                                comfort_model_id=model_id,
                                 fuel=self.settings.fuel,
                                 references=self.references,
                                 catalogue=self.catalogue,
                                 cfd_directory=self.settings.cfd_dir)
             except (EngineError, WeatherError) as error:
                 raise HTTPException(status_code=503, detail=str(error)) from error
-            self._engines[site.id] = engine
+            self._engines[key] = engine
             return engine
 
 
@@ -94,7 +104,10 @@ def _warning(code: str, message: str,
 
 @lru_cache(maxsize=1)
 def get_context() -> Context:
-    settings = get_settings()
+    return build_context(get_settings())
+
+
+def build_context(settings: Settings) -> Context:
     warnings: list[EngineWarning] = []
 
     library: MaterialLibrary | None = None

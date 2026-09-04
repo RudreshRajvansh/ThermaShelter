@@ -3,6 +3,7 @@
   "description": "Traditional Ladakhi construction: stone rubble plinth with sun dried mud brick walls, mud plaster inside and out, timber and earth roof, small openings.",
   "arrangement": "single_room",
   "plan": {
+    "use": "barrack",
     "floor_area_m2": 40.0,
     "aspect_ratio": 1.6,
     "ceiling_height_m": 2.4,

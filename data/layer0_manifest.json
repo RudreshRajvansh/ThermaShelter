@@ -1,0 +1,41 @@
+{
+  "generated_from": "R:\\SIH\\build\\layer0\\layer_0",
+  "weather_file": "IND_JK_Leh.427053_TMYx.2011-2025.epw",
+  "weather_source": "SRC-TMYx",
+  "materials_from_layer0": [
+    "brick_solid",
+    "concrete_dense",
+    "glass_soda_lime",
+    "limestone",
+    "timber_softwood"
+  ],
+  "materials_added": [
+    "cement_plaster",
+    "eps_thermocol",
+    "gi_sheet",
+    "gravel_bed",
+    "mud_brick",
+    "mud_plaster",
+    "rammed_earth",
+    "rockwool",
+    "stone_granite",
+    "xps_board"
+  ],
+  "glazing_added": [
+    "single_clear_4mm",
+    "double_clear_6_12_6",
+    "double_lowe_argon"
+  ],
+  "pcm_from_layer0": [
+    "rt21",
+    "rt21hc",
+    "rt25",
+    "rt25hc"
+  ],
+  "corrections": {
+    "brick_solid": "The Layer 0 row gives k = 0.17 W/mK and cp = 330 to 440 J/kgK at 1980 kg/m3. Both fail a physical plausibility check: fired clay brick at that density conducts near 0.9 W/mK and stores near 800 J/kgK. This is the baseline wall, so an implausibly low conductivity would make current construction look insulated and shrink every reported difference. ASHRAE values substituted; confirm with Layer 0."
+  },
+  "costs": "Indicative delivered cost, not a measured property and not supplied by Layer 0. The Layer 0 material source file states these must be replaced with locally sourced values. Treat every rupee figure derived from them as provisional.",
+  "ground_temperature_source": "Undisturbed earth temperature at 0.5 m from the EPW GROUND TEMPERATURES header, calculated from this weather file",
+  "ground_temperature_note": "NASA POWER TSOIL1 for 2015 to 2024 is also in the Layer 0 delivery and gives -8.9, -8.5, -7.4, -2.4, 2.8, 7.7, 12.3, 11.9, 7.2, 0.5, -4.4, -8.8 C. It was not used because its MERRA-2 grid cell reports 4533 m elevation against the 3256 m of the site, so it is colder than Leh."
+}

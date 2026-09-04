@@ -3,6 +3,7 @@
   "description": "Modern insulated prefabricated shelter: rockwool cored panel walls and roof, double glazed windows, insulated floor. Light, quick to erect and almost without thermal mass.",
   "arrangement": "single_room",
   "plan": {
+    "use": "barrack",
     "floor_area_m2": 40.0,
     "aspect_ratio": 1.6,
     "ceiling_height_m": 2.5,

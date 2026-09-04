@@ -196,3 +196,21 @@ def test_nan_values_do_not_propagate():
     metrics = evaluate_comfort(indoor, _outdoor(), fixtures.comfort_model(), PERIOD)
     assert np.isfinite(metrics.degree_hours_total_kh)
     assert np.isfinite(metrics.mean_operative_c)
+
+
+def test_two_comfort_models_with_the_same_coefficients_are_called_out(site, library):
+    from shelter_engine.engine import Engine
+
+    catalogue = load_catalogue()
+    chosen = catalogue.adaptive[0]
+    twins = [model.id for model in catalogue.adaptive
+             if model.id != chosen.id
+             and model.intercept_c == chosen.intercept_c
+             and model.slope == chosen.slope
+             and model.band_half_width_k == chosen.band_half_width_k]
+    engine = Engine(site, library, comfort_model_id=chosen.id)
+    codes = {warning.code for warning in engine._integrity_warnings()}
+    if twins:
+        assert "comfort_model_duplicates_another" in codes
+    else:
+        assert "comfort_model_duplicates_another" not in codes

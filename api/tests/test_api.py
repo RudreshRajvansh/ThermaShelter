@@ -32,6 +32,48 @@ def client(tmp_path_factory) -> TestClient:
 
 
 @pytest.fixture(scope="module")
+def cooling_client(tmp_path_factory) -> TestClient:
+    import shutil
+
+    from synthetic_epw import write_synthetic_epw
+
+    root = tmp_path_factory.mktemp("cooling")
+    shutil.copy2(DATA / "materials.db", root / "materials.db")
+    (root / "weather").mkdir()
+    (root / "sites").mkdir()
+    epw = write_synthetic_epw(
+        root / "weather" / "synthetic_jaisalmer.epw", latitude_deg=26.92,
+        longitude_deg=70.92, time_zone_h=5.5, elevation_m=225.0,
+        annual_mean_c=26.0, annual_swing_c=10.0, diurnal_swing_c=15.0,
+        city="SYNTHETIC-JAISALMER")
+    (root / "sites" / "jaisalmer.json").write_text(json.dumps({
+        "id": "jaisalmer", "name": "Jaisalmer, Rajasthan", "latitude_deg": 26.92,
+        "longitude_deg": 70.92, "elevation_m": 225.0, "time_zone_h": 5.5,
+        "epw_path": f"weather/{epw.name}",
+        "climate_objective": "cooling_dominated", "terrain": "Country",
+        "source": {"citation": "Synthetic weather year written by this test to "
+                               "exercise the cooling path. Not a result.",
+                   "status": "pending"}}), encoding="utf-8")
+
+    from shelter_api.config import Settings
+    from shelter_api.deps import build_context, get_context
+    from shelter_api.main import create_app
+
+    settings = Settings(data_dir=root, database_path=root / "runs.db",
+                        default_site="jaisalmer")
+    context = build_context(settings)
+    app = create_app()
+    app.dependency_overrides[get_context] = lambda: context
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+@pytest.fixture(scope="module")
+def meta(client) -> dict:
+    return client.get("/api/meta").json()
+
+
+@pytest.fixture(scope="module")
 def design() -> dict:
     return json.loads((DATA / "designs" / "single_room.json").read_text())
 
@@ -52,14 +94,17 @@ def test_health_reports_ready(client):
     assert body["status"] == "ok"
 
 
-def test_meta_lists_both_climates(client):
+def test_meta_names_the_heating_climate(client):
     body = client.get("/api/meta").json()
-    ids = {site["id"] for site in body["sites"]}
-    assert {"leh", "jaisalmer"} <= ids
     headline = {site["id"]: site["headline_metric"] for site in body["sites"]}
     assert headline["leh"] == "minimum_overnight_operative_c"
-    assert headline["jaisalmer"] == "maximum_daytime_operative_c"
     assert body["energyplus_available"] is True
+
+
+def test_meta_names_the_cooling_climate(cooling_client):
+    body = cooling_client.get("/api/meta").json()
+    headline = {site["id"]: site["headline_metric"] for site in body["sites"]}
+    assert headline["jaisalmer"] == "maximum_daytime_operative_c"
 
 
 def test_meta_names_the_provenance_gaps(client):
@@ -97,6 +142,28 @@ def test_geometry_is_fast_and_named(client, design):
     for surface in payload["surfaces"]:
         assert len(surface["positions"]) % 3 == 0
         assert surface["colour"].startswith("#")
+
+
+def test_an_unknown_comfort_model_is_refused_by_name(client, design):
+    response = client.post(
+        "/api/geometry",
+        json={"design": design, "comfort_model_id": "not_a_model"})
+    assert response.status_code == 422
+    assert "not_a_model" in response.json()["detail"]
+
+
+def test_the_comfort_model_can_be_chosen_per_request(client, design, meta):
+    models = meta["comfort_models"]
+    assert len(models) >= 2
+    other = next(item for item in models if item != meta["comfort_model_id"])
+    body = {"design": design, "comfort_model_id": other,
+            "period": {"start": "2019-01-10", "end": "2019-01-12"},
+            "with_uncertainty": False, "with_reference": False}
+    response = client.post("/api/simulate", json=body)
+    if response.status_code == 503:
+        pytest.skip("EnergyPlus is not available")
+    assert response.status_code == 200
+    assert response.json()["comfort"]["comfort_model_id"] == other
 
 
 def test_geometry_rejects_an_impossible_design(client, design):
@@ -177,8 +244,8 @@ def test_compare_puts_the_reference_first(client, design, reference_design):
     assert rows[1]["delta_vs_reference"]
 
 
-def test_cooling_climate_flips_the_headline(client, design):
-    body = client.post("/api/simulate", json={
+def test_cooling_climate_flips_the_headline(cooling_client, design):
+    body = cooling_client.post("/api/simulate", json={
         "design": design, "site_id": "jaisalmer",
         "period": {"start": "2019-06-10", "end": "2019-06-16"},
         "conditioned_run": False, "with_uncertainty": False,
@@ -282,8 +349,17 @@ def test_sun_path_rejects_a_bad_date(client):
     assert client.get("/api/sun-path?day=not-a-date").status_code == 422
 
 
-def test_terrain_mesh_is_drawable(client):
+def test_terrain_mesh_is_the_measured_elevation_model(client):
     body = client.get("/api/terrain?site_id=leh").json()
+    assert body["derived_from_horizon"] is False
+    assert body["vertex_count"] > 1000
+    assert body["sample_spacing_m"] and body["sample_spacing_m"] > 0
+    assert body["elevation_max_m"] > body["elevation_min_m"]
+    assert max(body["indices"]) < len(body["positions"]) // 3
+
+
+def test_terrain_mesh_is_drawable(client):
+    body = client.get("/api/terrain?site_id=leh&skyline_only=true").json()
     assert body["derived_from_horizon"] is True
     assert len(body["positions"]) % 3 == 0
     assert len(body["indices"]) % 3 == 0
@@ -292,8 +368,10 @@ def test_terrain_mesh_is_drawable(client):
 
 
 def test_terrain_display_radii_do_not_change_the_angles(client):
-    near = client.get("/api/terrain?site_id=leh&inner_radius_m=50&outer_radius_m=100").json()
-    far = client.get("/api/terrain?site_id=leh&inner_radius_m=50&outer_radius_m=400").json()
+    near = client.get("/api/terrain?site_id=leh&skyline_only=true"
+                      "&inner_radius_m=50&outer_radius_m=100").json()
+    far = client.get("/api/terrain?site_id=leh&skyline_only=true"
+                     "&inner_radius_m=50&outer_radius_m=400").json()
     assert far["ridge_max_m"] == pytest.approx(near["ridge_max_m"] * 4.0, rel=1e-3)
 
 
@@ -321,9 +399,9 @@ def test_climate_reports_the_altitude_pressure_check(client):
     ) / body["expected_station_pressure_pa"] < 0.05
 
 
-def test_climate_flips_the_design_day_in_a_cooling_climate(client):
+def test_climate_flips_the_design_day_in_a_cooling_climate(client, cooling_client):
     cold = client.get("/api/climate?site_id=leh").json()
-    hot = client.get("/api/climate?site_id=jaisalmer").json()
+    hot = cooling_client.get("/api/climate?site_id=jaisalmer").json()
     assert cold["design_day"][5:7] in ("01", "02", "12")
     assert hot["design_day"][5:7] in ("05", "06", "07", "08")
     assert hot["cooling_degree_days"] > hot["heating_degree_days"]
@@ -334,3 +412,29 @@ def test_climate_monthly_ground_temperatures_are_carried(client):
     january = body["months"][0]
     assert january["ground_temperature_c"] is not None
     assert january["mean_daily_swing_k"] > 0
+
+
+def test_designs_endpoint_lists_the_stored_library(client):
+    body = client.get("/api/designs").json()
+    assert body
+    identifiers = {item["id"] for item in body}
+    assert "single_room" in identifiers
+    assert "vestibule" not in identifiers
+    for item in body:
+        assert item["floor_area_m2"] > 0
+        assert item["use"]
+        assert item["arrangement"]
+
+
+def test_a_stored_design_round_trips_through_the_api(client):
+    listed = client.get("/api/designs").json()
+    identifier = listed[0]["id"]
+    design = client.get(f"/api/designs/{identifier}").json()
+    assert design["name"]
+    assert design["plan"]["floor_area_m2"] == listed[0]["floor_area_m2"]
+
+
+def test_an_unknown_design_names_what_the_library_holds(client):
+    response = client.get("/api/designs/not_a_design")
+    assert response.status_code == 404
+    assert "single_room" in response.json()["detail"]

@@ -400,6 +400,7 @@ class ConstructionNames:
     trombe_wall: str = ""
     sunspace_floor: str = ""
     interior_door: str = ""
+    internal_mass: str = ""
 
 
 def _strip_bounds(x0: float, x1: float, fraction: float) -> tuple[float, float]:
