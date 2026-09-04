@@ -1,0 +1,10 @@
+Materials property source:
+
+Primary source:
+ASHRAE Handbook — Fundamentals, Chapter 26, Heat, Air, and Moisture Control in Building Assemblies: Material Properties.
+
+The density, thermal conductivity (k), and specific heat (Cp) values in materials.csv are taken from or based on the corresponding material entries in the ASHRAE material-property tables.
+
+These are generic material properties. Actual properties may vary with composition, density, moisture content, and temperature.
+
+Cost, local availability, transport penalty, and mason skill are not treated as measured material properties and should be replaced with locally sourced values before being used in final simulations.

@@ -1,0 +1,24 @@
+LAYER 0 - DATA SOURCES
+
+1. WEATHER DATA
+Source: NASA POWER
+Location: Leh, Ladakh
+Latitude: 34.16
+Longitude: 77.58
+Resolution: Hourly
+Period: 01/01/2015 - 12/31/2016
+
+Parameters:
+- Temperature at 2 meters (T2M)
+- Relative Humidity at 2 meters (RH2M)
+- Surface Pressure (PS)
+- Wind Speed at 2 meters (WS2M)
+- All Sky Surface Shortwave Downward Irradiance
+- All Sky Surface Shortwave Downward Direct Normal Irradiance
+- All Sky Surface Shortwave Diffuse Irradiance
+
+Source website:
+NASA POWER Data Access Viewer
+https://power.larc.nasa.gov/data-access-viewer/
+
+Downloaded: 02/09/2026

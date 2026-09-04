@@ -1,0 +1,270 @@
+import * as THREE from "three";
+import type { SunPosition } from "./api";
+
+export const UP = new THREE.Vector3(0, 0, 1);
+
+export function sunVector(
+  altitudeDeg: number,
+  azimuthDeg: number,
+  radius: number,
+): THREE.Vector3 {
+  const altitude = THREE.MathUtils.degToRad(altitudeDeg);
+  const azimuth = THREE.MathUtils.degToRad(azimuthDeg);
+  return new THREE.Vector3(
+    radius * Math.cos(altitude) * Math.sin(azimuth),
+    radius * Math.cos(altitude) * Math.cos(azimuth),
+    radius * Math.sin(altitude),
+  );
+}
+
+const SKY_VERTEX = `
+varying vec3 vWorld;
+void main() {
+  vWorld = position;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+const SKY_FRAGMENT = `
+varying vec3 vWorld;
+uniform vec3 horizonColour;
+uniform vec3 zenithColour;
+uniform vec3 groundColour;
+uniform vec3 sunDirection;
+uniform float sunStrength;
+void main() {
+  vec3 direction = normalize(vWorld);
+  float height = direction.z;
+  vec3 sky = mix(horizonColour, zenithColour, clamp(pow(max(height, 0.0), 0.55), 0.0, 1.0));
+  vec3 colour = height < 0.0 ? mix(horizonColour, groundColour, clamp(-height * 3.0, 0.0, 1.0)) : sky;
+  float glow = pow(max(dot(direction, normalize(sunDirection)), 0.0), 26.0);
+  colour += vec3(1.0, 0.86, 0.62) * glow * sunStrength;
+  gl_FragColor = vec4(colour, 1.0);
+}
+`;
+
+export function createSky(radius: number): {
+  mesh: THREE.Mesh;
+  setSun: (direction: THREE.Vector3, altitudeDeg: number) => void;
+} {
+  const uniforms = {
+    horizonColour: { value: new THREE.Color("#cfd9e4") },
+    zenithColour: { value: new THREE.Color("#5d87bd") },
+    groundColour: { value: new THREE.Color("#8d8375") },
+    sunDirection: { value: new THREE.Vector3(0, 0, 1) },
+    sunStrength: { value: 1.0 },
+  };
+  const mesh = new THREE.Mesh(
+    new THREE.SphereGeometry(radius, 48, 32),
+    new THREE.ShaderMaterial({
+      uniforms,
+      vertexShader: SKY_VERTEX,
+      fragmentShader: SKY_FRAGMENT,
+      side: THREE.BackSide,
+      depthWrite: false,
+    }),
+  );
+  mesh.frustumCulled = false;
+
+  const day = { horizon: "#cfd9e4", zenith: "#5d87bd" };
+  const dusk = { horizon: "#e0a878", zenith: "#3d5273" };
+  const night = { horizon: "#141d2e", zenith: "#0f1626" };
+
+  const setSun = (direction: THREE.Vector3, altitudeDeg: number) => {
+    uniforms.sunDirection.value.copy(direction).normalize();
+    const daylight = THREE.MathUtils.clamp(altitudeDeg / 18, 0, 1);
+    const twilight = THREE.MathUtils.clamp((altitudeDeg + 8) / 14, 0, 1);
+    const horizon = new THREE.Color(night.horizon)
+      .lerp(new THREE.Color(dusk.horizon), twilight)
+      .lerp(new THREE.Color(day.horizon), daylight);
+    const zenith = new THREE.Color(night.zenith)
+      .lerp(new THREE.Color(dusk.zenith), twilight)
+      .lerp(new THREE.Color(day.zenith), daylight);
+    uniforms.horizonColour.value.copy(horizon);
+    uniforms.zenithColour.value.copy(zenith);
+    uniforms.sunStrength.value = daylight;
+  };
+  setSun(new THREE.Vector3(0, 0, 1), 45);
+  return { mesh, setSun };
+}
+
+export function createGround(radius: number): THREE.Mesh {
+  const mesh = new THREE.Mesh(
+    new THREE.CircleGeometry(radius, 96),
+    new THREE.MeshLambertMaterial({ color: new THREE.Color("#a99c81") }),
+  );
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+export function createTerrain(
+  positions: number[],
+  indices: number[],
+  scale = 1,
+): THREE.Mesh | null {
+  if (positions.length === 0 || indices.length === 0) return null;
+  const geometry = new THREE.BufferGeometry();
+  const scaled = scale === 1 ? positions : positions.map((value) => value * scale);
+  geometry.setAttribute(
+    "position",
+    new THREE.BufferAttribute(new Float32Array(scaled), 3),
+  );
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  const mesh = new THREE.Mesh(
+    geometry,
+    new THREE.MeshLambertMaterial({
+      color: new THREE.Color("#6b6250"),
+      side: THREE.DoubleSide,
+      flatShading: true,
+    }),
+  );
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+export function createSunPathArc(
+  positions: SunPosition[],
+  radius: number,
+): THREE.Group {
+  const group = new THREE.Group();
+  const visible: THREE.Vector3[] = [];
+  const blocked: THREE.Vector3[] = [];
+  for (const item of positions) {
+    if (!item.above_horizon) continue;
+    const point = sunVector(item.altitude_deg, item.azimuth_deg, radius);
+    (item.visible ? visible : blocked).push(point);
+  }
+  const build = (points: THREE.Vector3[], colour: string, thickness: number) => {
+    if (points.length < 2) return;
+    const curve = new THREE.CatmullRomCurve3(points);
+    const geometry = new THREE.TubeGeometry(
+      curve,
+      Math.max(16, points.length * 2),
+      thickness,
+      8,
+      false,
+    );
+    group.add(
+      new THREE.Mesh(
+        geometry,
+        new THREE.MeshBasicMaterial({ color: colour, toneMapped: false }),
+      ),
+    );
+  };
+  const thickness = radius * 0.006;
+  build(blocked, "#9b6a44", thickness * 0.7);
+  build(visible, "#ffc043", thickness);
+  return group;
+}
+
+export function createCompass(radius: number): THREE.Group {
+  const group = new THREE.Group();
+  const marks: [string, number, string][] = [
+    ["N", 0, "#c53030"],
+    ["E", 90, "#5b6672"],
+    ["S", 180, "#2b6cb0"],
+    ["W", 270, "#5b6672"],
+  ];
+  for (const [, azimuth, colour] of marks) {
+    const angle = THREE.MathUtils.degToRad(azimuth);
+    const inner = new THREE.Vector3(
+      radius * 0.86 * Math.sin(angle),
+      radius * 0.86 * Math.cos(angle),
+      0.05,
+    );
+    const outer = new THREE.Vector3(
+      radius * Math.sin(angle),
+      radius * Math.cos(angle),
+      0.05,
+    );
+    const geometry = new THREE.BufferGeometry().setFromPoints([inner, outer]);
+    group.add(
+      new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: colour })),
+    );
+  }
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(radius * 0.985, radius, 128),
+    new THREE.MeshBasicMaterial({
+      color: "#5b6672",
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.45,
+    }),
+  );
+  ring.position.z = 0.04;
+  group.add(ring);
+  return group;
+}
+
+export function createSunDisc(radius: number): {
+  group: THREE.Group;
+  setState: (shining: boolean) => void;
+} {
+  const group = new THREE.Group();
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(radius, 24, 18),
+    new THREE.MeshBasicMaterial({ color: "#ffd166", toneMapped: false }),
+  );
+  group.add(core);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 128;
+  const context = canvas.getContext("2d")!;
+  const gradient = context.createRadialGradient(64, 64, 4, 64, 64, 64);
+  gradient.addColorStop(0, "rgba(255,220,150,0.95)");
+  gradient.addColorStop(0.35, "rgba(255,196,90,0.35)");
+  gradient.addColorStop(1, "rgba(255,196,90,0)");
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, 128, 128);
+  const halo = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: new THREE.CanvasTexture(canvas),
+      transparent: true,
+      depthWrite: false,
+      toneMapped: false,
+    }),
+  );
+  halo.scale.setScalar(radius * 9);
+  group.add(halo);
+
+  const setState = (shining: boolean) => {
+    (core.material as THREE.MeshBasicMaterial).color.set(
+      shining ? "#ffd166" : "#8e97a1",
+    );
+    halo.visible = shining;
+  };
+  return { group, setState };
+}
+
+export function makeLabel(text: string, colour = "#12161c"): THREE.Sprite {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 128;
+  const context = canvas.getContext("2d")!;
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.font = "bold 76px system-ui, sans-serif";
+  context.fillStyle = colour;
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(text, canvas.width / 2, canvas.height / 2);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.anisotropy = 4;
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }),
+  );
+  sprite.scale.set(8, 4, 1);
+  return sprite;
+}
+
+export function disposeObject(root: THREE.Object3D): void {
+  root.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (mesh.geometry) mesh.geometry.dispose();
+    const material = (mesh as THREE.Mesh).material;
+    if (!material) return;
+    if (Array.isArray(material)) material.forEach((item) => item.dispose());
+    else material.dispose();
+  });
+}

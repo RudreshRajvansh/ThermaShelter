@@ -1,0 +1,27 @@
+Ground Temperature Source:
+
+Data source:
+NASA POWER Data Access Viewer
+https://power.larc.nasa.gov/data-access-viewer/
+
+Location:
+Leh, Ladakh
+Latitude: 34.16
+Longitude: 77.58
+
+Parameter:
+TSOIL1 — Soil Temperature Layer 1
+
+Temporal resolution:
+Monthly
+
+Period:
+2015–2024
+
+Data source/model:
+NASA POWER / MERRA-2
+
+The soil temperature values in the ground-temperature dataset are taken from NASA POWER's TSOIL1 parameter.
+
+Note:
+The elevation reported in the NASA POWER header is the MERRA-2 grid-region elevation and is not being treated as the actual building-site elevation of Leh.

@@ -1,0 +1,1 @@
+SYNTHETIC DEVELOPMENT DATA. The weather years are generated from a sinusoid and a clear sky model. Every material property is a placeholder carrying a pending source. Layer 0 replaces all of it with a real EPW and a cited material database. Nothing produced from these files is a result and none of it may be shown to a jury.

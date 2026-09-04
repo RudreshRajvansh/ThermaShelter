@@ -1,0 +1,12 @@
+**/node_modules
+**/.venv
+**/__pycache__
+**/*.egg-info
+**/.pytest_cache
+engine/build
+web/dist
+web/api.log
+web/dev.log
+tools
+data/runs.db
+.git

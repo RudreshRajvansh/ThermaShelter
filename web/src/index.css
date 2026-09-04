@@ -1,0 +1,115 @@
+@import "tailwindcss";
+
+@theme {
+  --color-night: #0b1220;
+  --color-night-2: #111b2c;
+  --color-night-3: #18253a;
+  --color-day: #eaf2f7;
+  --color-solar: #f5a623;
+  --color-earth: #b5754a;
+  --color-stone: #8c8378;
+  --color-cold: #4e9bc4;
+  --color-diesel: #c4453d;
+  --color-good: #5aa469;
+
+  --color-ink: #eaf2f7;
+  --color-ink-dim: #9fb0c4;
+  --color-ink-faint: #6b7d94;
+  --color-line: #22334c;
+  --color-line-soft: #1a2942;
+
+  --font-ui: ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia,
+    "Times New Roman", serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 20% -10%, #16233a 0%, transparent 60%),
+    var(--color-night);
+  color: var(--color-ink);
+  font-family: var(--font-ui);
+  font-feature-settings: "tnum" 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+.display {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+.panel {
+  background: linear-gradient(180deg, rgba(24, 37, 58, 0.85), rgba(17, 27, 44, 0.85));
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+}
+
+.panel-flat {
+  background: rgba(17, 27, 44, 0.6);
+  border: 1px solid var(--color-line-soft);
+  border-radius: 8px;
+}
+
+.hairline {
+  border-color: var(--color-line);
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+input[type="range"] {
+  accent-color: var(--color-solar);
+}
+
+select,
+input[type="text"],
+input[type="number"] {
+  background: rgba(11, 18, 32, 0.75);
+  border: 1px solid var(--color-line);
+  border-radius: 6px;
+  color: var(--color-ink);
+}
+
+select:focus,
+input:focus {
+  outline: 2px solid rgba(245, 166, 35, 0.45);
+  outline-offset: 1px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-night);
+}
+::-webkit-scrollbar-thumb {
+  background: #24354f;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2f4463;
+}
+
+@media print {
+  body {
+    background: #fff;
+    color: #111;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .panel,
+  .panel-flat {
+    background: #fff;
+    border-color: #ccc;
+  }
+}

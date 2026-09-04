@@ -1,0 +1,6 @@
+pcm_product,melting_peak_C,heat_storage_kJ_kg,specific_heat_kJ_kgK,density_solid_kg_m3,k_W_mK,source
+pcm_product,melting_peak_C,heat_storage_kJ_kg,specific_heat_kJ_kgK,density_solid_kg_m3,k_W_mK,source
+RT21,21,165,2,840,0.2,Rubitherm RT21 datasheet 2024
+RT21HC,21,190,2,880,0.2,Rubitherm RT21HC datasheet
+RT25,25,180,2,840,0.2,Rubitherm RT25 datasheet 2024
+RT25HC,25,230,2,880,0.2,Rubitherm RT25HC datasheet

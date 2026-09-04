@@ -1,0 +1,84 @@
+{
+  "adaptive_models": [
+    {
+      "id": "imac_2016_nv",
+      "name": "India Model for Adaptive Comfort, naturally ventilated",
+      "intercept_c": 12.83,
+      "slope": 0.54,
+      "band_half_width_k": 3.46,
+      "running_mean_alpha": 0.8,
+      "outdoor_applicability_c": {"low": 13.0, "high": 38.0},
+      "source": {
+        "citation": "Manu, Shukla, Rawal, Thomas and de Dear, Field studies of thermal comfort across multiple climate zones for the subcontinent, India Model for Adaptive Comfort IMAC, Building and Environment 98 (2016) 55-70",
+        "status": "pending",
+        "note": "Coefficients, band half width and the outdoor applicability range must be read off the paper and this record updated before any published result. Do not quote these values until status reads verified."
+      }
+    },
+    {
+      "id": "imac_r_2022_nv",
+      "name": "India Model for Adaptive Comfort, residential, naturally ventilated",
+      "intercept_c": 12.83,
+      "slope": 0.54,
+      "band_half_width_k": 3.46,
+      "running_mean_alpha": 0.8,
+      "outdoor_applicability_c": {"low": 13.0, "high": 38.0},
+      "source": {
+        "citation": "Rawal and others, India Model for Adaptive Comfort residential, IMAC-R, 2022",
+        "status": "pending",
+        "note": "Placeholder carrying the IMAC 2016 coefficients so the pipeline runs. The residential regression differs and MUST be substituted from the 2022 paper before this model is selected for a reported result."
+      }
+    }
+  ],
+  "fixed_targets": [
+    {
+      "id": "dihar_operational_target",
+      "name": "DIHAR operational target for occupied shelters",
+      "lower_bound_c": 20.0,
+      "from_hour": 18,
+      "until_hour": 6,
+      "source": {
+        "citation": "DIHAR operational target of 20 C held from 18:00 to 06:00, as stated in the project build guide",
+        "status": "pending",
+        "note": "Confirm against a DIHAR publication or the problem statement before quoting on screen."
+      }
+    },
+    {
+      "id": "eco_niwas_cold_zone",
+      "name": "Eco-Niwas Samhita cold climate envelope check",
+      "lower_bound_c": 18.0,
+      "from_hour": 0,
+      "until_hour": 0,
+      "source": {
+        "citation": "Eco-Niwas Samhita 2018, Bureau of Energy Efficiency, cold climate zone envelope requirements",
+        "status": "pending",
+        "note": "Used as a secondary reference bound only. The envelope U-value limits it sets are checked separately in the buildability metrics."
+      }
+    }
+  ],
+  "fuel_models": [
+    {
+      "fuel": "diesel",
+      "unit": "litre",
+      "lower_heating_value_kwh_per_unit": 9.94,
+      "appliance_efficiency": 0.75,
+      "price_inr_per_unit": 0.0,
+      "source": {
+        "citation": "Diesel lower heating value of 35.8 MJ per litre, standard fuel property tables",
+        "status": "pending",
+        "note": "Appliance efficiency and the delivered price at the forward post are project inputs. Set price_inr_per_unit from a procurement figure before any rupee number reaches a screen; a zero price makes the omission visible rather than silent."
+      }
+    },
+    {
+      "fuel": "kerosene",
+      "unit": "litre",
+      "lower_heating_value_kwh_per_unit": 9.5,
+      "appliance_efficiency": 0.70,
+      "price_inr_per_unit": 0.0,
+      "source": {
+        "citation": "Kerosene lower heating value of 34.2 MJ per litre, standard fuel property tables",
+        "status": "pending",
+        "note": "Set price_inr_per_unit from a procurement figure before use."
+      }
+    }
+  ]
+}

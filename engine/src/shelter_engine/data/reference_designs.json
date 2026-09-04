@@ -1,0 +1,137 @@
+{
+  "required_material_ids": [
+    "brick_solid", "cement_plaster", "concrete_dense", "gravel_bed", "gi_sheet",
+    "timber_softwood", "mud_brick", "mud_plaster", "rammed_earth", "stone_granite",
+    "eps_thermocol", "rockwool"
+  ],
+  "required_glazing_ids": [
+    "single_clear_4mm", "double_clear_6_12_6", "double_lowe_argon"
+  ],
+  "default_reference": "current_practice_masonry",
+  "designs": [
+    {
+      "name": "current_practice_masonry",
+      "description": "Current construction practice: uninsulated solid brick wall, corrugated galvanised sheet roof on timber, single glazed steel framed windows, unheated concrete floor on grade. This is the object every reported difference is measured against.",
+      "arrangement": "single_room",
+      "is_reference": true,
+      "tags": ["baseline", "current_practice"],
+      "plan": {"floor_area_m2": 40.0, "aspect_ratio": 1.6, "ceiling_height_m": 2.7, "azimuth_deg": 180.0},
+      "wall": {
+        "name": "brick_230_uninsulated",
+        "layers": [
+          {"material_id": "cement_plaster", "thickness_m": 0.015},
+          {"material_id": "brick_solid", "thickness_m": 0.23},
+          {"material_id": "cement_plaster", "thickness_m": 0.015}
+        ]
+      },
+      "roof": {
+        "name": "gi_sheet_on_timber",
+        "layers": [
+          {"material_id": "gi_sheet", "thickness_m": 0.0006},
+          {"material_id": "timber_softwood", "thickness_m": 0.025}
+        ]
+      },
+      "floor": {
+        "name": "concrete_on_grade",
+        "layers": [
+          {"material_id": "gravel_bed", "thickness_m": 0.15},
+          {"material_id": "concrete_dense", "thickness_m": 0.1}
+        ]
+      },
+      "windows": {
+        "south": {"wwr": 0.12, "glazing_id": "single_clear_4mm", "sill_height_m": 0.9},
+        "north": {"wwr": 0.06, "glazing_id": "single_clear_4mm", "sill_height_m": 0.9}
+      },
+      "ventilation": {"infiltration_ach": 1.5, "minimum_fresh_air_ach": 0.35},
+      "occupancy": {"occupants": 9},
+      "citation": {
+        "citation": "Reference construction for current practice in Ladakh, to be sourced from a public works schedule of rates, published defence construction practice, or a field survey",
+        "status": "pending",
+        "note": "This is the single most important citation in the project. Every headline difference is measured against this object, so it must not be invented. Replace this record with a cited assembly and an infiltration rate taken from a measurement or a published figure before any number derived from it is shown to a jury."
+      }
+    },
+    {
+      "name": "traditional_mud_stone",
+      "description": "Traditional Ladakhi construction: stone rubble plinth with sun dried mud brick walls, mud plaster inside and out, timber and earth roof, small openings.",
+      "arrangement": "single_room",
+      "is_reference": true,
+      "tags": ["baseline", "traditional"],
+      "plan": {"floor_area_m2": 40.0, "aspect_ratio": 1.6, "ceiling_height_m": 2.4, "azimuth_deg": 180.0},
+      "wall": {
+        "name": "mud_brick_450",
+        "layers": [
+          {"material_id": "mud_plaster", "thickness_m": 0.02},
+          {"material_id": "mud_brick", "thickness_m": 0.45},
+          {"material_id": "mud_plaster", "thickness_m": 0.02}
+        ]
+      },
+      "roof": {
+        "name": "timber_and_earth",
+        "layers": [
+          {"material_id": "rammed_earth", "thickness_m": 0.15},
+          {"material_id": "timber_softwood", "thickness_m": 0.05}
+        ]
+      },
+      "floor": {
+        "name": "rammed_earth_floor",
+        "layers": [
+          {"material_id": "gravel_bed", "thickness_m": 0.15},
+          {"material_id": "rammed_earth", "thickness_m": 0.1}
+        ]
+      },
+      "windows": {
+        "south": {"wwr": 0.08, "glazing_id": "single_clear_4mm", "sill_height_m": 0.9}
+      },
+      "ventilation": {"infiltration_ach": 2.0, "minimum_fresh_air_ach": 0.35},
+      "occupancy": {"occupants": 9},
+      "citation": {
+        "citation": "Traditional Ladakhi construction as described in the GBP-NIHE Practical Guide for Passive Solar Heated Buildings and GERES India field manuals",
+        "status": "pending",
+        "note": "Wall thickness, roof build up and infiltration must be taken from the guide or a field survey rather than assumed."
+      }
+    },
+    {
+      "name": "modern_insulated_prefab",
+      "description": "Modern insulated prefabricated shelter: rockwool cored panel walls and roof, double glazed windows, insulated floor. Light, quick to erect and almost without thermal mass.",
+      "arrangement": "single_room",
+      "is_reference": true,
+      "tags": ["baseline", "prefab"],
+      "plan": {"floor_area_m2": 40.0, "aspect_ratio": 1.6, "ceiling_height_m": 2.5, "azimuth_deg": 180.0},
+      "wall": {
+        "name": "rockwool_panel_wall",
+        "layers": [
+          {"material_id": "gi_sheet", "thickness_m": 0.0005},
+          {"material_id": "rockwool", "thickness_m": 0.075},
+          {"material_id": "gi_sheet", "thickness_m": 0.0005}
+        ]
+      },
+      "roof": {
+        "name": "rockwool_panel_roof",
+        "layers": [
+          {"material_id": "gi_sheet", "thickness_m": 0.0005},
+          {"material_id": "rockwool", "thickness_m": 0.1},
+          {"material_id": "gi_sheet", "thickness_m": 0.0005}
+        ]
+      },
+      "floor": {
+        "name": "insulated_deck",
+        "layers": [
+          {"material_id": "gravel_bed", "thickness_m": 0.15},
+          {"material_id": "eps_thermocol", "thickness_m": 0.05},
+          {"material_id": "timber_softwood", "thickness_m": 0.025}
+        ]
+      },
+      "windows": {
+        "south": {"wwr": 0.15, "glazing_id": "double_clear_6_12_6", "sill_height_m": 0.9},
+        "north": {"wwr": 0.05, "glazing_id": "double_clear_6_12_6", "sill_height_m": 0.9}
+      },
+      "ventilation": {"infiltration_ach": 0.8, "minimum_fresh_air_ach": 0.35},
+      "occupancy": {"occupants": 9},
+      "citation": {
+        "citation": "Insulated prefabricated shelter panel build up, to be sourced from a manufacturer datasheet or a defence procurement specification",
+        "status": "pending",
+        "note": "Panel core thickness and the achieved airtightness must come from a datasheet, not from assumption."
+      }
+    }
+  ]
+}

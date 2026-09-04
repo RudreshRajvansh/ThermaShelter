@@ -1,0 +1,165 @@
+{
+  "name": "candidate_single_room",
+  "description": null,
+  "arrangement": "single_room",
+  "plan": {
+    "floor_area_m2": 42.0,
+    "aspect_ratio": 1.8,
+    "ceiling_height_m": 2.7,
+    "azimuth_deg": 180.0
+  },
+  "wall": {
+    "name": "massive_insulated",
+    "layers": [
+      {
+        "material_id": "cement_plaster",
+        "thickness_m": 0.02
+      },
+      {
+        "material_id": "eps_thermocol",
+        "thickness_m": 0.08
+      },
+      {
+        "material_id": "rammed_earth",
+        "thickness_m": 0.4
+      },
+      {
+        "material_id": "mud_plaster",
+        "thickness_m": 0.02
+      }
+    ]
+  },
+  "roof": {
+    "name": "insulated_roof",
+    "layers": [
+      {
+        "material_id": "gi_sheet",
+        "thickness_m": 0.0006
+      },
+      {
+        "material_id": "eps_thermocol",
+        "thickness_m": 0.12
+      },
+      {
+        "material_id": "timber_softwood",
+        "thickness_m": 0.025
+      }
+    ]
+  },
+  "floor": {
+    "name": "insulated_floor",
+    "layers": [
+      {
+        "material_id": "gravel_bed",
+        "thickness_m": 0.15
+      },
+      {
+        "material_id": "eps_thermocol",
+        "thickness_m": 0.05
+      },
+      {
+        "material_id": "concrete_dense",
+        "thickness_m": 0.1
+      }
+    ]
+  },
+  "partition": {
+    "name": "mass_partition",
+    "layers": [
+      {
+        "material_id": "mud_plaster",
+        "thickness_m": 0.02
+      },
+      {
+        "material_id": "rammed_earth",
+        "thickness_m": 0.3
+      },
+      {
+        "material_id": "mud_plaster",
+        "thickness_m": 0.02
+      }
+    ]
+  },
+  "windows": {
+    "south": {
+      "wwr": 0.3,
+      "glazing_id": "double_clear_6_12_6",
+      "sill_height_m": 0.6,
+      "shutter": {
+        "present": true,
+        "thermal_resistance_m2k_w": 0.4,
+        "closed_from_hour": 17,
+        "closed_until_hour": 8,
+        "compliance": 1.0,
+        "cost_inr_m2": 0.0,
+        "source": null
+      },
+      "overhang_depth_m": 0.0,
+      "overhang_offset_m": 0.1
+    },
+    "east": {
+      "wwr": 0.05,
+      "glazing_id": "double_clear_6_12_6",
+      "sill_height_m": 0.9,
+      "shutter": {
+        "present": false,
+        "thermal_resistance_m2k_w": 0.35,
+        "closed_from_hour": 17,
+        "closed_until_hour": 8,
+        "compliance": 1.0,
+        "cost_inr_m2": 0.0,
+        "source": null
+      },
+      "overhang_depth_m": 0.0,
+      "overhang_offset_m": 0.1
+    }
+  },
+  "ventilation": {
+    "infiltration_ach": 0.5,
+    "minimum_fresh_air_ach": 0.35,
+    "night_ventilation": false,
+    "night_ventilation_ach": 0.0,
+    "night_ventilation_from_hour": 21,
+    "night_ventilation_until_hour": 6,
+    "infiltration_range": {
+      "low": 0.3,
+      "high": 1.0
+    }
+  },
+  "occupancy": {
+    "occupants": 9,
+    "metabolic_w_per_person": 110.0,
+    "equipment_w": 150.0,
+    "lighting_w": 100.0,
+    "cooking_w": 0.0,
+    "occupied_from_hour": 17,
+    "occupied_until_hour": 8,
+    "daytime_occupancy_fraction": 0.2,
+    "additional_moisture_g_h": 400.0,
+    "unoccupied": false,
+    "source": null
+  },
+  "pcm": {
+    "present": false,
+    "pcm_id": null,
+    "thickness_m": 0.02,
+    "applied_to": "mass_wall_inner"
+  },
+  "arrangement_params": {
+    "sunspace_depth_m": 1.8,
+    "sunspace_glazed_roof": true,
+    "sunspace_glazing_id": "single_clear_4mm",
+    "trombe_gap_m": 0.08,
+    "trombe_glazing_id": "single_clear_4mm",
+    "trombe_width_fraction": 0.7,
+    "vestibule_depth_m": 1.2,
+    "vestibule_facade": "north",
+    "coupling_ach": 2.0,
+    "coupling_from_hour": 10,
+    "coupling_until_hour": 17,
+    "coupling_source": null
+  },
+  "is_reference": false,
+  "citation": null,
+  "tags": []
+}

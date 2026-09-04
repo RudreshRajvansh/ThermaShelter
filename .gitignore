@@ -1,0 +1,13 @@
+tools/
+engine/.venv/
+engine/build/
+engine/**/__pycache__/
+engine/*.egg-info/
+engine/.pytest_cache/
+*.pyc
+web/node_modules/
+web/dist/
+web/public/designs/
+data/runs.db
+api/**/__pycache__/
+api/*.egg-info/

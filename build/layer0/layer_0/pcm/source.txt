@@ -1,0 +1,11 @@
+PCM product source:
+
+Products:
+RT21, RT21HC, RT25, RT25HC
+
+Primary source:
+Rubitherm Technologies GmbH — official technical datasheets for the respective RT PCM products.
+
+The melting temperature, heat-storage capacity, specific heat, density, and thermal conductivity values in pcm.csv are taken from the manufacturer's technical datasheets.
+
+Product properties are manufacturer-reported values and may vary with measurement conditions and product batch.

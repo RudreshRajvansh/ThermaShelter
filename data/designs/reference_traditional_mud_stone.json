@@ -1,0 +1,126 @@
+{
+  "name": "traditional_mud_stone",
+  "description": "Traditional Ladakhi construction: stone rubble plinth with sun dried mud brick walls, mud plaster inside and out, timber and earth roof, small openings.",
+  "arrangement": "single_room",
+  "plan": {
+    "floor_area_m2": 40.0,
+    "aspect_ratio": 1.6,
+    "ceiling_height_m": 2.4,
+    "azimuth_deg": 180.0
+  },
+  "wall": {
+    "name": "mud_brick_450",
+    "layers": [
+      {
+        "material_id": "mud_plaster",
+        "thickness_m": 0.02
+      },
+      {
+        "material_id": "mud_brick",
+        "thickness_m": 0.45
+      },
+      {
+        "material_id": "mud_plaster",
+        "thickness_m": 0.02
+      }
+    ]
+  },
+  "roof": {
+    "name": "timber_and_earth",
+    "layers": [
+      {
+        "material_id": "rammed_earth",
+        "thickness_m": 0.15
+      },
+      {
+        "material_id": "timber_softwood",
+        "thickness_m": 0.05
+      }
+    ]
+  },
+  "floor": {
+    "name": "rammed_earth_floor",
+    "layers": [
+      {
+        "material_id": "gravel_bed",
+        "thickness_m": 0.15
+      },
+      {
+        "material_id": "rammed_earth",
+        "thickness_m": 0.1
+      }
+    ]
+  },
+  "partition": null,
+  "windows": {
+    "south": {
+      "wwr": 0.08,
+      "glazing_id": "single_clear_4mm",
+      "sill_height_m": 0.9,
+      "shutter": {
+        "present": false,
+        "thermal_resistance_m2k_w": 0.35,
+        "closed_from_hour": 17,
+        "closed_until_hour": 8,
+        "compliance": 1.0,
+        "cost_inr_m2": 0.0,
+        "source": null
+      },
+      "overhang_depth_m": 0.0,
+      "overhang_offset_m": 0.1
+    }
+  },
+  "ventilation": {
+    "infiltration_ach": 2.0,
+    "minimum_fresh_air_ach": 0.35,
+    "night_ventilation": false,
+    "night_ventilation_ach": 0.0,
+    "night_ventilation_from_hour": 21,
+    "night_ventilation_until_hour": 6,
+    "infiltration_range": null
+  },
+  "occupancy": {
+    "occupants": 9,
+    "metabolic_w_per_person": 110.0,
+    "equipment_w": 150.0,
+    "lighting_w": 100.0,
+    "cooking_w": 0.0,
+    "occupied_from_hour": 17,
+    "occupied_until_hour": 8,
+    "daytime_occupancy_fraction": 0.2,
+    "additional_moisture_g_h": 0.0,
+    "unoccupied": false,
+    "source": null
+  },
+  "pcm": {
+    "present": false,
+    "pcm_id": null,
+    "thickness_m": 0.02,
+    "applied_to": "mass_wall_inner"
+  },
+  "arrangement_params": {
+    "sunspace_depth_m": 1.8,
+    "sunspace_glazed_roof": true,
+    "sunspace_glazing_id": null,
+    "trombe_gap_m": 0.08,
+    "trombe_glazing_id": null,
+    "trombe_width_fraction": 0.7,
+    "vestibule_depth_m": 1.2,
+    "vestibule_facade": "north",
+    "coupling_ach": 2.0,
+    "coupling_from_hour": 10,
+    "coupling_until_hour": 17,
+    "coupling_source": null
+  },
+  "is_reference": true,
+  "citation": {
+    "citation": "Traditional Ladakhi construction as described in the GBP-NIHE Practical Guide for Passive Solar Heated Buildings and GERES India field manuals",
+    "status": "pending",
+    "url": null,
+    "note": "Wall thickness, roof build up and infiltration must be taken from the guide or a field survey rather than assumed."
+  },
+  "tags": [
+    "baseline",
+    "traditional"
+  ]
+}

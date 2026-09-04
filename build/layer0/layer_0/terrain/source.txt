@@ -1,0 +1,39 @@
+Terrain Data Source:
+
+Primary elevation data source:
+USGS SRTM 1 Arc-Second Global
+
+Source:
+USGS Earth Resources Observation and Science (EROS) Center
+https://www.usgs.gov/centers/eros/science/usgs-eros-archive-digital-elevation-shuttle-radar-topography-mission-srtm-1
+
+DEM file:
+N34_E077_1arc_v3.tif
+
+Location:
+Leh, Ladakh
+Latitude: 34.16
+Longitude: 77.58
+
+Spatial resolution:
+1 arc-second (approximately 30 m)
+
+Coordinate reference:
+WGS 84
+
+Elevation units:
+metres
+
+Terrain processing:
+A 36-direction horizon profile was generated from the DEM at 10-degree azimuth intervals, covering 0° to 350°.
+
+Output:
+horizon_36dir.csv
+
+A coarse terrain mesh was generated from the same DEM.
+
+Output:
+terrain_mesh.obj
+
+Note:
+The same SRTM elevation dataset is used for both the horizon profile and the coarse terrain mesh to maintain consistency between terrain calculations.

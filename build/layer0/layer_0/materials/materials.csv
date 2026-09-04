@@ -1,0 +1,6 @@
+material,density_kg_m3,k_W_mK,Cp_J_kgK,source
+Clay brick,1980,0.17,330-440,ASHRAE Handbook 2025 Chapter 26; Kumaran (2002)
+Concrete,2200,0.88,940,ASHRAE Handbook 2025 Chapter 26; Kumaran (1996)
+Limestone,2400,0.57,840,ASHRAE Handbook 2025 Chapter 26; Kumaran (2002)
+Glass (soda-lime),2500,1.00,840,ASHRAE Handbook 2025 Chapter 26
+Eastern white pine,400,0.10,1630,ASHRAE Handbook 2025 Chapter 26; Kumaran (2002)

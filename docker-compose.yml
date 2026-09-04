@@ -1,0 +1,28 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: shelter-api:0.1.0
+    environment:
+      SHELTER_DATA_DIR: /data
+      SHELTER_DEFAULT_SITE: leh
+      SHELTER_ALLOW_ORIGINS: "http://localhost:8080,http://127.0.0.1:8080"
+      ENERGYPLUS_DIR: /opt/EnergyPlus
+    volumes:
+      - ./data:/data
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    image: shelter-web:0.1.0
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    restart: unless-stopped
