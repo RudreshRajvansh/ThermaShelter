@@ -1,22 +1,22 @@
 @import "tailwindcss";
 
 @theme {
-  --color-night: #0b1220;
-  --color-night-2: #111b2c;
-  --color-night-3: #18253a;
-  --color-day: #eaf2f7;
-  --color-solar: #f5a623;
-  --color-earth: #b5754a;
-  --color-stone: #8c8378;
-  --color-cold: #4e9bc4;
-  --color-diesel: #c4453d;
-  --color-good: #5aa469;
+  --color-night: #f4f7f9;
+  --color-night-2: #ffffff;
+  --color-night-3: #e2e8f0;
+  --color-day: #ffffff;
+  --color-solar: #3b82f6; /* Light Blue */
+  --color-earth: #8b5cf6; /* Purple */
+  --color-stone: #64748b;
+  --color-cold: #0ea5e9;
+  --color-diesel: #ef4444;
+  --color-good: #10b981; /* Green */
 
-  --color-ink: #eaf2f7;
-  --color-ink-dim: #9fb0c4;
-  --color-ink-faint: #6b7d94;
-  --color-line: #22334c;
-  --color-line-soft: #1a2942;
+  --color-ink: #1e293b;
+  --color-ink-dim: #475569;
+  --color-ink-faint: #64748b;
+  --color-line: #cbd5e1;
+  --color-line-soft: #e2e8f0;
 
   --font-ui: ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial,
     sans-serif;
@@ -31,8 +31,9 @@ body,
 }
 
 body {
-  background:
-    radial-gradient(1200px 600px at 20% -10%, #16233a 0%, transparent 60%),
+  background: 
+    radial-gradient(circle at 15% 10%, rgba(59, 130, 246, 0.05) 0%, transparent 40%),
+    radial-gradient(circle at 85% 20%, rgba(139, 92, 246, 0.04) 0%, transparent 40%),
     var(--color-night);
   color: var(--color-ink);
   font-family: var(--font-ui);
@@ -46,13 +47,14 @@ body {
 }
 
 .panel {
-  background: linear-gradient(180deg, rgba(24, 37, 58, 0.85), rgba(17, 27, 44, 0.85));
+  background: #ffffff;
   border: 1px solid var(--color-line);
   border-radius: 10px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
 }
 
 .panel-flat {
-  background: rgba(17, 27, 44, 0.6);
+  background: #f8fafc;
   border: 1px solid var(--color-line-soft);
   border-radius: 8px;
 }
@@ -72,16 +74,18 @@ input[type="range"] {
 select,
 input[type="text"],
 input[type="number"] {
-  background: rgba(11, 18, 32, 0.75);
-  border: 1px solid var(--color-line);
-  border-radius: 6px;
+  background: #f8fafc;
+  border: 1px solid transparent;
+  border-radius: 8px;
   color: var(--color-ink);
+  transition: all 0.2s ease-in-out;
 }
 
 select:focus,
 input:focus {
-  outline: 2px solid rgba(245, 166, 35, 0.45);
-  outline-offset: 1px;
+  background: #ffffff;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
 }
 
 ::-webkit-scrollbar {
@@ -92,11 +96,11 @@ input:focus {
   background: var(--color-night);
 }
 ::-webkit-scrollbar-thumb {
-  background: #24354f;
+  background: #cbd5e1;
   border-radius: 6px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #2f4463;
+  background: #94a3b8;
 }
 
 @media print {

@@ -14,7 +14,6 @@ export const STEPS = [
   "Design Parameters",
   "Simulation",
   "Results",
-  "Compare Designs",
   "Reports",
 ] as const;
 export type Step = (typeof STEPS)[number];
@@ -60,7 +59,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [designName, setDesignName] = useState("single_room");
   const [design, setDesign] = useState<DesignSpec | null>(null);
   const [overrides, setOverrides] = useState<DesignSpec | null>(null);
-  const [displayMode, setDisplayMode] = useState<DisplayMode>("construction");
+  const [displayMode, setDisplayMode] = useState<DisplayMode>("surface_temperature");
   const [hourIndex, setHourIndex] = useState(0);
   const [cooling, setCooling] = useState(false);
   const [liveMode, setLiveMode] = useState(false);

@@ -6,6 +6,7 @@ import { Scene3D } from "../components/Scene3D";
 import { PlanView, SectionView } from "../components/PlanView";
 import { ConstructionView } from "../components/Construction";
 import { activeDesign, useStore } from "../lib/store";
+import { Compare } from "./Compare";
 import { num } from "../lib/format";
 
 const VIEWS = ["3d view", "plan view", "sections", "construction"] as const;
@@ -53,6 +54,8 @@ export function Simulation({
 
   return (
     <div className="space-y-4">
+      <Compare />
+      
       <Panel
         title="Simulation setup"
         subtitle="EnergyPlus runs a free floating case for comfort and a conditioned case for remaining heating demand, then eight corner runs for the uncertainty band and one run of the reference design."

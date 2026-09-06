@@ -14,3 +14,4 @@ src/shelter_api/routers/__init__.py
 src/shelter_api/routers/catalog.py
 src/shelter_api/routers/design.py
 src/shelter_api/routers/search.py
+tests/test_api.py
