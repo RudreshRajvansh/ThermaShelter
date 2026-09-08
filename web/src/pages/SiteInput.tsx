@@ -109,7 +109,7 @@ export function SiteInput({ meta }: { meta: MetaResponse | undefined }) {
         title="Tier one — six fields and a button"
         subtitle="This is the demo path. The location alone resolves the weather file, latitude, altitude, terrain horizon and terrain mesh; you do not enter any of those."
       >
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <Field
             label="Location"
             hint="We pull this location's weather year, terrain skyline and elevation from the Layer 0 data set."
@@ -233,7 +233,7 @@ export function SiteInput({ meta }: { meta: MetaResponse | undefined }) {
         </div>
 
         {site && (
-          <div className="mt-4 rounded-md border border-[var(--color-line)] bg-[var(--color-night)]/60 p-3 text-xs leading-relaxed text-[var(--color-ink-dim)]">
+          <div className="mt-6 rounded-lg border border-[var(--color-line-soft)] bg-[#f8fafc] p-4 text-sm leading-relaxed text-[var(--color-ink-dim)] shadow-sm">
             <span className="text-[var(--color-ink)]">{site.name}</span> at{" "}
             {num(site.latitude_deg, 2)}° N, {num(site.longitude_deg, 2)}° E,{" "}
             {num(site.elevation_m, 0)} m. Weather file{" "}
@@ -256,7 +256,7 @@ export function SiteInput({ meta }: { meta: MetaResponse | undefined }) {
         title="Tier two — the specific site"
         subtitle="for someone who has walked the plot"
       >
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <Field
             label="Plot orientation"
             hint="Compass bearing the main glazed face points at. 180° is due south."
@@ -346,7 +346,7 @@ export function SiteInput({ meta }: { meta: MetaResponse | undefined }) {
         title="Tier three — advanced"
         subtitle="every property editable, kept out of the way"
       >
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="Infiltration" hint="air changes per hour">
             <input
               type="number"

@@ -11,7 +11,7 @@ import {
 } from "recharts";
 import { api, seriesByName, type DesignSpec, type SimulationResult } from "../lib/api";
 import { Failure, Loading, Panel, Stat } from "../components/Kit";
-import { useStore } from "../lib/store";
+import { activeDesign, useStore } from "../lib/store";
 import { num, rupees, signed } from "../lib/format";
 
 const axis = { fontSize: 11, fill: "var(--color-ink-faint)" };
@@ -20,33 +20,46 @@ const COLOURS = ["var(--color-solar)", "var(--color-cold)", "var(--color-good)"]
 
 export function Compare() {
   const store = useStore();
-  const [selected, setSelected] = useState<string[]>([
-    "candidate_single_room",
-    "candidate_sunspace",
-  ]);
+  const active = activeDesign(store);
+  const [selected, setSelected] = useState<string[]>([]);
 
   const catalogue = useQuery({
     queryKey: ["design-catalogue"],
     queryFn: async (): Promise<Record<string, DesignSpec>> => {
-      const files = ["single_room", "sunspace", "trombe_wall", "vestibule"];
+      const listed = await api.designs();
       const entries = await Promise.all(
-        files.map(async (name) => {
-          const response = await fetch(`/designs/${name}.json`);
-          if (!response.ok) return null;
-          return [`candidate_${name}`, (await response.json()) as DesignSpec] as const;
-        }),
+        listed
+          .filter((item) => !item.is_reference)
+          .map(async (item) => {
+            try {
+              return [item.id, await api.design(item.id)] as const;
+            } catch {
+              return null;
+            }
+          }),
       );
       return Object.fromEntries(entries.filter(Boolean) as [string, DesignSpec][]);
     },
     staleTime: Infinity,
   });
 
-  const designs = selected
-    .map((name) => catalogue.data?.[name])
+  const available = Object.keys(catalogue.data ?? {});
+  const chosen = selected.length > 0
+    ? selected
+    : [store.designName, ...available.filter((name) => name !== store.designName)]
+        .filter((name) => available.includes(name))
+        .slice(0, 2);
+
+  const designs = chosen
+    .map((name) =>
+      name === store.designName && active ? active : catalogue.data?.[name],
+    )
     .filter(Boolean) as DesignSpec[];
 
+  const key = chosen.join("|");
+
   const table = useQuery({
-    queryKey: ["compare", selected.join("|"), store.siteId, store.period.start],
+    queryKey: ["compare", key, store.siteId, store.period.start],
     queryFn: () =>
       api.compare({
         designs,
@@ -59,7 +72,7 @@ export function Compare() {
   });
 
   const curves = useQuery({
-    queryKey: ["compare-curves", selected.join("|"), store.siteId, store.period.start],
+    queryKey: ["compare-curves", key, store.siteId, store.period.start],
     queryFn: async () => {
       const results: SimulationResult[] = [];
       for (const design of designs) {
@@ -113,25 +126,25 @@ export function Compare() {
         subtitle="Every design runs against the same weather, the same period and the same occupancy, and every row is differenced against current construction."
       >
         <div className="flex flex-wrap gap-2">
-          {Object.keys(catalogue.data ?? {}).map((name) => {
-            const active = selected.includes(name);
+          {available.map((name) => {
+            const on = chosen.includes(name);
             return (
               <button
                 key={name}
                 type="button"
                 onClick={() =>
-                  setSelected((current) =>
-                    current.includes(name)
-                      ? current.filter((item) => item !== name)
-                      : current.length >= 3
-                        ? current
-                        : [...current, name],
+                  setSelected(
+                    on
+                      ? chosen.filter((item) => item !== name)
+                      : chosen.length >= 3
+                        ? chosen
+                        : [...chosen, name],
                   )
                 }
-                className={`rounded-md border px-2.5 py-1 text-xs capitalize ${
-                  active
-                    ? "border-[var(--color-solar)] bg-[var(--color-solar)]/15 text-[var(--color-solar)]"
-                    : "border-[var(--color-line)] text-[var(--color-ink-dim)]"
+                className={`rounded-lg border px-3 py-1.5 text-xs capitalize transition-all ${
+                  on
+                    ? "border-[var(--color-solar)] bg-[var(--color-solar)]/10 text-[var(--color-solar)] font-medium shadow-sm"
+                    : "border-[var(--color-line)] bg-white/70 text-[var(--color-ink-dim)] hover:border-[var(--color-solar)] hover:shadow-sm"
                 }`}
               >
                 {name.replace(/_/g, " ")}
@@ -141,7 +154,8 @@ export function Compare() {
         </div>
         <p className="mt-2 text-[11px] text-[var(--color-ink-faint)]">
           Up to three at a time. Each one is a full EnergyPlus run, so the first request
-          takes a few seconds per design and repeats come from cache.
+          takes a few seconds per design and repeats come from cache. The design selected
+          in the header carries any edits you have made to it.
         </p>
       </Panel>
 

@@ -21,9 +21,9 @@ export function Panel({
       {(title || right) && (
         <header className="mb-3 flex items-start justify-between gap-4">
           <div>
-            {title && <h2 className="text-sm font-semibold">{title}</h2>}
+            {title && <h2 className="text-lg font-semibold tracking-tight text-[var(--color-ink)]">{title}</h2>}
             {subtitle && (
-              <p className="mt-0.5 max-w-2xl text-xs leading-relaxed text-[var(--color-ink-dim)]">
+              <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[var(--color-ink-dim)]">
                 {subtitle}
               </p>
             )}
@@ -47,12 +47,12 @@ export function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[11px] uppercase tracking-wide text-[var(--color-ink-faint)]">
+      <span className="mb-2 block text-[13px] font-medium text-[var(--color-ink-dim)]">
         {label}
       </span>
       {children}
       {hint && (
-        <span className="mt-1 block text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
+        <span className="mt-2 block text-[12px] leading-relaxed text-[var(--color-ink-faint)]">
           {hint}
         </span>
       )}
@@ -77,10 +77,10 @@ export function Accordion({
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left"
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[var(--color-line-soft)]/50 transition-colors rounded-t-lg"
       >
         <span>
-          <span className="text-sm font-medium">{title}</span>
+          <span className="text-base font-medium tracking-tight">{title}</span>
           {subtitle && (
             <span className="ml-2 text-xs text-[var(--color-ink-faint)]">{subtitle}</span>
           )}
