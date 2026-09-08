@@ -56,7 +56,11 @@ export function ParetoExplorer() {
   const [result, setResult] = useState<ParetoResult | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [progress, setProgress] = useState<string>("");
+  const [populationSize, setPopulationSize] = useState(20);
+  const [generations, setGenerations] = useState(5);
   const timer = useRef<number | null>(null);
+
+  const budget = populationSize * generations;
 
   const start = useMutation({
     mutationFn: async () => {
@@ -66,8 +70,8 @@ export function ParetoExplorer() {
         variables: variablesFor(),
         objectives: ["degree_hours_total_kh", "total_cost_inr", "worst_night_margin_k"],
         constraints: { max_condensation_hours: 2000, max_wall_thickness_m: 0.9 },
-        population_size: 12,
-        generations: 3,
+        population_size: populationSize,
+        generations: generations,
         seed: 1,
         site_id: store.siteId,
         period: { start: store.period.start, end: store.period.start },
@@ -83,8 +87,10 @@ export function ParetoExplorer() {
     if (!jobId) return;
     const poll = async () => {
       const job = await api.optimisationStatus(jobId);
-      if (job.status === "done" && job.result) {
+      if (job.result) {
         setResult(job.result as unknown as ParetoResult);
+      }
+      if (job.status === "done") {
         setProgress("done");
         setJobId(null);
       } else if (job.status === "failed") {
@@ -92,7 +98,7 @@ export function ParetoExplorer() {
         setJobId(null);
       }
     };
-    timer.current = window.setInterval(poll, 2500);
+    timer.current = window.setInterval(poll, 1500);
     return () => {
       if (timer.current) window.clearInterval(timer.current);
     };
@@ -120,12 +126,39 @@ export function ParetoExplorer() {
           disabled={start.isPending || Boolean(jobId) || !design}
           className="rounded-md bg-[var(--color-solar)] px-3 py-1.5 text-xs font-medium text-[#0b1220] disabled:opacity-40"
         >
-          {jobId ? "searching…" : "Run a small search"}
+          {jobId ? "searching…" : `Search ${budget} designs`}
         </button>
+        <label className="flex items-center gap-1.5 text-[11px] text-[var(--color-ink-faint)]">
+          budget
+          <select
+            value={budget}
+            disabled={Boolean(jobId)}
+            onChange={(event) => {
+              const chosen = Number(event.target.value);
+              const size = chosen <= 100 ? 20 : chosen <= 500 ? 25 : 50;
+              setPopulationSize(size);
+              setGenerations(Math.max(2, Math.round(chosen / size)));
+            }}
+            className="rounded border border-[var(--color-line)] bg-white px-1.5 py-0.5 text-[11px]"
+          >
+            {[100, 300, 500, 900, 1000].map((item) => (
+              <option key={item} value={item}>
+                {item} designs
+              </option>
+            ))}
+          </select>
+        </label>
+        {result && !result.complete && (
+          <span className="rounded bg-[var(--color-solar)]/15 px-2 py-0.5 text-[11px] text-[var(--color-solar)]">
+            generation {result.generation} of {result.generations_planned} ·{" "}
+            {result.evaluated} simulated so far
+          </span>
+        )}
         <span className="text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
           Wall mass, insulation thickness and south glazing varied together against three
-          goals at once. A real front for the demo is precomputed offline and stored;
-          never make a jury watch an optimiser run.
+          goals at once. The front below is redrawn after every generation, so the best
+          design so far is on screen while the search is still running. Each dot is one
+          full EnergyPlus run, so a larger budget costs real time.
         </span>
       </div>
 

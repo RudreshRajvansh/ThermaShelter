@@ -1321,6 +1321,7 @@ export interface components {
             locally_available: boolean;
             appearance: components["schemas"]["MaterialAppearance"];
             source: components["schemas"]["SourceRef"];
+            cost_source?: components["schemas"]["SourceRef"] | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1491,6 +1492,7 @@ export interface components {
             mason_skill: "unskilled" | "semiskilled" | "skilled" | "specialist";
             appearance: components["schemas"]["MaterialAppearance"];
             source: components["schemas"]["SourceRef"];
+            cost_source?: components["schemas"]["SourceRef"] | null;
             conductivity_range?: components["schemas"]["UncertainRange"] | null;
             density_range?: components["schemas"]["UncertainRange"] | null;
         };
@@ -1797,6 +1799,21 @@ export interface components {
              * @default 0
              */
             runtime_s: number;
+            /**
+             * Generation
+             * @default 0
+             */
+            generation: number;
+            /**
+             * Generations Planned
+             * @default 0
+             */
+            generations_planned: number;
+            /**
+             * Complete
+             * @default true
+             */
+            complete: boolean;
             /**
              * Warnings
              * @default []

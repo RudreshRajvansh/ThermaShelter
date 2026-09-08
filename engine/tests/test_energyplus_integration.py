@@ -410,6 +410,22 @@ def test_self_check_reports_pending_provenance(engine):
     assert "reference_designs_uncited" in codes
 
 
+def test_a_price_without_its_own_source_is_called_out(engine):
+    codes = {item.code for item in engine.self_check()}
+    assert "capital_cost_unsourced" in codes
+
+
+def test_a_verified_thermal_source_does_not_vouch_for_the_price(library):
+    material = library.material("brick_solid")
+    priced = material.model_copy(update={
+        "source": material.source.model_copy(update={
+            "status": SourceStatus.VERIFIED}),
+        "cost_source": None,
+    })
+    assert priced.source.status is SourceStatus.VERIFIED
+    assert priced.cost_source is None
+
+
 def test_internal_partitions_reach_the_input_file(site, library):
     design = fixtures.design()
     built = build_constructions(design, library)

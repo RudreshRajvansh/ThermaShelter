@@ -27,7 +27,12 @@ def _run_optimisation(context: Context, job_id: str, site_id: str,
         return
     try:
         engine = context.engine(site_id)
-        result = engine.optimise(spec, options)
+
+        def publish(stage) -> None:
+            context.store.publish_optimisation_stage(
+                job_id, stage.model_dump(mode="json"), stage.evaluated)
+
+        result = engine.optimise(spec, options, on_stage=publish)
         context.store.finish_optimisation(
             job_id, result.model_dump(mode="json"),
             message=None, evaluated=result.evaluated)

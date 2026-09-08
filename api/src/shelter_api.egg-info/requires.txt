@@ -1,8 +1,0 @@
-shelter-engine
-fastapi<1,>=0.110
-uvicorn[standard]<1,>=0.27
-pydantic<3,>=2.6
-
-[dev]
-pytest>=8
-httpx>=0.27

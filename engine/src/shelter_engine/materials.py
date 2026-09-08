@@ -93,6 +93,19 @@ def _range_from_row(row: Mapping[str, Any], low_key: str, high_key: str) -> dict
     return {"low": float(low), "high": float(high)}
 
 
+def _cost_source_from_row(row: Mapping[str, Any]) -> SourceRef | None:
+    citation = _pick(row, ("cost_source", "cost_citation", "price_source"))
+    if citation is None or not str(citation).strip():
+        return None
+    status = _pick(row, ("cost_source_status", "cost_status"))
+    try:
+        parsed = SourceStatus(str(status)) if status else SourceStatus.PENDING
+    except ValueError:
+        parsed = SourceStatus.PENDING
+    return SourceRef(citation=str(citation), status=parsed,
+                     note=_pick(row, ("cost_note",)))
+
+
 def material_from_row(row: Mapping[str, Any]) -> Material:
     identifier = str(_pick(row, ("id", "material_id", "key")) or "")
     if not identifier:
@@ -106,6 +119,7 @@ def material_from_row(row: Mapping[str, Any]) -> Material:
         "cost_inr_m3": _pick(row, ("cost_inr_m3", "cost_per_m3", "cost")),
         "appearance": _appearance_from_row(row, identifier),
         "source": _source_from_row(row, identifier),
+        "cost_source": _cost_source_from_row(row),
     }
     for key, aliases in (
             ("thermal_absorptance", ("thermal_absorptance", "emissivity")),
@@ -151,6 +165,7 @@ def glazing_from_row(row: Mapping[str, Any]) -> GlazingSystem:
         "cost_inr_m2": _pick(row, ("cost_inr_m2", "cost_per_m2", "cost")),
         "appearance": _appearance_from_row(row, identifier),
         "source": _source_from_row(row, identifier),
+        "cost_source": _cost_source_from_row(row),
     }
     for key, aliases in (("layers", ("layers", "panes")),
                          ("frame_fraction", ("frame_fraction",))):
@@ -363,6 +378,21 @@ class MaterialLibrary:
             if item.source.status is SourceStatus.PENDING:
                 pending.append(item.id)
         return tuple(pending)
+
+    def unpriced(self) -> tuple[str, ...]:
+        missing: list[str] = []
+        for item in (*self._materials.values(), *self._glazing.values(),
+                     *self._pcm.values()):
+            price = getattr(item, "cost_inr_m3", None)
+            if price is None:
+                price = getattr(item, "cost_inr_m2", None)
+            if price is None:
+                continue
+            cost_source = getattr(item, "cost_source", None)
+            if price > 0.0 and (cost_source is None
+                                or cost_source.status is not SourceStatus.VERIFIED):
+                missing.append(item.id)
+        return tuple(missing)
 
     def uncertain_materials(self) -> tuple[Material, ...]:
         return tuple(m for m in self._materials.values()

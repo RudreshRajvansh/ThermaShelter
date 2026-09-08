@@ -158,6 +158,7 @@ class Material(Frozen):
                          "specialist"] = "semiskilled"
     appearance: MaterialAppearance
     source: SourceRef
+    cost_source: SourceRef | None = None
     conductivity_range: UncertainRange | None = None
     density_range: UncertainRange | None = None
 
@@ -211,6 +212,7 @@ class GlazingSystem(Frozen):
     locally_available: bool = True
     appearance: MaterialAppearance
     source: SourceRef
+    cost_source: SourceRef | None = None
 
 
 class ShutterSpec(Frozen):
@@ -1220,6 +1222,9 @@ class ParetoResult(Frozen):
     failed: int = 0
     objectives: tuple[str, ...] = ()
     runtime_s: float = 0.0
+    generation: int = 0
+    generations_planned: int = 0
+    complete: bool = True
     warnings: tuple[EngineWarning, ...] = ()
     knee_hash: str | None = None
 

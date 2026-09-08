@@ -4,7 +4,7 @@ import time
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Callable, Iterable, Sequence
 
 import numpy as np
 import pandas as pd
@@ -525,6 +525,21 @@ class Engine:
                          + ("..." if len(pending) > 12 else "")
                          + ". Every number on screen has to be traceable, so they must "
                            "be cited before a reported result.")))
+        unpriced = self.library.unpriced()
+        if unpriced:
+            warnings.append(EngineWarning(
+                code="capital_cost_unsourced", severity=Severity.WARNING,
+                origin="materials", count=len(unpriced),
+                message=("Every capital cost on screen is built from delivered prices "
+                         "that carry no verified source: "
+                         f"{', '.join(sorted(unpriced)[:12])}"
+                         + ("..." if len(unpriced) > 12 else "")
+                         + ". The rupee totals are therefore indicative only. They are "
+                           "the right shape, because the volumes come from the real "
+                           "geometry, but the rates are placeholders and a comparison "
+                           "between two designs is only as sound as the relative prices. "
+                           "Replace them with a Layer 0 procurement schedule before any "
+                           "money figure is quoted.")))
         if self.comfort_model.source.status is not SourceStatus.VERIFIED:
             warnings.append(EngineWarning(
                 code="comfort_model_unverified", severity=Severity.WARNING,
@@ -644,11 +659,13 @@ class Engine:
             condensation_hours=result.condensation.hours,
             delta_vs_reference=deltas)
 
-    def optimise(self, spec: OptimisationSpec, options: RunOptions) -> ParetoResult:
+    def optimise(self, spec: OptimisationSpec, options: RunOptions,
+                 on_stage: Callable[[ParetoResult], None] | None = None
+                 ) -> ParetoResult:
         def evaluate(design: DesignSpec) -> Metrics:
             return self.metrics_for(design, options)
         return optimise(spec, evaluate, site_id=self.site.id,
-                        cache=LRUCache(maxsize=8192))
+                        cache=LRUCache(maxsize=8192), on_stage=on_stage)
 
     def cfd_export(self, design: DesignSpec, options: RunOptions
                    ) -> tuple[CFDExport, ...]:
