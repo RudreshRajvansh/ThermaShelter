@@ -68,6 +68,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [comfortModelId, setComfortModelId] = useState<string | null>(null);
 
   const applyOverride = useCallback((next: DesignSpec) => setOverrides(next), []);
+  const selectDesign = useCallback((name: string) => {
+    setDesignName(name);
+    setOverrides(null);
+  }, []);
   const clearOverride = useCallback(() => setOverrides(null), []);
 
   const value = useMemo<State>(
@@ -77,10 +81,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       siteId,
       setSiteId,
       designName,
-      setDesignName: (name: string) => {
-        setDesignName(name);
-        setOverrides(null);
-      },
+      setDesignName: selectDesign,
       design,
       setDesign,
       overrides,
@@ -103,6 +104,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       step,
       siteId,
       designName,
+      selectDesign,
       design,
       overrides,
       applyOverride,

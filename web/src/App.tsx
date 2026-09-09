@@ -99,9 +99,18 @@ export default function App() {
     staleTime: Infinity,
   });
 
-  const candidateOptions = Object.keys(catalogue.data ?? {});
-  const referenceOptions = references.data?.map((item) => item.name) ?? [];
-  const designOptions = [...candidateOptions, ...referenceOptions];
+  const candidateOptions = useMemo(
+    () => Object.keys(catalogue.data ?? {}),
+    [catalogue.data],
+  );
+  const referenceOptions = useMemo(
+    () => references.data?.map((item) => item.name) ?? [],
+    [references.data],
+  );
+  const designOptions = useMemo(
+    () => [...candidateOptions, ...referenceOptions],
+    [candidateOptions, referenceOptions],
+  );
 
   const { designName, setDesignName } = store;
   useEffect(() => {

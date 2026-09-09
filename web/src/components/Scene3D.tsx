@@ -7,6 +7,8 @@ import type {
   SurfaceResults,
   TerrainMesh,
 } from "../lib/api";
+import { buildSolid } from "../lib/solid";
+import { activeDesign, useStore } from "../lib/store";
 import {
   COLD_TO_HOT,
   SOLAR_SCALE,
@@ -148,6 +150,8 @@ export function Scene3D({
   hourIndex: number;
   onHourChange: (index: number) => void;
 }) {
+  const store = useStore();
+  const design = activeDesign(store);
   const mountRef = useRef<HTMLDivElement>(null);
   const meshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
   const sunRef = useRef<{
@@ -175,6 +179,10 @@ export function Scene3D({
   >([]);
   const airflowRef = useRef<THREE.Group | null>(null);
   const edgesRef = useRef<THREE.Group | null>(null);
+  const solidRef = useRef<{
+    group: THREE.Group;
+    parts: Map<string, THREE.Mesh[]>;
+  } | null>(null);
   const [ramp, setRamp] = useState<RampName>("diverging");
   const [rooms, setRooms] = useState<
     { name: string; colour: string; area: number }[]
@@ -245,6 +253,34 @@ export function Scene3D({
 
     const group = new THREE.Group();
     const meshes = new Map<string, THREE.Mesh>();
+
+    const makeOpaque = (surface: { colour: string; finish: string; opacity: number }) =>
+      new THREE.MeshStandardMaterial({
+        color: new THREE.Color(surface.colour),
+        roughness: surface.finish === "smooth" ? 0.42 : 0.92,
+        metalness: surface.finish === "smooth" ? 0.12 : 0.02,
+        envMapIntensity: 0.8,
+        clippingPlanes: [clipRef.current],
+        clipShadows: true,
+      });
+    const makeGlass = (surface: { colour: string }) =>
+      new THREE.MeshPhysicalMaterial({
+        color: new THREE.Color(surface.colour),
+        transparent: true,
+        opacity: 0.36,
+        roughness: 0.05,
+        metalness: 0,
+        transmission: 0.75,
+        thickness: 0.03,
+        ior: 1.52,
+        clearcoat: 1,
+        clearcoatRoughness: 0.03,
+        side: THREE.DoubleSide,
+        clippingPlanes: [clipRef.current],
+      });
+
+    const solid = buildSolid(geometry, design ?? null, makeOpaque, makeGlass);
+
     for (const surface of geometry.surfaces) {
       const buffer = new THREE.BufferGeometry();
       buffer.setAttribute(
@@ -288,6 +324,7 @@ export function Scene3D({
       mesh.userData.baseColour = surface.colour;
       mesh.castShadow = !transparent;
       mesh.receiveShadow = true;
+      mesh.visible = solid === null;
       group.add(mesh);
       meshes.set(surface.name, mesh);
 
@@ -301,6 +338,17 @@ export function Scene3D({
         }),
       );
       group.add(edges);
+    }
+    if (solid) {
+      for (const [name, list] of solid.parts) {
+        for (const mesh of list) mesh.userData.baseColour = meshes.get(name)
+          ? (meshes.get(name)!.userData.baseColour as string)
+          : "#ffffff";
+      }
+      solidRef.current = solid;
+      group.add(solid.group);
+    } else {
+      solidRef.current = null;
     }
     meshesRef.current = meshes;
 
@@ -493,7 +541,10 @@ export function Scene3D({
       const kit = raycastRef.current;
       if (!kit) return;
       kit.raycaster.setFromCamera(pointer, kit.camera);
-      const hits = kit.raycaster.intersectObjects([...meshes.values()], false);
+      const pickable: THREE.Object3D[] = solid
+        ? [...solid.parts.values()].flat()
+        : [...meshes.values()];
+      const hits = kit.raycaster.intersectObjects(pickable, false);
       if (hits.length === 0) {
         setHover(null);
         return;
@@ -579,7 +630,7 @@ export function Scene3D({
       raycastRef.current = null;
       sceneRef.current = null;
     };
-  }, [geometry, terrain, sunPath, airflow, areaBySurface]);
+  }, [geometry, design, terrain, sunPath, airflow, areaBySurface]);
 
   useEffect(() => {
     const kit = sunRef.current;
@@ -599,10 +650,10 @@ export function Scene3D({
   }, [sun, terrain]);
 
   useEffect(() => {
-    const meshes = meshesRef.current;
     const stops = rampStops(mode, ramp);
-    meshes.forEach((mesh, name) => {
+    const paint = (mesh: THREE.Mesh, name: string) => {
       const material = mesh.material as THREE.MeshStandardMaterial;
+      if (!material.color) return;
       if (mode === "construction" || !extent) {
         material.color.set(mesh.userData.baseColour as string);
         return;
@@ -612,8 +663,17 @@ export function Scene3D({
         material.color.set("#aeb5bd");
         return;
       }
-      material.color.set(lerpColour((value - extent.min) / (extent.max - extent.min), stops));
-    });
+      material.color.set(
+        lerpColour((value - extent.min) / (extent.max - extent.min), stops),
+      );
+    };
+    meshesRef.current.forEach((mesh, name) => paint(mesh, name));
+    const solid = solidRef.current;
+    if (solid) {
+      for (const [name, list] of solid.parts) {
+        for (const mesh of list) paint(mesh, name);
+      }
+    }
   }, [mode, ramp, safeIndex, valuesBySurface, extent, geometry]);
 
   useEffect(() => {
@@ -625,9 +685,15 @@ export function Scene3D({
   }, [showAirflow, geometry, airflow]);
 
   useEffect(() => {
-    const meshes = meshesRef.current;
     if (edgesRef.current) edgesRef.current.visible = shell !== "solid";
-    meshes.forEach((mesh) => {
+    const targets: THREE.Mesh[] = [];
+    const solid = solidRef.current;
+    if (solid) {
+      for (const list of solid.parts.values()) targets.push(...list);
+    } else {
+      meshesRef.current.forEach((mesh) => targets.push(mesh));
+    }
+    targets.forEach((mesh) => {
       const material = mesh.material as THREE.MeshStandardMaterial;
       if (shell === "wireframe") {
         material.transparent = true;

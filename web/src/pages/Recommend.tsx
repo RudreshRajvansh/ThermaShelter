@@ -75,15 +75,17 @@ export function Recommend({ meta }: { meta: MetaResponse | undefined }) {
   });
 
   const { designName, setDesignName } = store;
+  const candidates = useMemo(
+    () => (library.data ?? []).filter((item) => !item.is_reference),
+    [library.data],
+  );
   useEffect(() => {
-    const listed = (library.data ?? []).filter((item) => !item.is_reference);
-    if (listed.length === 0) return;
-    const current = listed.find((item) => item.id === designName);
-    if (current && !current.is_reference) return;
+    if (candidates.length === 0) return;
+    if (candidates.some((item) => item.id === designName)) return;
     const preferred =
-      listed.find((item) => item.arrangement === "sunspace") ?? listed[0];
+      candidates.find((item) => item.arrangement === "sunspace") ?? candidates[0];
     setDesignName(preferred.id);
-  }, [library.data, designName, setDesignName]);
+  }, [candidates, designName, setDesignName]);
 
   const programme: ShelterUseSummary | undefined = (uses.data ?? []).find(
     (item) => item.use === design?.plan.use,
@@ -96,9 +98,7 @@ export function Recommend({ meta }: { meta: MetaResponse | undefined }) {
   const applyUse = (value: string) => {
     const chosen = (uses.data ?? []).find((item) => item.use === value);
     if (!chosen || !design) return;
-    const match = (library.data ?? []).find(
-      (item) => !item.is_reference && item.use === value,
-    );
+    const match = candidates.find((item) => item.use === value);
     if (match && match.id !== store.designName) {
       store.setDesignName(match.id);
       store.clearOverride();
