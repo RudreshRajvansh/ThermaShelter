@@ -10,6 +10,7 @@ import { DesignParameters } from "./pages/DesignParameters";
 import { Simulation } from "./pages/Simulation";
 import { Results } from "./pages/Results";
 import { Compare } from "./pages/Compare";
+import { Recommend } from "./pages/Recommend";
 import { Reports } from "./pages/Reports";
 import { num } from "./lib/format";
 
@@ -154,6 +155,7 @@ export default function App() {
           </div>
         )}
 
+        {store.step === "Design a shelter" && <Recommend meta={meta.data} />}
         {store.step === "Site Input" && <SiteInput meta={meta.data} />}
         {store.step === "Climate Data" && <ClimateData />}
         {store.step === "Design Parameters" && <DesignParameters />}

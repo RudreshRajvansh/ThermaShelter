@@ -84,7 +84,8 @@ export function Navbar({
   referenceOptions: string[];
 }) {
   const store = useStore();
-  
+  const owned = store.step === "Design a shelter";
+
   return (
     <header className="sticky top-0 z-20 border-b border-white/20 bg-white/60 backdrop-blur-xl shadow-sm">
       <div className="mx-auto flex max-w-[1360px] flex-wrap items-center gap-4 px-5 py-3">
@@ -98,6 +99,7 @@ export function Navbar({
         </div>
 
         <div className="no-print ml-auto flex flex-wrap items-center gap-4">
+          {!owned && (
           <select
             value={siteId ?? ""}
             onChange={(event) => store.setSiteId(event.target.value)}
@@ -109,6 +111,8 @@ export function Navbar({
               </option>
             ))}
           </select>
+          )}
+          {!owned && (
           <select
             value={store.designName}
             onChange={(event) => store.setDesignName(event.target.value)}
@@ -129,6 +133,7 @@ export function Navbar({
               ))}
             </optgroup>
           </select>
+          )}
           <ModeToggle />
         </div>
       </div>

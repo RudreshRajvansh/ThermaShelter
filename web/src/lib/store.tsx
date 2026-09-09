@@ -9,6 +9,7 @@ import {
 import type { DesignSpec, Window } from "./api";
 
 export const STEPS = [
+  "Design a shelter",
   "Site Input",
   "Climate Data",
   "Design Parameters",
@@ -55,7 +56,7 @@ type State = {
 const Context = createContext<State | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [step, setStep] = useState<Step>("Site Input");
+  const [step, setStep] = useState<Step>("Design a shelter");
   const [siteId, setSiteId] = useState<string | null>(null);
   const [designName, setDesignName] = useState("single_room");
   const [design, setDesign] = useState<DesignSpec | null>(null);

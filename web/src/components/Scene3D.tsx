@@ -235,9 +235,10 @@ export function Scene3D({
     renderer.setSize(width, height);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.localClippingEnabled = true;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.08;
+    renderer.toneMappingExposure = 1.15;
     mount.appendChild(renderer.domElement);
 
     const camera = new THREE.PerspectiveCamera(42, width / height, 0.5, 4000);
@@ -252,15 +253,36 @@ export function Scene3D({
       );
       buffer.setIndex(Array.from(surface.indices));
       buffer.computeVertexNormals();
+      const glazed = surface.finish === "transparent" || surface.opacity < 1;
       const transparent = surface.opacity < 1;
-      const material = new THREE.MeshLambertMaterial({
-        color: new THREE.Color(surface.colour),
-        side: THREE.DoubleSide,
-        transparent,
-        opacity: surface.opacity,
-        clippingPlanes: [clipRef.current],
-        clipShadows: true,
-      });
+      const material = glazed
+        ? new THREE.MeshPhysicalMaterial({
+            color: new THREE.Color(surface.colour),
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: Math.min(surface.opacity, 0.42),
+            roughness: 0.06,
+            metalness: 0,
+            transmission: 0.7,
+            thickness: 0.04,
+            ior: 1.52,
+            reflectivity: 0.5,
+            clearcoat: 1,
+            clearcoatRoughness: 0.04,
+            clippingPlanes: [clipRef.current],
+            clipShadows: true,
+          })
+        : new THREE.MeshStandardMaterial({
+            color: new THREE.Color(surface.colour),
+            side: THREE.DoubleSide,
+            transparent,
+            opacity: surface.opacity,
+            roughness: surface.finish === "smooth" ? 0.42 : 0.92,
+            metalness: surface.finish === "smooth" ? 0.12 : 0.02,
+            envMapIntensity: 0.8,
+            clippingPlanes: [clipRef.current],
+            clipShadows: true,
+          });
       const mesh = new THREE.Mesh(buffer, material);
       mesh.name = surface.name;
       mesh.userData.baseColour = surface.colour;
@@ -399,16 +421,44 @@ export function Scene3D({
     scene.add(light);
     scene.add(light.target);
 
-    const fill = new THREE.HemisphereLight(0xdfe9f5, 0x6b6350, 1.15);
+    const fill = new THREE.HemisphereLight(0xdfe9f5, 0x6b6350, 0.9);
     scene.add(fill);
+
+    const bounce = new THREE.DirectionalLight(0xcfe0f2, 0.35);
+    bounce.position.set(-1, -0.6, 0.5);
+    scene.add(bounce);
+
+    const environment = new THREE.PMREMGenerator(renderer);
+    environment.compileEquirectangularShader();
+    const envScene = new THREE.Scene();
+    const envSky = new THREE.Mesh(
+      new THREE.SphereGeometry(10, 24, 16),
+      new THREE.MeshBasicMaterial({
+        color: new THREE.Color("#b9cfe4"),
+        side: THREE.BackSide,
+      }),
+    );
+    envScene.add(envSky);
+    const envGround = new THREE.Mesh(
+      new THREE.CircleGeometry(10, 32),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color("#a9976f") }),
+    );
+    envGround.rotation.x = -Math.PI / 2;
+    envGround.position.y = -1.5;
+    envScene.add(envGround);
+    const envTarget = environment.fromScene(envScene, 0.04);
+    scene.environment = envTarget.texture;
+    envSky.geometry.dispose();
+    envGround.geometry.dispose();
+    environment.dispose();
     sunRef.current = {
       light, disc: sunDisc.group, setDisc: sunDisc.setState,
       setSky: sky.setSun, fill,
     };
 
-    let theta = Math.PI * 0.86;
-    let phi = Math.PI * 0.27;
-    let distance = buildingRadius * 3.0;
+    let theta = Math.PI * 0.82;
+    let phi = Math.PI * 0.33;
+    let distance = buildingRadius * 3.9;
     let dragging = false;
     let engaged = false;
     let lastX = 0;
@@ -552,7 +602,7 @@ export function Scene3D({
     const meshes = meshesRef.current;
     const stops = rampStops(mode, ramp);
     meshes.forEach((mesh, name) => {
-      const material = mesh.material as THREE.MeshLambertMaterial;
+      const material = mesh.material as THREE.MeshStandardMaterial;
       if (mode === "construction" || !extent) {
         material.color.set(mesh.userData.baseColour as string);
         return;
@@ -578,7 +628,7 @@ export function Scene3D({
     const meshes = meshesRef.current;
     if (edgesRef.current) edgesRef.current.visible = shell !== "solid";
     meshes.forEach((mesh) => {
-      const material = mesh.material as THREE.MeshLambertMaterial;
+      const material = mesh.material as THREE.MeshStandardMaterial;
       if (shell === "wireframe") {
         material.transparent = true;
         material.opacity = 0.06;

@@ -92,7 +92,11 @@ export function createSky(radius: number): {
 export function createGround(radius: number): THREE.Mesh {
   const mesh = new THREE.Mesh(
     new THREE.CircleGeometry(radius, 96),
-    new THREE.MeshLambertMaterial({ color: new THREE.Color("#a99c81") }),
+    new THREE.MeshStandardMaterial({
+      color: new THREE.Color("#a99c81"),
+      roughness: 0.96,
+      metalness: 0.0,
+    }),
   );
   mesh.receiveShadow = true;
   return mesh;
@@ -114,10 +118,12 @@ export function createTerrain(
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
 
-  const material = new THREE.MeshLambertMaterial({
+  const material = new THREE.MeshStandardMaterial({
     color: new THREE.Color("#6b6250"),
     side: THREE.DoubleSide,
     flatShading: true,
+    roughness: 0.98,
+    metalness: 0.0,
   });
 
   if (colourByElevation) {
@@ -185,10 +191,12 @@ export function createLayout(
     group.add(patch);
   });
 
-  const material = new THREE.MeshLambertMaterial({
+  const material = new THREE.MeshStandardMaterial({
     color: new THREE.Color("#c8bda8"),
     transparent: true,
     opacity: 0.9,
+    roughness: 0.9,
+    metalness: 0.02,
   });
   for (const run of layout.partitions) {
     const dx = run.x1 - run.x0;
