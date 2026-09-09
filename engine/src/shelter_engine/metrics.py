@@ -10,9 +10,10 @@ import pandas as pd
 from .errors import ResultsUnavailable
 from .geometry import GeometryModel, ROOM
 from .results import SimulationOutput
-from .schema import (CondensationMetrics, DesignSpec, EnergyMetrics,
+from .schema import (AirflowSummary, CondensationMetrics, DesignSpec, EnergyMetrics,
                      EngineWarning, Facade, FuelModel, HeatBalanceBreakdown,
-                     Provenance, Severity, SurfaceKind, ThermalBridge)
+                     Provenance, Severity, SourceRef, SourceStatus, SurfaceKind,
+                     ThermalBridge, ZoneAirflow, ZoneCoupling)
 from .weather import dew_point_c
 
 JOULES_TO_KWH = 1.0 / 3_600_000.0
@@ -307,3 +308,52 @@ def solar_gain_by_facade(output: SimulationOutput,
         energy = float(wide[polygon.name].sum()) * polygon.area_m2 * WATT_HOURS_TO_KWH
         totals[polygon.facade] = totals.get(polygon.facade, 0.0) + energy
     return totals
+
+
+def airflow_summary(output, model) -> AirflowSummary | None:
+    volumes = {zone.name.upper(): zone.volume_m3 for zone in model.zones}
+    if not volumes:
+        return None
+
+    def mean_peak(name: str, key: str) -> tuple[float, float]:
+        series = output.series(name, key, required=False)
+        if series is None:
+            return 0.0, 0.0
+        clean = series.dropna()
+        if clean.empty:
+            return 0.0, 0.0
+        return float(clean.mean()), float(clean.max())
+
+    zones: list[ZoneAirflow] = []
+    for name, volume in sorted(volumes.items()):
+        ach_mean, ach_peak = mean_peak("Zone Infiltration Air Change Rate", name)
+        flow_mean, _ = mean_peak(
+            "Zone Infiltration Standard Density Volume Flow Rate", name)
+        zones.append(ZoneAirflow(
+            zone=name, volume_m3=volume,
+            infiltration_ach_mean=max(ach_mean, 0.0),
+            infiltration_ach_peak=max(ach_peak, 0.0),
+            infiltration_m3_s_mean=max(flow_mean, 0.0)))
+
+    couplings: list[ZoneCoupling] = []
+    receiving = "ROOM"
+    if receiving in volumes:
+        flow_mean, flow_peak = mean_peak(
+            "Zone Mixing Current Density Volume Flow Rate", receiving)
+        mass_mean, _ = mean_peak("Zone Mixing Mass Flow Rate", receiving)
+        partners = [name for name in volumes if name != receiving]
+        if partners and (flow_mean > 0.0 or flow_peak > 0.0 or mass_mean > 0.0):
+            couplings.append(ZoneCoupling(
+                from_zone=partners[0], to_zone=receiving,
+                volume_flow_m3_s_mean=max(flow_mean, 0.0),
+                volume_flow_m3_s_peak=max(flow_peak, 0.0),
+                mass_flow_kg_s_mean=max(mass_mean, 0.0)))
+
+    if not zones and not couplings:
+        return None
+    return AirflowSummary(
+        zones=tuple(zones), couplings=tuple(couplings),
+        source=SourceRef(
+            citation="Zone air change rate, standard density volume flow and cross "
+                     "mixing flow reported by EnergyPlus for this run",
+            status=SourceStatus.DERIVED))

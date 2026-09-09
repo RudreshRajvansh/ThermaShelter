@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { LayoutPayload, SunPosition } from "./api";
+import type { AirflowSummary, LayoutPayload, SunPosition } from "./api";
 import { ELEVATION, rampRgb } from "./format";
 
 export const UP = new THREE.Vector3(0, 0, 1);
@@ -355,4 +355,93 @@ export function disposeObject(root: THREE.Object3D): void {
     if (Array.isArray(material)) material.forEach((item) => item.dispose());
     else material.dispose();
   });
+}
+
+export function createAirflow(
+  airflow: AirflowSummary,
+  layout: LayoutPayload | null | undefined,
+  origin: { x: number; y: number },
+  height: number,
+): { group: THREE.Group; legend: { label: string; detail: string }[] } {
+  const group = new THREE.Group();
+  const legend: { label: string; detail: string }[] = [];
+
+  const peak = Math.max(
+    ...airflow.zones.map((zone) => zone.infiltration_m3_s_mean),
+    ...airflow.couplings.map((pair) => pair.volume_flow_m3_s_mean),
+    1e-6,
+  );
+
+  const anchor = (name: string): THREE.Vector3 => {
+    const room = layout?.rooms.find(
+      (item) => item.name.toUpperCase().replace(/\s+/g, "_") === name,
+    );
+    if (room) {
+      return new THREE.Vector3(
+        origin.x + (room.x0 + room.x1) / 2,
+        origin.y + (room.y0 + room.y1) / 2,
+        height * 0.55,
+      );
+    }
+    return new THREE.Vector3(origin.x, origin.y, height * 0.55);
+  };
+
+  for (const zone of airflow.zones) {
+    if (zone.infiltration_m3_s_mean <= 0) continue;
+    const centre = anchor(zone.zone);
+    const scale = 0.35 + 0.65 * (zone.infiltration_m3_s_mean / peak);
+    const count = 8;
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2;
+      const reach = height * 1.5 * scale;
+      const from = new THREE.Vector3(
+        centre.x + Math.cos(angle) * reach,
+        centre.y + Math.sin(angle) * reach,
+        centre.z + height * 0.25,
+      );
+      const arrow = new THREE.ArrowHelper(
+        new THREE.Vector3().subVectors(centre, from).normalize(),
+        from,
+        from.distanceTo(centre) * 0.55,
+        0x4aa3df,
+        height * 0.16 * scale,
+        height * 0.1 * scale,
+      );
+      group.add(arrow);
+    }
+    legend.push({
+      label: `${zone.zone.toLowerCase().replace(/_/g, " ")} leakage`,
+      detail:
+        `${zone.infiltration_ach_mean.toFixed(2)} ACH mean, ` +
+        `${(zone.infiltration_m3_s_mean * 3600).toFixed(0)} m³/h through the envelope`,
+    });
+  }
+
+  for (const pair of airflow.couplings) {
+    if (pair.volume_flow_m3_s_mean <= 0) continue;
+    const from = anchor(pair.from_zone);
+    const to = anchor(pair.to_zone);
+    const scale = 0.4 + 0.6 * (pair.volume_flow_m3_s_mean / peak);
+    const direction = new THREE.Vector3().subVectors(to, from);
+    const length = direction.length();
+    if (length <= 1e-6) continue;
+    group.add(
+      new THREE.ArrowHelper(
+        direction.clone().normalize(),
+        from,
+        length,
+        0xe08a3c,
+        height * 0.22 * scale,
+        height * 0.14 * scale,
+      ),
+    );
+    legend.push({
+      label: `${pair.from_zone.toLowerCase()} to ${pair.to_zone.toLowerCase()}`,
+      detail:
+        `${(pair.volume_flow_m3_s_mean * 3600).toFixed(0)} m³/h mean, ` +
+        `${(pair.volume_flow_m3_s_peak * 3600).toFixed(0)} m³/h peak`,
+    });
+  }
+
+  return { group, legend };
 }

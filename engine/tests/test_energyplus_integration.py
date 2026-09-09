@@ -455,3 +455,43 @@ def test_a_larger_programme_damps_the_daily_swing(engine):
                   if value is not None]
         swings.append(max(values) - min(values))
     assert swings[1] < swings[0]
+
+
+def test_airflow_is_reported_per_zone_and_per_coupling(engine):
+    design = fixtures.design(arrangement=Arrangement.SUNSPACE)
+    result = engine.simulate(design, fixtures.winter_options(),
+                             with_uncertainty=False, with_reference=False)
+    airflow = result.airflow
+    assert airflow is not None
+    zones = {item.zone for item in airflow.zones}
+    assert "ROOM" in zones and "SUNSPACE" in zones
+    for item in airflow.zones:
+        assert item.volume_m3 > 0.0
+        assert item.infiltration_ach_peak >= item.infiltration_ach_mean
+    assert airflow.couplings
+    coupling = airflow.couplings[0]
+    assert coupling.to_zone == "ROOM"
+    assert coupling.volume_flow_m3_s_mean > 0.0
+
+
+def test_a_leakier_shelter_reports_a_higher_air_change_rate(engine):
+    tight = fixtures.design()
+    leaky = tight.model_copy(update={
+        "ventilation": tight.ventilation.model_copy(update={
+            "infiltration_ach": tight.ventilation.infiltration_ach * 2.0})})
+    options = fixtures.winter_options()
+    tight_flow = engine.simulate(tight, options, with_uncertainty=False,
+                                 with_reference=False).airflow
+    leaky_flow = engine.simulate(leaky, options, with_uncertainty=False,
+                                 with_reference=False).airflow
+    tight_ach = next(z.infiltration_ach_mean for z in tight_flow.zones
+                     if z.zone == "ROOM")
+    leaky_ach = next(z.infiltration_ach_mean for z in leaky_flow.zones
+                     if z.zone == "ROOM")
+    assert leaky_ach > tight_ach
+
+
+def test_airflow_states_it_is_not_a_velocity_field(engine):
+    result = engine.simulate(fixtures.design(), fixtures.winter_options(),
+                             with_uncertainty=False, with_reference=False)
+    assert "not a velocity field" in result.airflow.note

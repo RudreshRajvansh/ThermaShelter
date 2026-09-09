@@ -25,8 +25,9 @@ from .hashing import stable_hash
 from .idf import IdfBundle, build_idf
 from .materials import MaterialLibrary
 from .mesh import build_mesh
-from .metrics import (ZoneSeries, condensation, energy_metrics, heat_balance,
-                      solar_gain_by_facade, surface_frames, zone_series)
+from .metrics import (ZoneSeries, airflow_summary, condensation, energy_metrics,
+                      heat_balance, solar_gain_by_facade, surface_frames,
+                      zone_series)
 from .optimize import Metrics, optimise
 from .programme import layout_for
 from .recommend import RecommendationInputs, generate_recommendations
@@ -291,7 +292,9 @@ class Engine:
             headline_metric=self._headline_metric(),
             comfort=comfort, energy=energy, breakdown=breakdown,
             condensation=condensation_metrics, cost=cost, buildability=build,
-            hourly=tuple(hourly), surfaces=surfaces,
+            hourly=tuple(hourly),
+            airflow=airflow_summary(products.output, products.model),
+            surfaces=surfaces,
             reference=reference_comparison, uncertainty=tuple(bands),
             recommendations=recommendations,
             assumptions=tuple(_dedupe_assumptions(assumptions)),
