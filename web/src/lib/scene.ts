@@ -161,10 +161,64 @@ const ROOM_TINTS = [
 
 export function createLayout(
   layout: LayoutPayload,
-  origin: { x: number; y: number },
+  floor: { positions: ArrayLike<number> } | null | undefined,
 ): { group: THREE.Group; rooms: { name: string; colour: string; area: number }[] } {
   const group = new THREE.Group();
   const legend: { name: string; colour: string; area: number }[] = [];
+
+  let planWidth = 0;
+  let planDepth = 0;
+  for (const room of layout.rooms) {
+    planWidth = Math.max(planWidth, room.x1);
+    planDepth = Math.max(planDepth, room.y1);
+  }
+  if (planWidth <= 0 || planDepth <= 0) return { group, rooms: legend };
+
+  const corners: THREE.Vector3[] = [];
+  if (floor) {
+    for (let i = 0; i < floor.positions.length; i += 3) {
+      const point = new THREE.Vector3(
+        floor.positions[i],
+        floor.positions[i + 1],
+        floor.positions[i + 2],
+      );
+      if (!corners.some((other) => other.distanceToSquared(point) < 1e-8)) {
+        corners.push(point);
+      }
+    }
+  }
+
+  const centre = corners.length
+    ? corners.reduce((sum, p) => sum.add(p), new THREE.Vector3())
+        .divideScalar(corners.length)
+    : new THREE.Vector3();
+  const baseZ = corners.length ? corners[0].z : 0;
+
+  let uAxis = new THREE.Vector3(1, 0, 0);
+  let vAxis = new THREE.Vector3(0, 1, 0);
+  if (corners.length >= 3) {
+    let longest = 0;
+    for (let i = 0; i < corners.length; i++) {
+      const next = corners[(i + 1) % corners.length];
+      const edge = new THREE.Vector3().subVectors(next, corners[i]);
+      edge.z = 0;
+      const length = edge.length();
+      if (length > longest) {
+        longest = length;
+        uAxis = edge.normalize();
+      }
+    }
+    vAxis = new THREE.Vector3(-uAxis.y, uAxis.x, 0).normalize();
+  }
+
+  const toWorld = (px: number, py: number, z: number): THREE.Vector3 =>
+    centre
+      .clone()
+      .addScaledVector(uAxis, px - planWidth / 2)
+      .addScaledVector(vAxis, py - planDepth / 2)
+      .setZ(baseZ + z);
+
+  const heading = Math.atan2(uAxis.y, uAxis.x);
 
   layout.rooms.forEach((room, index) => {
     const colour = ROOM_TINTS[index % ROOM_TINTS.length];
@@ -182,11 +236,10 @@ export function createLayout(
         side: THREE.DoubleSide,
       }),
     );
-    patch.position.set(
-      origin.x + (room.x0 + room.x1) / 2,
-      origin.y + (room.y0 + room.y1) / 2,
-      0.02,
+    patch.position.copy(
+      toWorld((room.x0 + room.x1) / 2, (room.y0 + room.y1) / 2, 0.02),
     );
+    patch.rotation.z = heading;
     patch.renderOrder = 2;
     group.add(patch);
   });
@@ -207,12 +260,10 @@ export function createLayout(
       new THREE.BoxGeometry(length, 0.1, run.height_m),
       material,
     );
-    wall.position.set(
-      origin.x + (run.x0 + run.x1) / 2,
-      origin.y + (run.y0 + run.y1) / 2,
-      run.height_m / 2,
+    wall.position.copy(
+      toWorld((run.x0 + run.x1) / 2, (run.y0 + run.y1) / 2, run.height_m / 2),
     );
-    wall.rotation.z = Math.atan2(dy, dx);
+    wall.rotation.z = heading + Math.atan2(dy, dx);
     wall.castShadow = true;
     wall.receiveShadow = true;
     group.add(wall);

@@ -460,10 +460,13 @@ export function Scene3D({
     }
 
     if (geometry.layout) {
-      const built = createLayout(geometry.layout, {
-        x: -centre.x,
-        y: -centre.y,
-      });
+      const built = createLayout(
+        geometry.layout,
+        geometry.surfaces.find(
+          (item) => item.kind === "floor" && item.zone.toUpperCase() === "ROOM",
+        ) ?? geometry.surfaces.find((item) => item.kind === "floor"),
+      );
+      built.group.position.set(-centre.x, -centre.y, 0);
       layoutRef.current = built.group;
       setRooms(built.rooms);
       scene.add(built.group);
