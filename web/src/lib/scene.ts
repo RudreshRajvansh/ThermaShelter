@@ -347,8 +347,17 @@ export function makeLabel(text: string, colour = "#12161c"): THREE.Sprite {
   context.fillText(text, canvas.width / 2, canvas.height / 2);
   const texture = new THREE.CanvasTexture(canvas);
   texture.anisotropy = 4;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.premultiplyAlpha = false;
   const sprite = new THREE.Sprite(
-    new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }),
+    new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      alphaTest: 0.02,
+      toneMapped: false,
+    }),
   );
   sprite.scale.set(8, 4, 1);
   return sprite;

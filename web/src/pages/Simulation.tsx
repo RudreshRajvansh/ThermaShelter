@@ -16,7 +16,9 @@ export function Simulation({
   simulation,
   simulating,
   error,
+  viewportOnly = false,
 }: {
+  viewportOnly?: boolean;
   geometry: GeometryPayload | undefined;
   simulation: SimulationResult | undefined;
   simulating: boolean;
@@ -53,6 +55,7 @@ export function Simulation({
 
   return (
     <div className="space-y-4">
+      {!viewportOnly && (
       <Panel
         title="Simulation setup"
         subtitle="EnergyPlus runs a free floating case for comfort and a conditioned case for remaining heating demand, then eight corner runs for the uncertainty band and one run of the reference design."
@@ -82,6 +85,7 @@ export function Simulation({
         </div>
         {error ? <div className="mt-3"><Failure error={error} /></div> : null}
       </Panel>
+      )}
 
       <Panel
         title="The geometry that was simulated"
@@ -184,7 +188,7 @@ export function Simulation({
         )}
       </Panel>
 
-      {simulation && simulation.warnings.length > 0 && (
+      {!viewportOnly && simulation && simulation.warnings.length > 0 && (
         <Panel
           title="What the simulation reported about itself"
           subtitle="Passed straight up from the EnergyPlus error file. A tool that reports its own problems is more credible than one that hides them."
@@ -193,6 +197,7 @@ export function Simulation({
         </Panel>
       )}
 
+      {!viewportOnly && (
       <div className="flex justify-end">
         <button
           type="button"
@@ -203,6 +208,7 @@ export function Simulation({
           See the results →
         </button>
       </div>
+      )}
     </div>
   );
 }

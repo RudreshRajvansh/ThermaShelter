@@ -28,7 +28,6 @@ import {
   createLayout,
   createTerrain,
   disposeObject,
-  makeLabel,
   sunVector,
 } from "../lib/scene";
 import { createParticleAirflow } from "../lib/flow_paths";
@@ -397,6 +396,7 @@ export function Scene3D({
           clippingPlanes: [clipRef.current],
         }),
       );
+      edges.visible = solid === null;
       group.add(edges);
     }
     if (solid) {
@@ -446,23 +446,6 @@ export function Scene3D({
     scene.add(sky.mesh);
     scene.add(createGround(measured ? buildingRadius * 1.9 : sceneRadius * 1.4));
     scene.add(createCompass(buildingRadius * 2.1));
-
-    for (const [text, azimuth] of [
-      ["N", 0],
-      ["E", 90],
-      ["S", 180],
-      ["W", 270],
-    ] as [string, number][]) {
-      const label = makeLabel(text, text === "N" ? "#c53030" : "#3d4753");
-      const angle = THREE.MathUtils.degToRad(azimuth);
-      label.position.set(
-        buildingRadius * 2.35 * Math.sin(angle),
-        buildingRadius * 2.35 * Math.cos(angle),
-        1.2,
-      );
-      label.scale.set(buildingRadius * 0.42, buildingRadius * 0.21, 1);
-      scene.add(label);
-    }
 
     if (terrain && terrain.positions.length > 0) {
       const mesh = createTerrain(

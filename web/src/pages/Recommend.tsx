@@ -74,18 +74,10 @@ export function Recommend({ meta }: { meta: MetaResponse | undefined }) {
     staleTime: Infinity,
   });
 
-  const { designName, setDesignName } = store;
   const candidates = useMemo(
     () => (library.data ?? []).filter((item) => !item.is_reference),
     [library.data],
   );
-  useEffect(() => {
-    if (candidates.length === 0) return;
-    if (candidates.some((item) => item.id === designName)) return;
-    const preferred =
-      candidates.find((item) => item.arrangement === "sunspace") ?? candidates[0];
-    setDesignName(preferred.id);
-  }, [candidates, designName, setDesignName]);
 
   const programme: ShelterUseSummary | undefined = (uses.data ?? []).find(
     (item) => item.use === design?.plan.use,
@@ -184,7 +176,7 @@ export function Recommend({ meta }: { meta: MetaResponse | undefined }) {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-10">
+    <div className="space-y-8">
       <section className="space-y-6">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-ink)]">
@@ -198,7 +190,7 @@ export function Recommend({ meta }: { meta: MetaResponse | undefined }) {
           </p>
         </div>
 
-        <div className="grid gap-5 sm:grid-cols-3">
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-1">
           <Field label="Location">
             <select
               value={store.siteId ?? ""}

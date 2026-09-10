@@ -55,7 +55,10 @@ export default function App() {
     setSiteId(meta.data.default_site_id ?? meta.data.sites[0].id);
   }, [meta.data, siteId, setSiteId]);
 
-  const site = meta.data?.sites.find((item) => item.id === siteId);
+  const site = useMemo(
+    () => meta.data?.sites.find((item) => item.id === siteId),
+    [meta.data, siteId],
+  );
   useEffect(() => {
     if (site) setCooling(site.climate_objective === "cooling_dominated");
   }, [site, setCooling]);
@@ -176,7 +179,20 @@ export default function App() {
               active={store.designTab}
               onChange={store.setDesignTab}
             />
-            {store.designTab === "recommend" && <Recommend meta={meta.data} />}
+            {store.designTab === "recommend" && (
+              <div className="grid items-start gap-5 xl:grid-cols-[minmax(340px,400px)_1fr]">
+                <Recommend meta={meta.data} />
+                <div className="hidden xl:block">
+                  <Simulation
+                    viewportOnly
+                    geometry={geometry.data}
+                    simulation={simulation.data}
+                    simulating={simulation.isPending}
+                    error={simulation.error ?? geometry.error}
+                  />
+                </div>
+              </div>
+            )}
             {store.designTab === "model" && (
               <Simulation
                 geometry={geometry.data}
