@@ -9,6 +9,7 @@ import {
   type TerrainMesh,
 } from "../lib/api";
 import { buildSolid } from "../lib/solid";
+import { buildArchitecture } from "../lib/architecture";
 import { createThermalVolume, probeTemperature, type ThermalFieldData } from "../lib/thermal_volume";
 import { activeDesign, useStore } from "../lib/store";
 import {
@@ -189,6 +190,9 @@ export function Scene3D({
   const [cut, setCut] = useState(false);
   const [showRooms, setShowRooms] = useState(true);
   const [shell, setShell] = useState<Shell>("solid");
+  const [dressed, setDressed] = useState(true);
+  const [elements, setElements] = useState<string[]>([]);
+  const architectureRef = useRef<THREE.Group | null>(null);
   const [showAirflow, setShowAirflow] = useState(false);
   const [airflowLegend, setAirflowLegend] = useState<
     { label: string; detail: string }[]
@@ -327,6 +331,7 @@ export function Scene3D({
 
     const solid = buildSolid(geometry, design ?? null, makeOpaque, makeGlass);
 
+
     for (const surface of geometry.surfaces) {
       const buffer = new THREE.BufferGeometry();
       buffer.setAttribute(
@@ -410,6 +415,21 @@ export function Scene3D({
     const size = box.getSize(new THREE.Vector3());
     group.position.set(-centre.x, -centre.y, 0);
     scene.add(group);
+    const architecture = buildArchitecture(
+      geometry,
+      design ?? null,
+      geometry.layout,
+    );
+    if (architecture) {
+      architecture.group.position.set(-centre.x, -centre.y, 0);
+      architecture.group.visible = dressed;
+      architectureRef.current = architecture.group;
+      setElements(architecture.elements);
+      scene.add(architecture.group);
+    } else {
+      architectureRef.current = null;
+      setElements([]);
+    }
 
     const buildingRadius = Math.max(size.length(), 6);
     const sceneRadius = buildingRadius * 11;
@@ -881,6 +901,10 @@ export function Scene3D({
   }, [showRooms, geometry]);
 
   useEffect(() => {
+    if (architectureRef.current) architectureRef.current.visible = dressed;
+  }, [dressed, geometry]);
+
+  useEffect(() => {
     if (airflowRef.current) airflowRef.current.group.visible = showAirflow;
   }, [showAirflow, geometry, airflow]);
 
@@ -1096,6 +1120,18 @@ export function Scene3D({
             Air exchange
           </button>
         )}
+        <button
+          type="button"
+          onClick={() => setDressed((value) => !value)}
+          className={`rounded-md border px-2.5 py-1 text-xs ${
+            dressed
+              ? "border-[var(--color-ink)] bg-[var(--color-ink)] text-white"
+              : "border-[var(--color-line)] bg-white text-[var(--color-ink-faint)]"
+          }`}
+          title="Plinth, parapet, door and steps. Construction detail drawn from the design; it carries no result and is never painted with one."
+        >
+          Built detail
+        </button>
         {geometry.layout && (
           <button
             type="button"
@@ -1389,6 +1425,14 @@ export function Scene3D({
           </div>
           <p className="text-xs text-[var(--color-ink-faint)]">{airflow.note}</p>
         </div>
+      )}
+
+      {dressed && elements.length > 0 && (
+        <p className="text-xs leading-relaxed text-[var(--color-ink-faint)]">
+          Drawn as it would be built: {elements.join(", ")}. These are construction
+          elements derived from the design, not simulated surfaces. Nothing here is
+          painted with a result, and the faces that carry results are unchanged.
+        </p>
       )}
 
       {painted && extent && (
