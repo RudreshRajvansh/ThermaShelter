@@ -10,7 +10,11 @@ type Frame = {
   normal: THREE.Vector3;
 };
 
-type Rect = { u0: number; u1: number; v0: number; v1: number };
+export type SolidBuild = {
+  group: THREE.Group;
+  parts: Map<string, THREE.Mesh[]>;
+  detail: THREE.Group;
+};
 
 function corners(surface: MeshSurface): THREE.Vector3[] {
   const points: THREE.Vector3[] = [];
@@ -28,107 +32,103 @@ function corners(surface: MeshSurface): THREE.Vector3[] {
 
 function frameFor(points: THREE.Vector3[], normal: THREE.Vector3): Frame | null {
   if (points.length < 3) return null;
-  const u = new THREE.Vector3().subVectors(points[1], points[0]);
-  if (u.lengthSq() < EPSILON) return null;
-  u.normalize();
-  const v = new THREE.Vector3().crossVectors(normal, u);
-  if (v.lengthSq() < EPSILON) return null;
-  v.normalize();
-  return { origin: points[0].clone(), u, v, normal: normal.clone().normalize() };
-}
-
-function toLocal(point: THREE.Vector3, frame: Frame): { u: number; v: number } {
-  const delta = new THREE.Vector3().subVectors(point, frame.origin);
-  return { u: delta.dot(frame.u), v: delta.dot(frame.v) };
-}
-
-function boundsOf(points: THREE.Vector3[], frame: Frame): Rect {
-  let u0 = Infinity;
-  let u1 = -Infinity;
-  let v0 = Infinity;
-  let v1 = -Infinity;
-  for (const point of points) {
-    const local = toLocal(point, frame);
-    u0 = Math.min(u0, local.u);
-    u1 = Math.max(u1, local.u);
-    v0 = Math.min(v0, local.v);
-    v1 = Math.max(v1, local.v);
-  }
-  return { u0, u1, v0, v1 };
-}
-
-function partition(outer: Rect, holes: Rect[]): Rect[] {
-  const us = new Set<number>([outer.u0, outer.u1]);
-  const vs = new Set<number>([outer.v0, outer.v1]);
-  for (const hole of holes) {
-    us.add(Math.max(outer.u0, hole.u0));
-    us.add(Math.min(outer.u1, hole.u1));
-    vs.add(Math.max(outer.v0, hole.v0));
-    vs.add(Math.min(outer.v1, hole.v1));
-  }
-  const uEdges = [...us].sort((a, b) => a - b);
-  const vEdges = [...vs].sort((a, b) => a - b);
-
-  const cells: Rect[] = [];
-  for (let i = 0; i < uEdges.length - 1; i++) {
-    for (let j = 0; j < vEdges.length - 1; j++) {
-      const cell = {
-        u0: uEdges[i],
-        u1: uEdges[i + 1],
-        v0: vEdges[j],
-        v1: vEdges[j + 1],
-      };
-      if (cell.u1 - cell.u0 < 1e-4 || cell.v1 - cell.v0 < 1e-4) continue;
-      const cu = (cell.u0 + cell.u1) / 2;
-      const cv = (cell.v0 + cell.v1) / 2;
-      const inHole = holes.some(
-        (hole) => cu > hole.u0 && cu < hole.u1 && cv > hole.v0 && cv < hole.v1,
-      );
-      if (!inHole) cells.push(cell);
+  const unit = normal.clone().normalize();
+  let u: THREE.Vector3 | null = null;
+  for (let i = 1; i < points.length; i++) {
+    const candidate = new THREE.Vector3().subVectors(points[i], points[0]);
+    candidate.addScaledVector(unit, -candidate.dot(unit));
+    if (candidate.lengthSq() > EPSILON) {
+      u = candidate.normalize();
+      break;
     }
   }
-  return cells;
+  if (!u) return null;
+  const v = new THREE.Vector3().crossVectors(unit, u).normalize();
+  return { origin: points[0].clone(), u, v, normal: unit };
 }
 
-function placeBox(
-  rect: Rect,
-  frame: Frame,
-  thickness: number,
-  inset: number,
-  material: THREE.Material,
-): THREE.Mesh {
-  const width = rect.u1 - rect.u0;
-  const height = rect.v1 - rect.v0;
-  const mesh = new THREE.Mesh(
-    new THREE.BoxGeometry(width, height, thickness),
-    material,
-  );
-  const centre = frame.origin
-    .clone()
-    .addScaledVector(frame.u, (rect.u0 + rect.u1) / 2)
-    .addScaledVector(frame.v, (rect.v0 + rect.v1) / 2)
-    .addScaledVector(frame.normal, -(thickness / 2) - inset);
-  mesh.position.copy(centre);
-  mesh.setRotationFromMatrix(
-    new THREE.Matrix4().makeBasis(frame.u, frame.v, frame.normal),
-  );
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  return mesh;
+function toLocal(point: THREE.Vector3, frame: Frame): THREE.Vector2 {
+  const delta = new THREE.Vector3().subVectors(point, frame.origin);
+  return new THREE.Vector2(delta.dot(frame.u), delta.dot(frame.v));
+}
+
+function unique(points: THREE.Vector2[]): THREE.Vector2[] {
+  const out: THREE.Vector2[] = [];
+  for (const point of points) {
+    const last = out[out.length - 1];
+    if (last && last.distanceToSquared(point) < 1e-8) continue;
+    out.push(point);
+  }
+  if (out.length > 1 && out[0].distanceToSquared(out[out.length - 1]) < 1e-8) {
+    out.pop();
+  }
+  return out;
+}
+
+function hull(points: THREE.Vector2[]): THREE.Vector2[] {
+  if (points.length < 4) return points;
+  const sorted = [...points].sort((a, b) => (a.x - b.x) || (a.y - b.y));
+  const cross = (o: THREE.Vector2, a: THREE.Vector2, b: THREE.Vector2) =>
+    (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const lower: THREE.Vector2[] = [];
+  for (const point of sorted) {
+    while (lower.length >= 2 &&
+           cross(lower[lower.length - 2], lower[lower.length - 1], point) <= 0) {
+      lower.pop();
+    }
+    lower.push(point);
+  }
+  const upper: THREE.Vector2[] = [];
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const point = sorted[i];
+    while (upper.length >= 2 &&
+           cross(upper[upper.length - 2], upper[upper.length - 1], point) <= 0) {
+      upper.pop();
+    }
+    upper.push(point);
+  }
+  lower.pop();
+  upper.pop();
+  return lower.concat(upper);
+}
+
+const FRAME_FRACTION = 0.15;
+
+function frameThickness(): number {
+  return FRAME_FRACTION;
 }
 
 function constructionThickness(
   design: DesignSpec | null | undefined,
   kind: string,
 ): number {
-  const sum = (layers: { thickness_m: number }[] | undefined) =>
-    (layers ?? []).reduce((total, layer) => total + layer.thickness_m, 0);
-  if (!design) return kind === "roof" ? 0.2 : 0.3;
-  if (kind === "wall") return sum(design.wall?.layers) || 0.3;
-  if (kind === "roof") return sum(design.roof?.layers) || 0.2;
-  if (kind === "floor") return sum(design.floor?.layers) || 0.25;
-  if (kind === "partition") return sum(design.partition?.layers) || 0.1;
-  return 0.2;
+  const stack =
+    kind === "roof" ? design?.roof
+    : kind === "floor" ? design?.floor
+    : design?.wall;
+  const layers = stack?.layers ?? [];
+  const total = layers.reduce(
+    (sum: number, layer: { thickness_m: number }) => sum + layer.thickness_m,
+    0,
+  );
+  return total > 0 ? total : 0.3;
+}
+
+function place(
+  geometry: THREE.BufferGeometry,
+  frame: Frame,
+  offset: number,
+  material: THREE.Material,
+): THREE.Mesh {
+  const basis = new THREE.Matrix4().makeBasis(frame.u, frame.v, frame.normal);
+  basis.setPosition(
+    frame.origin.clone().addScaledVector(frame.normal, offset),
+  );
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.applyMatrix4(basis);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
 }
 
 export function buildSolid(
@@ -136,8 +136,10 @@ export function buildSolid(
   design: DesignSpec | null | undefined,
   materialFor: (surface: MeshSurface) => THREE.Material,
   glassFor: (surface: MeshSurface) => THREE.Material,
-): { group: THREE.Group; parts: Map<string, THREE.Mesh[]> } | null {
+  frameMaterial?: THREE.Material,
+): SolidBuild | null {
   const group = new THREE.Group();
+  const detail = new THREE.Group();
   const parts = new Map<string, THREE.Mesh[]>();
 
   const windowsByParent = new Map<string, MeshSurface[]>();
@@ -148,6 +150,13 @@ export function buildSolid(
     windowsByParent.set(surface.parent, list);
   }
 
+  const mullion = frameMaterial ??
+    new THREE.MeshStandardMaterial({
+      color: new THREE.Color("#6d6455"),
+      roughness: 0.65,
+      metalness: 0.1,
+    });
+
   let built = 0;
   for (const surface of geometry.surfaces) {
     if (surface.kind === "window" || surface.kind === "shading") continue;
@@ -157,44 +166,71 @@ export function buildSolid(
     const frame = frameFor(points, normal);
     if (!frame) continue;
 
-    const outer = boundsOf(points, frame);
-    const holes = (windowsByParent.get(surface.name) ?? []).map((window) =>
-      boundsOf(corners(window), frame),
-    );
-    const thickness = Math.max(constructionThickness(design, surface.kind), 0.02);
+    const outline = hull(unique(points.map((point) => toLocal(point, frame))));
+    if (outline.length < 3) continue;
 
-    const cells = partition(outer, holes);
-    if (cells.length === 0) continue;
-
-    const material = materialFor(surface);
-    const meshes: THREE.Mesh[] = [];
-    for (const cell of cells) {
-      const mesh = placeBox(cell, frame, thickness, 0, material);
-      mesh.name = surface.name;
-      mesh.userData.surface = surface.name;
-      group.add(mesh);
-      meshes.push(mesh);
+    const shape = new THREE.Shape(outline);
+    const openings = windowsByParent.get(surface.name) ?? [];
+    for (const window of openings) {
+      const local = hull(unique(corners(window).map((p) => toLocal(p, frame))));
+      if (local.length < 3) continue;
+      shape.holes.push(new THREE.Path(local.reverse()));
     }
-    parts.set(surface.name, meshes);
+
+    const thickness = Math.max(constructionThickness(design, surface.kind), 0.02);
+    const extruded = new THREE.ExtrudeGeometry(shape, {
+      depth: thickness,
+      bevelEnabled: false,
+      curveSegments: 1,
+    });
+    extruded.computeVertexNormals();
+
+    const mesh = place(extruded, frame, -thickness, materialFor(surface));
+    mesh.name = surface.name;
+    mesh.userData.surface = surface.name;
+    group.add(mesh);
+    parts.set(surface.name, [mesh]);
     built += 1;
 
-    for (const window of windowsByParent.get(surface.name) ?? []) {
-      const rect = boundsOf(corners(window), frame);
-      const pane = placeBox(
-        rect,
-        frame,
-        Math.min(0.03, thickness * 0.2),
-        thickness * 0.45,
-        glassFor(window),
+    const border = frameThickness();
+    for (const window of openings) {
+      const local = hull(unique(corners(window).map((p) => toLocal(p, frame))));
+      if (local.length < 3) continue;
+
+      const pane = new THREE.ExtrudeGeometry(new THREE.Shape(local), {
+        depth: Math.min(0.028, thickness * 0.25),
+        bevelEnabled: false,
+        curveSegments: 1,
+      });
+      pane.computeVertexNormals();
+      const glass = place(pane, frame, -thickness * 0.55, glassFor(window));
+      glass.name = window.name;
+      glass.userData.surface = window.name;
+      glass.castShadow = false;
+      group.add(glass);
+      parts.set(window.name, [glass]);
+
+      const centre = local
+        .reduce((sum, p) => sum.add(p), new THREE.Vector2())
+        .divideScalar(local.length);
+      const inner = local.map((p) =>
+        p.clone().sub(centre).multiplyScalar(1 - border).add(centre),
       );
-      pane.name = window.name;
-      pane.userData.surface = window.name;
-      pane.castShadow = false;
-      group.add(pane);
-      parts.set(window.name, [pane]);
+      const ring = new THREE.Shape(local);
+      ring.holes.push(new THREE.Path([...inner].reverse()));
+      const ringGeometry = new THREE.ExtrudeGeometry(ring, {
+        depth: thickness * 0.5,
+        bevelEnabled: false,
+        curveSegments: 1,
+      });
+      ringGeometry.computeVertexNormals();
+      const sash = place(ringGeometry, frame, -thickness * 0.75, mullion);
+      sash.userData.detail = true;
+      detail.add(sash);
     }
   }
 
   if (built === 0) return null;
-  return { group, parts };
+  group.add(detail);
+  return { group, parts, detail };
 }
