@@ -84,7 +84,7 @@ export function Navbar({
   referenceOptions: string[];
 }) {
   const store = useStore();
-  const owned = store.step === "Design a shelter";
+  const owned = store.step === "Design";
 
   return (
     <header className="sticky top-0 z-20 border-b border-white/20 bg-white/60 backdrop-blur-xl shadow-sm">

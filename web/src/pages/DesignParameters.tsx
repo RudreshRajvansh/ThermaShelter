@@ -347,7 +347,7 @@ export function DesignParameters() {
         </button>
         <button
           type="button"
-          onClick={() => store.setStep("Simulation")}
+          onClick={() => store.go("Design", "model")}
           className="rounded-md bg-[var(--color-solar)] px-4 py-2 text-sm font-medium text-[#0b1220]"
         >
           Simulate this design →

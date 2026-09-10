@@ -1,8 +1,13 @@
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, type DesignSpec } from "./lib/api";
-import { activeDesign, useStore } from "./lib/store";
-import { Warnings } from "./components/Kit";
+import {
+  DESIGN_TABS,
+  EVIDENCE_TABS,
+  activeDesign,
+  useStore,
+} from "./lib/store";
+import { Tabs, Warnings } from "./components/Kit";
 import { Navbar } from "./components/Navbar";
 import { SiteInput } from "./pages/SiteInput";
 import { ClimateData } from "./pages/ClimateData";
@@ -164,27 +169,47 @@ export default function App() {
           </div>
         )}
 
-        {store.step === "Design a shelter" && <Recommend meta={meta.data} />}
-        {store.step === "Site Input" && <SiteInput meta={meta.data} />}
-        {store.step === "Climate Data" && <ClimateData />}
-        {store.step === "Design Parameters" && <DesignParameters />}
-        {store.step === "Simulation" && (
-          <Simulation
-            geometry={geometry.data}
-            simulation={simulation.data}
-            simulating={simulation.isPending}
-            error={simulation.error ?? geometry.error}
-          />
+        {store.step === "Design" && (
+          <div className="space-y-4">
+            <Tabs
+              tabs={DESIGN_TABS}
+              active={store.designTab}
+              onChange={store.setDesignTab}
+            />
+            {store.designTab === "recommend" && <Recommend meta={meta.data} />}
+            {store.designTab === "model" && (
+              <Simulation
+                geometry={geometry.data}
+                simulation={simulation.data}
+                simulating={simulation.isPending}
+                error={simulation.error ?? geometry.error}
+              />
+            )}
+            {store.designTab === "all inputs" && <SiteInput meta={meta.data} />}
+          </div>
         )}
-        {store.step === "Results" && (
-          <Results
-            simulation={simulation.data}
-            simulating={simulation.isPending}
-            error={simulation.error}
-          />
+
+        {store.step === "Evidence" && (
+          <div className="space-y-4">
+            <Tabs
+              tabs={EVIDENCE_TABS}
+              active={store.evidenceTab}
+              onChange={store.setEvidenceTab}
+            />
+            {store.evidenceTab === "climate" && <ClimateData />}
+            {store.evidenceTab === "construction" && <DesignParameters />}
+            {store.evidenceTab === "results" && (
+              <Results
+                simulation={simulation.data}
+                simulating={simulation.isPending}
+                error={simulation.error}
+              />
+            )}
+            {store.evidenceTab === "compare" && <Compare />}
+          </div>
         )}
-        {store.step === "Compare Designs" && <Compare />}
-        {store.step === "Reports" && (
+
+        {store.step === "Report" && (
           <Reports simulation={simulation.data} meta={meta.data} />
         )}
       </main>

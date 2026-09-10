@@ -417,7 +417,7 @@ export function SiteInput({ meta }: { meta: MetaResponse | undefined }) {
       <div className="flex justify-end">
         <button
           type="button"
-          onClick={() => store.setStep("Climate Data")}
+          onClick={() => store.go("Evidence", "climate")}
           className="rounded-md bg-[var(--color-solar)] px-4 py-2 text-sm font-medium text-[#0b1220]"
         >
           Use this site →
