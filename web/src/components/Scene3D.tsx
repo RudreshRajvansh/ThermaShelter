@@ -115,8 +115,8 @@ function hourOf(stamp: string | undefined): number {
 }
 
 function interpolateSun(path: SunPath | null | undefined, hour: number) {
-  if (!path || path.positions.length === 0) return null;
-  const positions = path.positions;
+  const positions = path?.positions;
+  if (!positions || positions.length === 0) return null;
   for (let index = 0; index < positions.length - 1; index += 1) {
     const a = positions[index];
     const b = positions[index + 1];
@@ -194,6 +194,7 @@ export function Scene3D({
   const [shell, setShell] = useState<Shell>("solid");
   const [dressed, setDressed] = useState(true);
   const [immersive, setImmersive] = useState(false);
+  const [idle, setIdle] = useState(false);
   const [elements, setElements] = useState<string[]>([]);
   const architectureRef = useRef<THREE.Group | null>(null);
   const [showAirflow, setShowAirflow] = useState(false);
@@ -491,7 +492,8 @@ export function Scene3D({
     edgesRef.current = edges;
     scene.add(edges);
 
-    if (airflow && (airflow.zones.length > 0 || airflow.couplings.length > 0)) {
+    if (airflow && ((airflow.zones?.length ?? 0) > 0
+                    || (airflow.couplings?.length ?? 0) > 0)) {
       if (airflowRef.current) airflowRef.current.dispose();
       const built = createParticleAirflow(
         airflow,
@@ -1066,6 +1068,30 @@ export function Scene3D({
   }, []);
 
   useEffect(() => {
+    if (!immersive) {
+      setIdle(false);
+      return;
+    }
+    let timer = window.setTimeout(() => setIdle(true), 2600);
+    const wake = () => {
+      setIdle(false);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setIdle(true), 2600);
+    };
+    window.addEventListener("pointermove", wake);
+    window.addEventListener("pointerdown", wake);
+    window.addEventListener("wheel", wake, { passive: true });
+    window.addEventListener("keydown", wake);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("pointermove", wake);
+      window.removeEventListener("pointerdown", wake);
+      window.removeEventListener("wheel", wake);
+      window.removeEventListener("keydown", wake);
+    };
+  }, [immersive]);
+
+  useEffect(() => {
     const onChange = () => setImmersive(Boolean(document.fullscreenElement));
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -1085,7 +1111,7 @@ export function Scene3D({
       ref={shellRef}
       className={
         immersive
-          ? "flex h-screen flex-col gap-2 bg-[var(--color-night)] p-3"
+          ? "flex h-screen flex-col bg-black"
           : immersiveChrome
             ? "relative"
             : "space-y-2"
@@ -1093,9 +1119,13 @@ export function Scene3D({
     >
       <div
         className={
-          immersiveChrome && !immersive
-            ? "absolute inset-x-3 top-3 z-10 flex items-start justify-between gap-3 rounded-xl border border-white/50 bg-white/75 p-2 shadow-lg backdrop-blur-md"
-            : "flex items-start justify-between gap-3"
+          immersive
+            ? `absolute inset-x-4 top-4 z-20 flex items-start justify-between gap-3 rounded-xl border border-white/40 bg-white/80 p-2 shadow-2xl backdrop-blur-md transition-opacity duration-300 ${
+                idle ? "pointer-events-none opacity-0" : "opacity-100"
+              }`
+            : immersiveChrome
+              ? "absolute inset-x-3 top-3 z-10 flex items-start justify-between gap-3 rounded-xl border border-white/50 bg-white/75 p-2 shadow-lg backdrop-blur-md"
+              : "flex items-start justify-between gap-3"
         }
       >
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2">
@@ -1169,7 +1199,8 @@ export function Scene3D({
             </button>
           ))}
         </div>
-        {airflow && (airflow.zones.length > 0 || airflow.couplings.length > 0) && (
+        {airflow && ((airflow.zones?.length ?? 0) > 0
+                     || (airflow.couplings?.length ?? 0) > 0) && (
           <button
             type="button"
             onClick={() => setShowAirflow((value) => !value)}
@@ -1232,7 +1263,7 @@ export function Scene3D({
             ))}
           </select>
         )}
-        {mode === "interior_temperature" && (
+        {!immersive && mode === "interior_temperature" && (
           <input
             type="range"
             min={0.1}
@@ -1289,9 +1320,13 @@ export function Scene3D({
       <div className={immersive ? "relative min-h-0 flex-1" : "relative"}>
         <div
           ref={mountRef}
-          className={`w-full overflow-hidden rounded-xl border border-[#1b2836] bg-[#070b11] shadow-[inset_0_0_60px_rgba(0,0,0,0.55)] ${
+          className={`w-full overflow-hidden bg-[#070b11] ${
             immersive
               ? "h-full"
+              : "rounded-xl border border-[#1b2836] shadow-[inset_0_0_60px_rgba(0,0,0,0.55)]"
+          } ${
+            immersive
+              ? ""
               : immersiveChrome
                 ? "h-[clamp(520px,78vh,900px)]"
                 : "h-[clamp(420px,62vh,760px)]"
@@ -1451,7 +1486,7 @@ export function Scene3D({
         </div>
       )}
 
-      {geometry.layout && showRooms && rooms.length > 0 && (
+      {!immersive && geometry.layout && showRooms && rooms.length > 0 && (
         <div className="space-y-1.5">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
             <span className="font-medium text-[var(--color-ink)]">
@@ -1475,7 +1510,9 @@ export function Scene3D({
             {geometry.layout.thermal_zoning}{" "}
             {num(geometry.layout.partition_area_m2, 1)} m² of partition enters the
             simulation as internal mass.
-            {geometry.layout.notes.length > 1 ? ` ${geometry.layout.notes[0]}` : ""}
+            {(geometry.layout.notes?.length ?? 0) > 1
+              ? ` ${geometry.layout.notes[0]}`
+              : ""}
           </p>
         </div>
       )}
@@ -1493,7 +1530,7 @@ export function Scene3D({
         </p>
       )}
 
-      {showAirflow && airflow && (
+      {!immersive && showAirflow && airflow && (
         <div className="space-y-1.5 rounded-md border border-[var(--color-line)] bg-[var(--color-night-2)]/60 p-3">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
             <span className="font-medium text-[var(--color-ink)]">Air exchange</span>
@@ -1521,7 +1558,7 @@ export function Scene3D({
         </p>
       )}
 
-      {dressed && elements.length > 0 && (
+      {!immersive && dressed && elements.length > 0 && (
         <p className="text-xs leading-relaxed text-[var(--color-ink-faint)]">
           Drawn as it would be built: {elements.join(", ")}. These are construction
           elements derived from the design, not simulated surfaces. Nothing here is
@@ -1529,7 +1566,7 @@ export function Scene3D({
         </p>
       )}
 
-      {painted && extent && (
+      {!immersive && painted && extent && (
         <div className="flex items-center gap-2 text-xs text-[var(--color-ink-faint)]">
           <span className="tabular-nums">
             {num(extent.min)} {unit}
