@@ -13,9 +13,11 @@ from shelter_engine.schema import (ClimateObjective, ComfortModel, DesignSpec,
                                    Material, PhaseChangeMaterial, SourceStatus)
 
 from ..deps import Context, get_context
+from ..live import fetch_live_weather
 from shelter_engine.programme import PROGRAMMES, occupancy_for, plan_for
 
-from ..schemas import (DesignSummary, HealthResponse, MetaResponse,
+from ..schemas import (DesignSummary, HealthResponse, LiveWeather,
+                       MetaResponse,
                        ShelterUseSummary,
                        SiteSummary, ValidationEvidence)
 
@@ -191,6 +193,14 @@ def design(identifier: str, context: Context = Depends(get_context)) -> DesignSp
             status_code=500,
             detail=f"The stored design {identifier!r} could not be read: {error}",
         ) from error
+
+
+@router.get("/live-weather", response_model=LiveWeather, tags=["catalogue"])
+def live_weather(site_id: str | None = None,
+                 context: Context = Depends(get_context)) -> LiveWeather:
+    site = context.site(site_id)
+    return fetch_live_weather(site.id, site.name, site.latitude_deg,
+                              site.longitude_deg, site.elevation_m)
 
 
 @router.get("/comfort-models", response_model=list[ComfortModel], tags=["catalogue"])

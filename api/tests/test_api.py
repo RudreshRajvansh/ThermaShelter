@@ -438,3 +438,47 @@ def test_an_unknown_design_names_what_the_library_holds(client):
     response = client.get("/api/designs/not_a_design")
     assert response.status_code == 404
     assert "single_room" in response.json()["detail"]
+
+
+def test_live_weather_never_raises_when_the_network_is_gone(client, monkeypatch):
+    import urllib.error
+
+    def unreachable(*args, **kwargs):
+        raise urllib.error.URLError("no route to host")
+
+    monkeypatch.setattr("shelter_api.live.urllib.request.urlopen", unreachable)
+    body = client.get("/api/live-weather").json()
+    assert body["available"] is False
+    assert body["observation"] is None
+    assert "URLError" in body["detail"]
+    assert "stored weather year" in body["detail"]
+
+
+def test_live_weather_says_it_is_not_a_simulation_input(client):
+    body = client.get("/api/live-weather").json()
+    assert "does not read this" in body["note"]
+    assert "IMD" in body["provider"]
+
+
+def test_live_weather_flags_an_elevation_mismatch(client, monkeypatch):
+    import json as _json
+
+    class Fake:
+        def read(self):
+            return _json.dumps({
+                "elevation": 4600.0,
+                "current": {"time": "2026-01-01T00:00", "temperature_2m": -5.0},
+            }).encode()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr("shelter_api.live.urllib.request.urlopen",
+                        lambda *a, **k: Fake())
+    body = client.get("/api/live-weather").json()
+    assert body["available"] is True
+    assert body["elevation_mismatch"]
+    assert "4600" in body["elevation_mismatch"]

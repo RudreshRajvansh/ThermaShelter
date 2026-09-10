@@ -42,6 +42,29 @@ class GeometryRequest(Body):
     comfort_model_id: str | None = None
 
 
+class LiveObservation(Body):
+    air_temperature_c: float | None = None
+    apparent_temperature_c: float | None = None
+    relative_humidity_pct: float | None = None
+    wind_speed_m_s: float | None = None
+    surface_pressure_pa: float | None = None
+    cloud_cover_pct: float | None = None
+
+
+class LiveWeather(Body):
+    site_id: str
+    available: bool
+    observation: LiveObservation | None = None
+    observed_at: str | None = None
+    fetched_at: str | None = None
+    location: str | None = None
+    provider_elevation_m: float | None = None
+    elevation_mismatch: str | None = None
+    detail: str | None = None
+    provider: str
+    note: str
+
+
 class DesignSummary(Body):
     id: str
     name: str

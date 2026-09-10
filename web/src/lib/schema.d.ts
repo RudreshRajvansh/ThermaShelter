@@ -157,6 +157,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/live-weather": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Live Weather */
+        get: operations["live_weather_api_live_weather_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/comfort-models": {
         parameters: {
             query?: never;
@@ -1474,6 +1491,45 @@ export interface components {
              */
             notes: string[];
             source: components["schemas"]["SourceRef"];
+        };
+        /** LiveObservation */
+        LiveObservation: {
+            /** Air Temperature C */
+            air_temperature_c?: number | null;
+            /** Apparent Temperature C */
+            apparent_temperature_c?: number | null;
+            /** Relative Humidity Pct */
+            relative_humidity_pct?: number | null;
+            /** Wind Speed M S */
+            wind_speed_m_s?: number | null;
+            /** Surface Pressure Pa */
+            surface_pressure_pa?: number | null;
+            /** Cloud Cover Pct */
+            cloud_cover_pct?: number | null;
+        };
+        /** LiveWeather */
+        LiveWeather: {
+            /** Site Id */
+            site_id: string;
+            /** Available */
+            available: boolean;
+            observation?: components["schemas"]["LiveObservation"] | null;
+            /** Observed At */
+            observed_at?: string | null;
+            /** Fetched At */
+            fetched_at?: string | null;
+            /** Location */
+            location?: string | null;
+            /** Provider Elevation M */
+            provider_elevation_m?: number | null;
+            /** Elevation Mismatch */
+            elevation_mismatch?: string | null;
+            /** Detail */
+            detail?: string | null;
+            /** Provider */
+            provider: string;
+            /** Note */
+            note: string;
         };
         /** Material */
         Material: {
@@ -2916,6 +2972,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DesignSpec"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    live_weather_api_live_weather_get: {
+        parameters: {
+            query?: {
+                site_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveWeather"];
                 };
             };
             /** @description Validation Error */

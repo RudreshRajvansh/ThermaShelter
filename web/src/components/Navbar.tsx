@@ -1,4 +1,5 @@
-import { type MetaResponse } from "../lib/api";
+import { useQuery } from "@tanstack/react-query";
+import { api, type MetaResponse } from "../lib/api";
 import { STEPS, useStore, type Step } from "../lib/store";
 
 function Stepper({ step, onChange }: { step: Step; onChange: (step: Step) => void }) {
@@ -46,6 +47,24 @@ function Stepper({ step, onChange }: { step: Step; onChange: (step: Step) => voi
 
 function ModeToggle() {
   const store = useStore();
+  const live = useQuery({
+    queryKey: ["live-weather", store.siteId],
+    queryFn: () => api.liveWeather(store.siteId),
+    enabled: store.liveMode && Boolean(store.siteId),
+    refetchInterval: 300000,
+    retry: false,
+  });
+
+  const observed = live.data?.observation?.air_temperature_c;
+  const reading =
+    live.data?.available && typeof observed === "number"
+      ? `${observed.toFixed(1)} °C now`
+      : live.data && !live.data.available
+        ? "unreachable"
+        : live.isFetching
+          ? "fetching…"
+          : null;
+
   return (
     <div className="flex items-center gap-1 rounded-xl border border-[var(--color-line)] bg-white/70 p-1 text-sm shadow-sm backdrop-blur-md">
       <button
@@ -62,11 +81,15 @@ function ModeToggle() {
       </button>
       <button
         type="button"
-        disabled
-        className="cursor-not-allowed rounded-lg px-3 py-1.5 text-[var(--color-ink-faint)] opacity-50"
-        title="Fetching a recent observed weather year from a network service is not wired into this build."
+        onClick={() => store.setLiveMode(true)}
+        title="Current conditions at the site, for context. The simulation always runs against the stored weather year, so results stay reproducible and work with the network unplugged."
+        className={`rounded-lg px-3 py-1.5 transition-colors ${
+          store.liveMode
+            ? "bg-[var(--color-cold)]/15 font-medium text-[var(--color-cold)] shadow-sm"
+            : "text-[var(--color-ink-faint)] hover:bg-white"
+        }`}
       >
-        ○ Weather: live fetch
+        ○ Live conditions{reading ? ` · ${reading}` : ""}
       </button>
     </div>
   );
