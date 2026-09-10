@@ -167,6 +167,7 @@ export function Scene3D({
   const store = useStore();
   const design = activeDesign(store);
   const mountRef = useRef<HTMLDivElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
   const meshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
   const sunRef = useRef<{
     light: THREE.DirectionalLight;
@@ -191,6 +192,7 @@ export function Scene3D({
   const [showRooms, setShowRooms] = useState(true);
   const [shell, setShell] = useState<Shell>("solid");
   const [dressed, setDressed] = useState(true);
+  const [immersive, setImmersive] = useState(false);
   const [elements, setElements] = useState<string[]>([]);
   const architectureRef = useRef<THREE.Group | null>(null);
   const [showAirflow, setShowAirflow] = useState(false);
@@ -1065,25 +1067,80 @@ export function Scene3D({
     onHourChange(best);
   }, [sunPath, hours, onHourChange]);
 
+  const toggleImmersive = useCallback(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => undefined);
+    } else {
+      void shell.requestFullscreen().catch(() => undefined);
+    }
+  }, []);
+
+  useEffect(() => {
+    const onChange = () => setImmersive(Boolean(document.fullscreenElement));
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName)) return;
+      if (event.key === "f" || event.key === "F") toggleImmersive();
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [toggleImmersive]);
+
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
-        {(Object.keys(MODE_LABEL) as DisplayMode[]).map((item) => (
-          <button
-            key={item}
-            type="button"
-            onClick={() => onModeChange(item)}
-            disabled={item !== "construction" && !surfaces}
-            className={`rounded-md border px-2.5 py-1 text-xs transition ${
-              mode === item
-                ? "border-[var(--color-ink)] bg-[var(--color-ink)] text-white"
-                : "border-[var(--color-line)] bg-white text-[var(--color-ink-faint)] hover:border-[var(--color-ink-faint)] disabled:opacity-40"
-            }`}
-          >
-            {MODE_LABEL[item]}
-          </button>
-        ))}
-        <span className="mx-1 h-4 w-px bg-[var(--color-line)]" />
+    <div
+      ref={shellRef}
+      className={
+        immersive
+          ? "flex h-screen flex-col gap-2 bg-[var(--color-night)] p-3"
+          : "space-y-2"
+      }
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2">
+        <div
+          role="group"
+          aria-label="What is painted on the surfaces"
+          className="flex items-center rounded-lg border border-[var(--color-line)] bg-white p-0.5"
+        >
+          {(Object.keys(MODE_LABEL) as DisplayMode[])
+            .filter((item) => item !== "interior_temperature")
+            .map((item) => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => onModeChange(item)}
+                disabled={item !== "construction" && !surfaces}
+                aria-pressed={mode === item}
+                className={`rounded-md px-2.5 py-1 text-xs transition-colors ${
+                  mode === item
+                    ? "bg-[var(--color-ink)] font-medium text-white"
+                    : "text-[var(--color-ink-faint)] hover:text-[var(--color-ink)] disabled:opacity-40"
+                }`}
+              >
+                {MODE_LABEL[item]}
+              </button>
+            ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => onModeChange("interior_temperature")}
+          disabled={!surfaces}
+          aria-pressed={mode === "interior_temperature"}
+          title="Interpolated between the surface temperatures EnergyPlus reported. Not a solved field."
+          className={`rounded-md border border-dashed px-2.5 py-1 text-xs transition-colors ${
+            mode === "interior_temperature"
+              ? "border-[var(--color-earth)] bg-[var(--color-earth)]/12 font-medium text-[var(--color-earth)]"
+              : "border-[var(--color-line)] bg-white text-[var(--color-ink-faint)] hover:text-[var(--color-ink)] disabled:opacity-40"
+          }`}
+        >
+          {MODE_LABEL.interior_temperature}
+        </button>
         <button
           type="button"
           onClick={() => setCut((value) => !value)}
@@ -1095,18 +1152,27 @@ export function Scene3D({
         >
           Section
         </button>
-        <select
-          value={shell}
-          onChange={(event) => setShell(event.target.value as Shell)}
-          className="rounded-md border border-[var(--color-line)] bg-white px-2 py-1 text-xs text-[var(--color-ink-faint)]"
-          aria-label="Shell rendering"
+        <div
+          role="group"
+          aria-label="How the shell is drawn"
+          className="flex items-center rounded-lg border border-[var(--color-line)] bg-white p-0.5"
         >
           {(Object.keys(SHELL_LABEL) as Shell[]).map((item) => (
-            <option key={item} value={item}>
+            <button
+              key={item}
+              type="button"
+              onClick={() => setShell(item)}
+              aria-pressed={shell === item}
+              className={`rounded-md px-2.5 py-1 text-xs transition-colors ${
+                shell === item
+                  ? "bg-[var(--color-ink)] font-medium text-white"
+                  : "text-[var(--color-ink-faint)] hover:text-[var(--color-ink)]"
+              }`}
+            >
               {SHELL_LABEL[item]}
-            </option>
+            </button>
           ))}
-        </select>
+        </div>
         {airflow && (airflow.zones.length > 0 || airflow.couplings.length > 0) && (
           <button
             type="button"
@@ -1204,17 +1270,32 @@ export function Scene3D({
             </button>
           </>
         )}
-        <span className="ml-auto text-xs text-[var(--color-ink-faint)]">
+        </div>
+
+        <button
+          type="button"
+          onClick={toggleImmersive}
+          className="shrink-0 rounded-md border border-[var(--color-line)] bg-white px-2.5 py-1 text-xs whitespace-nowrap text-[var(--color-ink-faint)] transition-colors hover:border-[var(--color-ink-faint)] hover:text-[var(--color-ink)]"
+          title="Fill the screen. Press F to toggle."
+        >
+          {immersive ? "Exit full screen" : "Full screen"}
+        </button>
+      </div>
+
+      {!immersive && (
+        <p className="text-xs text-[var(--color-ink-faint)]">
           {engagedHint
             ? "drag to orbit, scroll to zoom, hover a face"
             : "click the view to take control, then drag and scroll"}
-        </span>
-      </div>
+        </p>
+      )}
 
-      <div className="relative">
+      <div className={immersive ? "relative min-h-0 flex-1" : "relative"}>
         <div
           ref={mountRef}
-          className="h-[520px] w-full overflow-hidden rounded-lg border border-[#1b2836] bg-[#070b11] shadow-[inset_0_0_60px_rgba(0,0,0,0.55)]"
+          className={`w-full overflow-hidden rounded-lg border border-[#1b2836] bg-[#070b11] shadow-[inset_0_0_60px_rgba(0,0,0,0.55)] ${
+            immersive ? "h-full" : "h-[clamp(420px,62vh,760px)]"
+          }`}
         />
 
         <div className="pointer-events-none absolute inset-0 rounded-lg">
@@ -1425,6 +1506,19 @@ export function Scene3D({
           </div>
           <p className="text-xs text-[var(--color-ink-faint)]">{airflow.note}</p>
         </div>
+      )}
+
+      {mode === "interior_temperature" && (
+        <p className="rounded-md border border-dashed border-[var(--color-earth)]/50 bg-[var(--color-earth)]/8 px-3 py-2 text-xs leading-relaxed text-[var(--color-ink-dim)]">
+          <span className="font-medium text-[var(--color-ink)]">
+            This one is an estimate, not a solved field.
+          </span>{" "}
+          EnergyPlus models the air in a zone as a single well mixed node, so it
+          reports no temperature distribution inside the room. What you see is
+          interpolated between the surface temperatures it did report, with an assumed
+          vertical stratification. Use it to read the shape of the problem, never as a
+          measured value. A solved field needs the fluid dynamics run.
+        </p>
       )}
 
       {dressed && elements.length > 0 && (
