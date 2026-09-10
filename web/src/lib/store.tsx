@@ -25,7 +25,7 @@ export const SUMMER: Window = { start: "2019-06-10", end: "2019-06-16" };
 export const SURFACE_WINTER: Window = { start: "2019-01-12", end: "2019-01-14" };
 export const SURFACE_SUMMER: Window = { start: "2019-06-12", end: "2019-06-14" };
 
-export type DisplayMode = "construction" | "surface_temperature" | "incident_solar";
+export type DisplayMode = "construction" | "surface_temperature" | "incident_solar" | "interior_temperature";
 
 type State = {
   step: Step;

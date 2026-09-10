@@ -11,11 +11,11 @@ from shelter_engine.errors import (EngineError, GeometryError, MaterialError,
 from shelter_engine.hashing import stable_hash
 from shelter_engine.schema import (CFDExport, ClimateSummary, ComparisonTable,
                                    GeometryPayload, SimulationResult, SunPath,
-                                   SurfaceResults, TerrainMesh)
+                                   SurfaceResults, TerrainMesh, ThermalFieldPayload)
 
 from ..deps import Context, get_context
 from ..schemas import (CFDAbsent, CompareRequest, GeometryRequest,
-                       SimulateRequest, SurfaceRequest)
+                       SimulateRequest, SurfaceRequest, ThermalFieldRequest)
 
 router = APIRouter()
 
@@ -72,6 +72,29 @@ def surface_results(request: SurfaceRequest,
             detail=("The simulation reported no per surface results for this period. "
                     "Widen the surface period or check that surface output is enabled."))
     return result
+
+
+@router.post("/thermal-field", response_model=ThermalFieldPayload, tags=["design"])
+def thermal_field(request: ThermalFieldRequest,
+                  context: Context = Depends(get_context)) -> ThermalFieldPayload:
+    engine = context.engine(request.site_id, request.comfort_model_id)
+    options = request.to_options()
+    try:
+        surface_results = engine.surface_results(request.design, options)
+    except Exception as error:
+        raise _translate(error) from error
+    if surface_results is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No surface results available for thermal field computation.")
+    geometry = engine.geometry(request.design)
+    from shelter_engine.thermal_field import compute_thermal_field
+    try:
+        return compute_thermal_field(
+            geometry, surface_results, request.hour_index,
+            zone=request.zone, resolution=request.resolution)
+    except Exception as error:
+        raise _translate(error) from error
 
 
 @router.post("/compare", response_model=ComparisonTable, tags=["design"])

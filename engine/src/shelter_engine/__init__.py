@@ -23,6 +23,7 @@ from .optimize import (cold_climate_variables, hot_dry_variables, materialise,
                        optimise)
 from .solar import (daylight_lost_to_terrain_h, sun_path, sun_position,
                     terrain_mesh)
+from .thermal_field import compute_thermal_field
 from .schema import (Arrangement, ArrangementParams, Assumption,
                      BuildabilityMetrics, CFDBoundarySurface, CFDExport,
                      ClimateObjective, ComfortMetrics, ComfortModel,
@@ -39,7 +40,7 @@ from .schema import (Arrangement, ArrangementParams, Assumption,
                      RunPeriod, Severity, ShutterSpec, SimulationResult,
                      SiteSpec, SolarNoon, SourceRef, SourceStatus, SunPath,
                      SunPosition, SurfaceInfo, SurfaceKind, SurfaceResults,
-                     SurfaceSeries, TerrainMesh, ThermalBridge,
+                     SurfaceSeries, TerrainMesh, ThermalBridge, ThermalFieldPayload,
                      UncertainRange, UncertaintyBand, UncertaintyContribution,
                      VentilationSpec, WindowSpec)
 from .uncertainty import UncertainParameter, describe_band, select_parameters
@@ -152,6 +153,8 @@ __all__ = [
     "SurfaceResults",
     "SurfaceSeries",
     "ThermalBridge",
+    "ThermalFieldPayload",
+    "compute_thermal_field",
     "SunPath",
     "SunPosition",
     "SolarNoon",

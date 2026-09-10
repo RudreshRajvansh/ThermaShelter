@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import type {
-  AirflowSummary,
-  GeometryPayload,
-  SunPath,
-  SurfaceResults,
-  TerrainMesh,
+import {
+  api,
+  type AirflowSummary,
+  type GeometryPayload,
+  type SunPath,
+  type SurfaceResults,
+  type TerrainMesh,
 } from "../lib/api";
 import { buildSolid } from "../lib/solid";
+import { createThermalVolume, probeTemperature, type ThermalFieldData } from "../lib/thermal_volume";
 import { activeDesign, useStore } from "../lib/store";
 import {
   COLD_TO_HOT,
@@ -20,18 +22,27 @@ import {
 import {
   createCompass,
   createGround,
-  createSky,
   createSunDisc,
   createSunPathArc,
-  createAirflow,
   createLayout,
   createTerrain,
   disposeObject,
   makeLabel,
   sunVector,
 } from "../lib/scene";
+import { createParticleAirflow } from "../lib/flow_paths";
+import {
+  createPipeline,
+  createSkyDome,
+  detailMaps,
+  detectQuality,
+  type Pipeline,
+  type Quality,
+} from "../lib/render_pipeline";
+import { createGizmos, computeNewDesign, type HandleType } from "../lib/manipulate";
+import type { DesignSpec } from "../lib/api";
 
-export type DisplayMode = "construction" | "surface_temperature" | "incident_solar";
+export type DisplayMode = "construction" | "surface_temperature" | "incident_solar" | "interior_temperature";
 
 export type RampName = "diverging" | "spectral" | "solar";
 
@@ -59,10 +70,11 @@ const MODE_LABEL: Record<DisplayMode, string> = {
   construction: "Construction",
   surface_temperature: "Surface temperature",
   incident_solar: "Incident solar",
+  interior_temperature: "Interior estimate",
 };
 
 const MODE_FIELD: Record<
-  Exclude<DisplayMode, "construction">,
+  Exclude<DisplayMode, "construction" | "interior_temperature">,
   "inside_face_temperature_c" | "incident_solar_w_m2"
 > = {
   surface_temperature: "inside_face_temperature_c",
@@ -73,9 +85,10 @@ const MODE_UNIT: Record<DisplayMode, string> = {
   construction: "",
   surface_temperature: "°C",
   incident_solar: "W/m²",
+  interior_temperature: "°C",
 };
 
-type Hover = { name: string; value: number | null; area: number; x: number; y: number };
+type Hover = { name: string; value: number | null; area: number; x: number; y: number; point?: THREE.Vector3 };
 
 function extentOf(
   surfaces: SurfaceResults | null,
@@ -168,6 +181,9 @@ export function Scene3D({
   } | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const sunGroupRef = useRef<THREE.Group | null>(null);
+  const gizmoRef = useRef<ReturnType<typeof createGizmos> | null>(null);
+  const modeRef = useRef(mode);
+  useEffect(() => { modeRef.current = mode; }, [mode]);
 
   const [playing, setPlaying] = useState(false);
   const [cut, setCut] = useState(false);
@@ -177,7 +193,11 @@ export function Scene3D({
   const [airflowLegend, setAirflowLegend] = useState<
     { label: string; detail: string }[]
   >([]);
-  const airflowRef = useRef<THREE.Group | null>(null);
+  const airflowRef = useRef<{
+    group: THREE.Group;
+    tick: (delta: number) => void;
+    dispose: () => void;
+  } | null>(null);
   const edgesRef = useRef<THREE.Group | null>(null);
   const solidRef = useRef<{
     group: THREE.Group;
@@ -191,13 +211,34 @@ export function Scene3D({
   const [hover, setHover] = useState<Hover | null>(null);
   const [engagedHint, setEngagedHint] = useState(false);
 
+  const thermalRef = useRef<{
+    mesh: THREE.Mesh;
+    update: (data: ThermalFieldData) => void;
+    dispose: () => void;
+    setOpacity: (v: number) => void;
+    setClipHeight: (h: number) => void;
+  } | null>(null);
+  const [thermalFieldData, setThermalFieldData] = useState<ThermalFieldData | null>(null);
+  const pipelineRef = useRef<Pipeline | null>(null);
+  const qualityRef = useRef<Quality>(detectQuality());
+  const [quality, setQualityState] = useState<Quality>(qualityRef.current);
+
+  const changeQuality = (next: Quality) => {
+    qualityRef.current = next;
+    setQualityState(next);
+    pipelineRef.current?.setQuality(next);
+  };
+  const [thermalOpacity, setThermalOpacity] = useState(0.6);
+  const [probeTemp, setProbeTemp] = useState<{ value: number; x: number; y: number } | null>(null);
+
+
   const hours = surfaces?.timestamps ?? [];
   const maxIndex = Math.max(0, hours.length - 1);
   const safeIndex = Math.min(hourIndex, maxIndex);
   const currentStamp = hours[safeIndex];
   const clockHour = hourOf(currentStamp);
 
-  const field = mode === "construction" ? null : MODE_FIELD[mode];
+  const field = (mode === "construction" || mode === "interior_temperature") ? null : MODE_FIELD[mode];
 
   const valuesBySurface = useMemo(() => {
     const map = new Map<string, (number | null)[]>();
@@ -220,6 +261,11 @@ export function Scene3D({
   );
 
   const sun = useMemo(() => interpolateSun(sunPath, clockHour), [sunPath, clockHour]);
+
+  const volumeTotal = useMemo(
+    () => Object.values(geometry.zone_volumes_m3 ?? {}).reduce((a, b) => a + b, 0),
+    [geometry],
+  );
 
   useEffect(() => {
     if (!playing || maxIndex === 0) return;
@@ -289,6 +335,7 @@ export function Scene3D({
       );
       buffer.setIndex(Array.from(surface.indices));
       buffer.computeVertexNormals();
+      const detail = detailMaps(surface.finish);
       const glazed = surface.finish === "transparent" || surface.opacity < 1;
       const transparent = surface.opacity < 1;
       const material = glazed
@@ -315,7 +362,13 @@ export function Scene3D({
             opacity: surface.opacity,
             roughness: surface.finish === "smooth" ? 0.42 : 0.92,
             metalness: surface.finish === "smooth" ? 0.12 : 0.02,
-            envMapIntensity: 0.8,
+            envMapIntensity: 0.9,
+            normalMap: detail.normal,
+            normalScale: new THREE.Vector2(
+              surface.finish === "rough" ? 0.9 : 0.35,
+              surface.finish === "rough" ? 0.9 : 0.35,
+            ),
+            roughnessMap: detail.rough,
             clippingPlanes: [clipRef.current],
             clipShadows: true,
           });
@@ -367,7 +420,7 @@ export function Scene3D({
     const measured = Boolean(
       terrain && terrain.positions.length > 0 && !terrain.derived_from_horizon,
     );
-    const sky = createSky(sceneRadius * 3.2);
+    const sky = createSkyDome(sceneRadius * 3.2);
     scene.add(sky.mesh);
     scene.add(createGround(measured ? buildingRadius * 1.9 : sceneRadius * 1.4));
     scene.add(createCompass(buildingRadius * 2.1));
@@ -429,17 +482,19 @@ export function Scene3D({
     scene.add(edges);
 
     if (airflow && (airflow.zones.length > 0 || airflow.couplings.length > 0)) {
-      const built = createAirflow(
+      if (airflowRef.current) airflowRef.current.dispose();
+      const built = createParticleAirflow(
         airflow,
         geometry.layout,
         { x: -centre.x, y: -centre.y },
         Math.max(size.z, 2),
       );
       built.group.visible = false;
-      airflowRef.current = built.group;
+      airflowRef.current = built;
       setAirflowLegend(built.legend);
       scene.add(built.group);
     } else {
+      if (airflowRef.current) airflowRef.current.dispose();
       airflowRef.current = null;
       setAirflowLegend([]);
     }
@@ -449,6 +504,19 @@ export function Scene3D({
     scene.add(sunGroup);
     if (sunPath) {
       sunGroup.add(createSunPathArc(Array.from(sunPath.positions), sceneRadius * 0.8));
+    }
+
+    if (design) {
+      const width = Math.sqrt(design.plan.floor_area_m2 * design.plan.aspect_ratio);
+      const depth = Math.sqrt(design.plan.floor_area_m2 / design.plan.aspect_ratio);
+      const height = design.plan.ceiling_height_m;
+      const gizmos = createGizmos(width, depth, height);
+      gizmos.group.position.set(-centre.x, -centre.y, 0);
+      gizmos.group.visible = modeRef.current === "construction";
+      gizmoRef.current = gizmos;
+      scene.add(gizmos.group);
+    } else {
+      gizmoRef.current = null;
     }
 
     const sunDisc = createSunDisc(buildingRadius * 0.2);
@@ -524,11 +592,59 @@ export function Scene3D({
     place();
     raycastRef.current = { raycaster: new THREE.Raycaster(), camera };
 
+    let activeGizmo: {
+      handle: HandleType;
+      mesh: THREE.Mesh;
+      startPoint: THREE.Vector3;
+      startDesign: DesignSpec;
+      plane: THREE.Plane;
+    } | null = null;
+
     const pointer = new THREE.Vector2();
     const onMove = (event: PointerEvent) => {
       const rect = renderer.domElement.getBoundingClientRect();
       pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      if (activeGizmo && gizmoRef.current) {
+        const kit = raycastRef.current;
+        if (kit) {
+          kit.raycaster.setFromCamera(pointer, kit.camera);
+          const currentPoint = new THREE.Vector3();
+          kit.raycaster.ray.intersectPlane(activeGizmo.plane, currentPoint);
+          if (currentPoint) {
+            let delta = 0;
+            if (activeGizmo.handle === "east") delta = currentPoint.x - activeGizmo.startPoint.x;
+            else if (activeGizmo.handle === "west") delta = -(currentPoint.x - activeGizmo.startPoint.x);
+            else if (activeGizmo.handle === "north") delta = currentPoint.y - activeGizmo.startPoint.y;
+            else if (activeGizmo.handle === "south") delta = -(currentPoint.y - activeGizmo.startPoint.y);
+            else if (activeGizmo.handle === "top") delta = currentPoint.z - activeGizmo.startPoint.z;
+
+            const newDesign = computeNewDesign(activeGizmo.startDesign, activeGizmo.handle, delta);
+            const w = Math.sqrt(newDesign.plan.floor_area_m2 * newDesign.plan.aspect_ratio);
+            const d = Math.sqrt(newDesign.plan.floor_area_m2 / newDesign.plan.aspect_ratio);
+            const h = newDesign.plan.ceiling_height_m;
+            gizmoRef.current.updateGhost(w, d, h);
+          }
+        }
+        return;
+      }
+
+      if (modeRef.current === "construction" && gizmoRef.current && !dragging) {
+        const kit = raycastRef.current;
+        if (kit) {
+          kit.raycaster.setFromCamera(pointer, kit.camera);
+          const hits = kit.raycaster.intersectObjects(gizmoRef.current.handles, false);
+          gizmoRef.current.handles.forEach(h => {
+             (h.material as THREE.MeshBasicMaterial).color.setHex(0xffffff);
+          });
+          if (hits.length > 0) {
+            const mat = (hits[0].object as THREE.Mesh).material as THREE.MeshBasicMaterial;
+            mat.color.setHex(0xffa500);
+          }
+        }
+      }
+
       if (dragging) {
         theta -= (event.clientX - lastX) * 0.007;
         phi = THREE.MathUtils.clamp(phi - (event.clientY - lastY) * 0.007, 0.08, 1.52);
@@ -549,16 +665,52 @@ export function Scene3D({
         setHover(null);
         return;
       }
-      const name = hits[0].object.name;
+      const hit = hits[0];
+      const name = hit.object.name;
       setHover({
         name,
         value: null,
         area: areaBySurface.get(name) ?? 0,
         x: event.clientX - rect.left,
         y: event.clientY - rect.top,
+        point: hit.point,
       });
     };
     const onDown = (event: PointerEvent) => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      if (modeRef.current === "construction" && gizmoRef.current && design) {
+        const kit = raycastRef.current;
+        if (kit) {
+          kit.raycaster.setFromCamera(pointer, kit.camera);
+          const hits = kit.raycaster.intersectObjects(gizmoRef.current.handles, false);
+          if (hits.length > 0) {
+            const hit = hits[0];
+            const mesh = hit.object as THREE.Mesh;
+            const type = mesh.userData.type as HandleType;
+            const normal = type === "top" ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1);
+            
+            activeGizmo = {
+              handle: type,
+              mesh,
+              startPoint: hit.point,
+              startDesign: design,
+              plane: new THREE.Plane().setFromNormalAndCoplanarPoint(normal, hit.point)
+            };
+            
+            gizmoRef.current.ghost.visible = true;
+            (mesh.material as THREE.MeshBasicMaterial).color.setHex(0xffa500);
+            dragging = true;
+            engaged = true;
+            setEngagedHint(true);
+            renderer.domElement.setPointerCapture(event.pointerId);
+            return;
+          }
+        }
+      }
+
       dragging = true;
       engaged = true;
       setEngagedHint(true);
@@ -572,6 +724,35 @@ export function Scene3D({
         renderer.domElement.releasePointerCapture(event.pointerId);
       } catch {
         /* pointer already released */
+      }
+
+      if (activeGizmo && gizmoRef.current) {
+        const kit = raycastRef.current;
+        if (kit) {
+          const rect = renderer.domElement.getBoundingClientRect();
+          pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+          pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+          kit.raycaster.setFromCamera(pointer, kit.camera);
+          
+          const currentPoint = new THREE.Vector3();
+          kit.raycaster.ray.intersectPlane(activeGizmo.plane, currentPoint);
+          if (currentPoint) {
+            let delta = 0;
+            if (activeGizmo.handle === "east") delta = currentPoint.x - activeGizmo.startPoint.x;
+            else if (activeGizmo.handle === "west") delta = -(currentPoint.x - activeGizmo.startPoint.x);
+            else if (activeGizmo.handle === "north") delta = currentPoint.y - activeGizmo.startPoint.y;
+            else if (activeGizmo.handle === "south") delta = -(currentPoint.y - activeGizmo.startPoint.y);
+            else if (activeGizmo.handle === "top") delta = currentPoint.z - activeGizmo.startPoint.z;
+
+            const newDesign = computeNewDesign(activeGizmo.startDesign, activeGizmo.handle, delta);
+            store.applyOverride(newDesign);
+          }
+        }
+        
+        (activeGizmo.mesh.material as THREE.MeshBasicMaterial).color.setHex(0xffffff);
+        gizmoRef.current.ghost.visible = false;
+        activeGizmo = null;
+        return;
       }
     };
     const onLeave = () => {
@@ -601,26 +782,45 @@ export function Scene3D({
       if (!w || !h) return;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
+      pipeline.resize(w, h);
     };
     const observer = new ResizeObserver(resize);
     observer.observe(mount);
 
+    const pipeline = createPipeline(renderer, scene, camera, width, height,
+                                    qualityRef.current);
+    pipelineRef.current = pipeline;
+
+    let lastTime = performance.now();
     let frame = 0;
     const animate = () => {
-      renderer.render(scene, camera);
+      const now = performance.now();
+      const delta = (now - lastTime) / 1000;
+      lastTime = now;
+
+      if (airflowRef.current && airflowRef.current.group.visible) {
+        airflowRef.current.tick(delta);
+      }
+
+      pipeline.render();
       frame = requestAnimationFrame(animate);
     };
     animate();
 
     return () => {
       cancelAnimationFrame(frame);
+      pipeline.dispose();
+      pipelineRef.current = null;
       observer.disconnect();
       renderer.domElement.removeEventListener("pointerdown", onDown);
       renderer.domElement.removeEventListener("pointermove", onMove);
       renderer.domElement.removeEventListener("pointerup", onUp);
       renderer.domElement.removeEventListener("pointerleave", onLeave);
       renderer.domElement.removeEventListener("wheel", onWheel);
+      if (gizmoRef.current) {
+        gizmoRef.current.dispose();
+        gizmoRef.current = null;
+      }
       disposeObject(scene);
       renderer.dispose();
       if (renderer.domElement.parentNode === mount) {
@@ -681,7 +881,7 @@ export function Scene3D({
   }, [showRooms, geometry]);
 
   useEffect(() => {
-    if (airflowRef.current) airflowRef.current.visible = showAirflow;
+    if (airflowRef.current) airflowRef.current.group.visible = showAirflow;
   }, [showAirflow, geometry, airflow]);
 
   useEffect(() => {
@@ -732,6 +932,100 @@ export function Scene3D({
   const hoverValue = hover ? valuesBySurface.get(hover.name)?.[safeIndex] : undefined;
   const painted = mode !== "construction";
   const unit = MODE_UNIT[mode];
+
+  // Fetch thermal field data
+  useEffect(() => {
+    if (mode !== "interior_temperature" || !design || !store.period) return;
+    
+    let cancelled = false;
+    
+    api.thermalField({
+      design,
+      site_id: store.siteId,
+      hour_index: safeIndex,
+      period: store.period,
+    }).then((res: any) => {
+      if (!cancelled) setThermalFieldData(res as ThermalFieldData);
+    }).catch(err => {
+      console.warn("Failed to fetch thermal field:", err);
+      if (!cancelled) setThermalFieldData(null);
+    });
+    
+    return () => { cancelled = true; };
+  }, [mode, design, store.siteId, store.period, safeIndex]);
+
+  // Create or update the thermal volume mesh
+  useEffect(() => {
+    if (mode !== "interior_temperature" || !thermalFieldData || !sceneRef.current) {
+      if (thermalRef.current) {
+        if (sceneRef.current) sceneRef.current.remove(thermalRef.current.mesh);
+        thermalRef.current.dispose();
+        thermalRef.current = null;
+      }
+      return;
+    }
+    
+    const stops = rampStops(mode, ramp);
+    if (!thermalRef.current) {
+      const volume = createThermalVolume(thermalFieldData, stops);
+      volume.setOpacity(thermalOpacity);
+      sceneRef.current.add(volume.mesh);
+      thermalRef.current = volume;
+    } else {
+      thermalRef.current.update(thermalFieldData);
+      thermalRef.current.setOpacity(thermalOpacity);
+    }
+    
+    // Handle clip height
+    if (thermalRef.current) {
+      let maxZ = 9999;
+      if (cut) {
+        const box = new THREE.Box3();
+        geometry.surfaces.forEach((surface) => {
+          for (let index = 0; index < surface.positions.length; index += 3) {
+            box.expandByPoint(
+              new THREE.Vector3(
+                surface.positions[index],
+                surface.positions[index + 1],
+                surface.positions[index + 2],
+              ),
+            );
+          }
+        });
+        const centre = box.getCenter(new THREE.Vector3());
+        maxZ = centre.z;
+      }
+      thermalRef.current.setClipHeight(maxZ);
+    }
+  }, [mode, thermalFieldData, ramp, thermalOpacity, cut, geometry]);
+
+  useEffect(() => {
+    if (gizmoRef.current) {
+      gizmoRef.current.group.visible = mode === "construction";
+    }
+  }, [mode]);
+
+  // Visibility management / shell adjustment
+  useEffect(() => {
+    if (mode === "interior_temperature") {
+      setShell("xray");
+    } else if (shell === "xray") {
+      setShell("solid");
+    }
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode !== "interior_temperature" || !hover?.point || !thermalFieldData) {
+      setProbeTemp(null);
+      return;
+    }
+    const temp = probeTemperature(thermalFieldData, hover.point);
+    if (temp !== null) {
+      setProbeTemp({ value: temp, x: hover.x, y: hover.y });
+    } else {
+      setProbeTemp(null);
+    }
+  }, [hover, mode, thermalFieldData]);
 
   const jumpToNoon = useCallback(() => {
     if (!sunPath || hours.length === 0) return;
@@ -815,6 +1109,17 @@ export function Scene3D({
             Rooms
           </button>
         )}
+        <select
+          value={quality}
+          onChange={(event) => changeQuality(event.target.value as Quality)}
+          className="rounded-md border border-[var(--color-line)] bg-white px-2 py-1 text-xs text-[var(--color-ink-faint)]"
+          aria-label="Render quality"
+          title="Ambient occlusion, bloom and antialiasing cost frame rate. Drop this if the view stutters."
+        >
+          <option value="high">High render</option>
+          <option value="balanced">Balanced</option>
+          <option value="plain">Plain</option>
+        </select>
         {mode !== "construction" && (
           <select
             value={ramp}
@@ -828,6 +1133,18 @@ export function Scene3D({
               </option>
             ))}
           </select>
+        )}
+        {mode === "interior_temperature" && (
+          <input
+            type="range"
+            min={0.1}
+            max={1.0}
+            step={0.05}
+            value={thermalOpacity}
+            onChange={(e) => setThermalOpacity(Number(e.target.value))}
+            className="w-24 accent-[var(--color-ink)]"
+            title="Volume Opacity"
+          />
         )}
         {hours.length > 0 && (
           <>
@@ -861,8 +1178,36 @@ export function Scene3D({
       <div className="relative">
         <div
           ref={mountRef}
-          className="h-[440px] w-full overflow-hidden rounded-lg border border-[var(--color-line)]"
+          className="h-[520px] w-full overflow-hidden rounded-lg border border-[#1b2836] bg-[#070b11] shadow-[inset_0_0_60px_rgba(0,0,0,0.55)]"
         />
+
+        <div className="pointer-events-none absolute inset-0 rounded-lg">
+          <span className="absolute left-2 top-2 h-4 w-4 border-l border-t border-[#2f4a63]" />
+          <span className="absolute right-2 top-2 h-4 w-4 border-r border-t border-[#2f4a63]" />
+          <span className="absolute bottom-2 left-2 h-4 w-4 border-b border-l border-[#2f4a63]" />
+          <span className="absolute bottom-2 right-2 h-4 w-4 border-b border-r border-[#2f4a63]" />
+        </div>
+
+        <div className="pointer-events-none absolute left-4 top-4 flex flex-col gap-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[#6f97b3]">
+          <span className="text-[13px] normal-case tracking-normal text-[#dbe9f4]">
+            {geometry.arrangement.replace(/_/g, " ")}
+          </span>
+          <span className="tabular-nums">
+            {geometry.surfaces.length} surfaces ·{" "}
+            {num(volumeTotal, 1)} m³
+          </span>
+          <span className="tabular-nums">
+            azimuth {num(geometry.azimuth_deg, 0)}°
+          </span>
+        </div>
+
+        <div className="pointer-events-none absolute right-4 top-4 flex flex-col items-end gap-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[#6f97b3]">
+          <span className="text-[#dbe9f4]">{MODE_LABEL[mode]}</span>
+          <span className="tabular-nums">
+            alt {num(sun?.altitude, 1)}° · az {num(sun?.azimuth, 1)}°
+          </span>
+          <span>{quality}</span>
+        </div>
 
         {hover && (
           <div
@@ -875,10 +1220,15 @@ export function Scene3D({
             <div className="font-mono font-medium">{hover.name}</div>
             <div className="text-[var(--color-ink-faint)]">
               {num(hover.area, 2)} m²
-              {painted && hoverValue !== undefined && hoverValue !== null
+              {mode !== "interior_temperature" && painted && hoverValue !== undefined && hoverValue !== null
                 ? ` · ${num(hoverValue)} ${unit}`
                 : ""}
             </div>
+            {mode === "interior_temperature" && probeTemp && (
+              <div className="text-[var(--color-solar)] font-medium mt-0.5">
+                Air: {num(probeTemp.value, 1)} °C
+              </div>
+            )}
           </div>
         )}
 
@@ -1013,6 +1363,19 @@ export function Scene3D({
         </div>
       )}
 
+      {mode === "interior_temperature" && thermalFieldData && (
+        <p className="rounded-md border border-[var(--color-line)] bg-[var(--color-night-2)]/60 p-3 text-xs leading-relaxed text-[var(--color-ink-faint)]">
+          <span className="text-[var(--color-ink-dim)]">
+            This volume is interpolated, not solved.
+          </span>{" "}
+          EnergyPlus carries one well mixed air node per zone and does not resolve
+          temperature inside a room. The surfaces bounding this volume are solver
+          output; the air between them is inverse distance weighted between them with
+          an assumed stratification, so read it as a sketch of where the cold sits,
+          never as a fluid dynamics result.
+        </p>
+      )}
+
       {showAirflow && airflow && (
         <div className="space-y-1.5 rounded-md border border-[var(--color-line)] bg-[var(--color-night-2)]/60 p-3">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
@@ -1044,17 +1407,17 @@ export function Scene3D({
       )}
 
       <p className="text-xs leading-relaxed text-[var(--color-ink-faint)]">
-        {painted
-          ? "Every painted face is one number EnergyPlus reported for that surface at that hour, and the face names come from the simulation, so the value sits on the surface it belongs to."
-          : "Material colours come from the Layer 0 database. The geometry drawn here is the geometry that was simulated, built from one description."}{" "}
+        {mode === "interior_temperature"
+          ? "The volumetric field is an approximate interpolation of room air temperatures over the grid, meant for rapid visualization. It is not a computational fluid dynamics (CFD) result."
+          : painted
+            ? "Every painted face is one number EnergyPlus reported for that surface at that hour, and the face names come from the simulation, so the value sits on the surface it belongs to."
+            : "Material colours come from the Layer 0 database. The geometry drawn here is the geometry that was simulated, built from one description."}{" "}
         {terrain && terrain.positions.length > 0
           ? terrain.derived_from_horizon
             ? "The skyline is the terrain horizon table the simulation shades with, so what blocks the sun on screen is what blocked it in the run."
             : `The ground is the measured elevation model, ${terrain.vertex_count.toLocaleString()} points out to ${Math.round((terrain.outer_radius_m ?? 0) / 1000)} km, shaded by height above the site. It is the same ground the horizon profile the simulation shades with was measured from, and it is scaled uniformly so every skyline angle is the angle the run used. Heights are not exaggerated, and the colour is a display ramp over real elevation rather than observed snow.`
           : "No terrain is attached, so the simulation assumed a flat skyline in every direction."}{" "}
-        There is no air temperature or velocity field here because the engine computes
-        neither; those live in the detailed analysis tab and come from a fluid dynamics
-        solver.
+        {mode !== "interior_temperature" && "There is no air temperature or velocity field here because the engine computes neither; those live in the detailed analysis tab and come from a fluid dynamics solver."}
       </p>
     </div>
   );
