@@ -70,6 +70,12 @@ ZONE_VARIABLES = (
     "Zone Windows Total Transmitted Solar Radiation Energy",
     "Enclosure Windows Total Transmitted Solar Radiation Energy",
     "Zone Total Internal Total Heating Energy",
+    "Zone Infiltration Air Change Rate",
+    "Zone Infiltration Standard Density Volume Flow Rate",
+    "Zone Ventilation Air Change Rate",
+    "Zone Ventilation Standard Density Volume Flow Rate",
+    "Zone Mixing Current Density Volume Flow Rate",
+    "Zone Mixing Mass Flow Rate",
 )
 SITE_VARIABLES = (
     "Site Outdoor Air Drybulb Temperature",

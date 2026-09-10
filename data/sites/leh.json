@@ -114,7 +114,7 @@
     "source": {
       "citation": "Undisturbed earth temperature at 0.5 m from the EPW GROUND TEMPERATURES header, calculated from this weather file",
       "status": "verified",
-      "note": "NASA POWER TSOIL1 for 2015 to 2024 is also in the Layer 0 delivery and gives -8.9, -8.5, -7.4, -2.4, 2.8, 7.7, 12.3, 11.9, 7.2, 0.5, -4.4, -8.8 C. It was not used because its MERRA-2 grid cell reports 4533 m elevation against the 3256 m of the site, so it is colder than Leh."
+      "note": "NASA POWER TSOIL1 for 2015 to 2024 is also in the Layer 0 delivery and gives -8.9, -8.5, -7.4, -2.4, 2.8, 7.7, 12.3, 11.9, 7.2, 0.5, -4.4, -8.8 C. It was not used because it is a MERRA-2 reanalysis cell whose grid elevation is 4533 m against the 3256 m of the site, so it does not describe this ground. The EPW header values are derived from the same weather year the simulation runs on, so they stay consistent with it."
     }
   }
 }

@@ -112,12 +112,13 @@ CREATE TABLE materials (
     visible_absorptance REAL, roughness TEXT, cost_inr_m3 REAL,
     locally_available INTEGER, transport_multiplier REAL, mason_skill TEXT,
     colour TEXT, finish TEXT, conductivity_low REAL, conductivity_high REAL,
-    source TEXT, source_status TEXT, source_note TEXT);
+    source TEXT, source_status TEXT, source_note TEXT,
+    cost_source TEXT, cost_source_status TEXT);
 CREATE TABLE glazing_systems (
     id TEXT PRIMARY KEY, name TEXT, u_value_w_m2k REAL, shgc REAL,
     visible_transmittance REAL, layers INTEGER, frame_fraction REAL,
     cost_inr_m2 REAL, locally_available INTEGER, colour TEXT, finish TEXT,
-    source TEXT, source_status TEXT);
+    source TEXT, source_status TEXT, cost_source TEXT, cost_source_status TEXT);
 CREATE TABLE phase_change_materials (
     id TEXT PRIMARY KEY, name TEXT, melt_temperature_c REAL, latent_heat_j_kg REAL,
     conductivity_w_mk REAL, density_kg_m3 REAL, specific_heat_j_kgk REAL,
@@ -301,19 +302,21 @@ def write_database(path: Path, materials: list[dict], pcm: list[dict],
             "INSERT INTO materials (id, name, conductivity_w_mk, density_kg_m3, "
             "specific_heat_j_kgk, roughness, cost_inr_m3, locally_available, "
             "transport_multiplier, mason_skill, colour, finish, conductivity_low, "
-            "conductivity_high, source, source_status, source_note) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "conductivity_high, source, source_status, source_note, "
+            "cost_source, cost_source_status) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (record["id"], record["name"], record["conductivity_w_mk"],
              record["density_kg_m3"], record["specific_heat_j_kgk"], "MediumRough",
              record["cost_inr_m3"], record["locally_available"],
              record["transport_multiplier"], record["mason_skill"], record["colour"],
              record["finish"], record["conductivity_low"], record["conductivity_high"],
-             record["source"], record["source_status"], record["source_note"]))
+             record["source"], record["source_status"], record["source_note"],
+             COST_NOTE, "pending"))
     for (identifier, name, u, shgc, vt, layers, cost, local, colour) in GLAZING:
         connection.execute(
-            "INSERT INTO glazing_systems VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO glazing_systems VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (identifier, name, u, shgc, vt, layers, 0.15, cost, int(local), colour,
-             "transparent", GLAZING_SOURCE, "pending"))
+             "transparent", GLAZING_SOURCE, "pending", COST_NOTE, "pending"))
     for record in pcm:
         connection.execute(
             "INSERT INTO phase_change_materials VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",

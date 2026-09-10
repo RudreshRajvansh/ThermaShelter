@@ -244,6 +244,14 @@ class Store:
                 (job_id, site_id, "running", _now(),
                  json.dumps(spec, separators=(",", ":"))))
 
+    def publish_optimisation_stage(self, job_id: str, result: dict[str, Any],
+                                   evaluated: int) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "UPDATE optimisations SET evaluated = ?, result_json = ? "
+                "WHERE job_id = ? AND status = 'running'",
+                (evaluated, json.dumps(result, separators=(",", ":")), job_id))
+
     def finish_optimisation(self, job_id: str, result: dict[str, Any] | None,
                             message: str | None = None,
                             evaluated: int = 0) -> None:

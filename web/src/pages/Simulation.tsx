@@ -123,6 +123,7 @@ export function Simulation({
               surfaces={surfaces}
               sunPath={sunPath.data}
               terrain={terrain.data}
+              airflow={simulation?.airflow}
               mode={store.displayMode}
               onModeChange={store.setDisplayMode}
               hourIndex={index}

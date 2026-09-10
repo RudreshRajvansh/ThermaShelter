@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import type { GeometryPayload, SunPath, SurfaceResults, TerrainMesh } from "../lib/api";
+import type {
+  AirflowSummary,
+  GeometryPayload,
+  SunPath,
+  SurfaceResults,
+  TerrainMesh,
+} from "../lib/api";
 import {
   COLD_TO_HOT,
   SOLAR_SCALE,
@@ -15,6 +21,7 @@ import {
   createSky,
   createSunDisc,
   createSunPathArc,
+  createAirflow,
   createLayout,
   createTerrain,
   disposeObject,
@@ -25,6 +32,14 @@ import {
 export type DisplayMode = "construction" | "surface_temperature" | "incident_solar";
 
 export type RampName = "diverging" | "spectral" | "solar";
+
+export type Shell = "solid" | "wireframe" | "xray";
+
+const SHELL_LABEL: Record<Shell, string> = {
+  solid: "Solid",
+  wireframe: "Wireframe",
+  xray: "X-ray",
+};
 
 const RAMP_LABEL: Record<RampName, string> = {
   diverging: "Cold to hot",
@@ -117,6 +132,7 @@ export function Scene3D({
   surfaces,
   sunPath,
   terrain,
+  airflow,
   mode,
   onModeChange,
   hourIndex,
@@ -126,6 +142,7 @@ export function Scene3D({
   surfaces: SurfaceResults | null;
   sunPath: SunPath | null | undefined;
   terrain: TerrainMesh | null | undefined;
+  airflow?: AirflowSummary | null;
   mode: DisplayMode;
   onModeChange: (mode: DisplayMode) => void;
   hourIndex: number;
@@ -151,6 +168,13 @@ export function Scene3D({
   const [playing, setPlaying] = useState(false);
   const [cut, setCut] = useState(false);
   const [showRooms, setShowRooms] = useState(true);
+  const [shell, setShell] = useState<Shell>("solid");
+  const [showAirflow, setShowAirflow] = useState(false);
+  const [airflowLegend, setAirflowLegend] = useState<
+    { label: string; detail: string }[]
+  >([]);
+  const airflowRef = useRef<THREE.Group | null>(null);
+  const edgesRef = useRef<THREE.Group | null>(null);
   const [ramp, setRamp] = useState<RampName>("diverging");
   const [rooms, setRooms] = useState<
     { name: string; colour: string; area: number }[]
@@ -318,6 +342,38 @@ export function Scene3D({
       setRooms([]);
     }
 
+    const edges = new THREE.Group();
+    for (const mesh of meshes.values()) {
+      const line = new THREE.LineSegments(
+        new THREE.EdgesGeometry(mesh.geometry, 25),
+        new THREE.LineBasicMaterial({ color: 0x1e293b, transparent: true,
+                                      opacity: 0.75 }),
+      );
+      line.position.copy(mesh.position);
+      line.rotation.copy(mesh.rotation);
+      edges.add(line);
+    }
+    edges.position.copy(group.position);
+    edges.visible = false;
+    edgesRef.current = edges;
+    scene.add(edges);
+
+    if (airflow && (airflow.zones.length > 0 || airflow.couplings.length > 0)) {
+      const built = createAirflow(
+        airflow,
+        geometry.layout,
+        { x: -centre.x, y: -centre.y },
+        Math.max(size.z, 2),
+      );
+      built.group.visible = false;
+      airflowRef.current = built.group;
+      setAirflowLegend(built.legend);
+      scene.add(built.group);
+    } else {
+      airflowRef.current = null;
+      setAirflowLegend([]);
+    }
+
     const sunGroup = new THREE.Group();
     sunGroupRef.current = sunGroup;
     scene.add(sunGroup);
@@ -473,7 +529,7 @@ export function Scene3D({
       raycastRef.current = null;
       sceneRef.current = null;
     };
-  }, [geometry, terrain, sunPath, areaBySurface]);
+  }, [geometry, terrain, sunPath, airflow, areaBySurface]);
 
   useEffect(() => {
     const kit = sunRef.current;
@@ -513,6 +569,32 @@ export function Scene3D({
   useEffect(() => {
     if (layoutRef.current) layoutRef.current.visible = showRooms;
   }, [showRooms, geometry]);
+
+  useEffect(() => {
+    if (airflowRef.current) airflowRef.current.visible = showAirflow;
+  }, [showAirflow, geometry, airflow]);
+
+  useEffect(() => {
+    const meshes = meshesRef.current;
+    if (edgesRef.current) edgesRef.current.visible = shell !== "solid";
+    meshes.forEach((mesh) => {
+      const material = mesh.material as THREE.MeshLambertMaterial;
+      if (shell === "wireframe") {
+        material.transparent = true;
+        material.opacity = 0.06;
+        material.depthWrite = false;
+      } else if (shell === "xray") {
+        material.transparent = true;
+        material.opacity = 0.3;
+        material.depthWrite = false;
+      } else {
+        material.transparent = false;
+        material.opacity = 1;
+        material.depthWrite = true;
+      }
+      material.needsUpdate = true;
+    });
+  }, [shell, geometry, mode]);
 
   useEffect(() => {
     const box = new THREE.Box3();
@@ -579,6 +661,31 @@ export function Scene3D({
         >
           Section
         </button>
+        <select
+          value={shell}
+          onChange={(event) => setShell(event.target.value as Shell)}
+          className="rounded-md border border-[var(--color-line)] bg-white px-2 py-1 text-xs text-[var(--color-ink-faint)]"
+          aria-label="Shell rendering"
+        >
+          {(Object.keys(SHELL_LABEL) as Shell[]).map((item) => (
+            <option key={item} value={item}>
+              {SHELL_LABEL[item]}
+            </option>
+          ))}
+        </select>
+        {airflow && (airflow.zones.length > 0 || airflow.couplings.length > 0) && (
+          <button
+            type="button"
+            onClick={() => setShowAirflow((value) => !value)}
+            className={`rounded-md border px-2.5 py-1 text-xs ${
+              showAirflow
+                ? "border-[var(--color-cold)] bg-[var(--color-cold)] text-white"
+                : "border-[var(--color-line)] bg-white text-[var(--color-ink-faint)]"
+            }`}
+          >
+            Air exchange
+          </button>
+        )}
         {geometry.layout && (
           <button
             type="button"
@@ -787,6 +894,21 @@ export function Scene3D({
             simulation as internal mass.
             {geometry.layout.notes.length > 1 ? ` ${geometry.layout.notes[0]}` : ""}
           </p>
+        </div>
+      )}
+
+      {showAirflow && airflow && (
+        <div className="space-y-1.5 rounded-md border border-[var(--color-line)] bg-[var(--color-night-2)]/60 p-3">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+            <span className="font-medium text-[var(--color-ink)]">Air exchange</span>
+            {airflowLegend.map((item) => (
+              <span key={item.label} className="text-[var(--color-ink-faint)]">
+                <span className="text-[var(--color-ink-dim)]">{item.label}</span>{" "}
+                {item.detail}
+              </span>
+            ))}
+          </div>
+          <p className="text-xs text-[var(--color-ink-faint)]">{airflow.note}</p>
         </div>
       )}
 

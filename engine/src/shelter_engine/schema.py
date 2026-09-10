@@ -158,6 +158,7 @@ class Material(Frozen):
                          "specialist"] = "semiskilled"
     appearance: MaterialAppearance
     source: SourceRef
+    cost_source: SourceRef | None = None
     conductivity_range: UncertainRange | None = None
     density_range: UncertainRange | None = None
 
@@ -211,6 +212,7 @@ class GlazingSystem(Frozen):
     locally_available: bool = True
     appearance: MaterialAppearance
     source: SourceRef
+    cost_source: SourceRef | None = None
 
 
 class ShutterSpec(Frozen):
@@ -1085,6 +1087,34 @@ class ReferenceComparison(Frozen):
     delta_cost_inr: float | None = None
 
 
+class ZoneAirflow(Frozen):
+    zone: str
+    volume_m3: float = Field(gt=0.0)
+    infiltration_ach_mean: float = Field(ge=0.0)
+    infiltration_ach_peak: float = Field(ge=0.0)
+    infiltration_m3_s_mean: float = Field(ge=0.0)
+
+
+class ZoneCoupling(Frozen):
+    from_zone: str
+    to_zone: str
+    volume_flow_m3_s_mean: float = Field(ge=0.0)
+    volume_flow_m3_s_peak: float = Field(ge=0.0)
+    mass_flow_kg_s_mean: float = Field(ge=0.0)
+
+
+class AirflowSummary(Frozen):
+    zones: tuple[ZoneAirflow, ...] = ()
+    couplings: tuple[ZoneCoupling, ...] = ()
+    source: SourceRef
+    note: str = (
+        "Bulk air exchange reported by EnergyPlus per zone and per coupled zone pair. "
+        "These are whole zone flow rates, not a velocity field: EnergyPlus does not "
+        "resolve air movement inside a room, so nothing here says how air moves across "
+        "a section. A velocity field requires the fluid dynamics run and is shown only "
+        "on the detailed analysis tab, for the one design it was solved for.")
+
+
 class SimulationResult(Frozen):
     design_hash: str
     design_fingerprint: str = ""
@@ -1100,6 +1130,7 @@ class SimulationResult(Frozen):
     cost: CostBreakdown
     buildability: BuildabilityMetrics
     hourly: tuple[HourlySeries, ...] = ()
+    airflow: AirflowSummary | None = None
     surfaces: SurfaceResults | None = None
     reference: ReferenceComparison | None = None
     uncertainty: tuple[UncertaintyBand, ...] = ()
@@ -1220,6 +1251,9 @@ class ParetoResult(Frozen):
     failed: int = 0
     objectives: tuple[str, ...] = ()
     runtime_s: float = 0.0
+    generation: int = 0
+    generations_planned: int = 0
+    complete: bool = True
     warnings: tuple[EngineWarning, ...] = ()
     knee_hash: str | None = None
 

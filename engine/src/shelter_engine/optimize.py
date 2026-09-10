@@ -279,9 +279,52 @@ def _extract_population(result) -> tuple[list[Any], np.ndarray, np.ndarray]:
     return solutions, objectives, violations
 
 
+class _StageReporter:
+    def __init__(self, spec: OptimisationSpec, site_id: str, records: dict,
+                 failures: list[str], started: float,
+                 emit: Callable[[ParetoResult], None]) -> None:
+        self.spec = spec
+        self.site_id = site_id
+        self.records = records
+        self.failures = failures
+        self.started = started
+        self.emit = emit
+        self.generation = 0
+
+    def __call__(self, algorithm: Any) -> None:
+        self.generation += 1
+        try:
+            front = _build_front(self.spec, algorithm, self.records)
+        except Exception:
+            return
+        if not front:
+            return
+        feasible = sum(1 for point in front if point.feasible)
+        result = ParetoResult(
+            spec_hash=stable_hash(self.spec),
+            site_id=self.site_id,
+            front=tuple(front),
+            evaluated=len(self.records) + len(self.failures),
+            feasible_evaluated=feasible,
+            failed=len(self.failures),
+            objectives=self.spec.objectives,
+            runtime_s=time.perf_counter() - self.started,
+            generation=self.generation,
+            generations_planned=self.spec.generations,
+            complete=False,
+            warnings=(),
+            knee_hash=_knee([point for point in front if point.feasible] or front,
+                            self.spec.objectives))
+        try:
+            self.emit(result)
+        except Exception:
+            return
+
+
 def optimise(spec: OptimisationSpec, evaluate: Evaluator, site_id: str = "",
              cache: Cache | None = None,
-             progress: Callable[[int, int], None] | None = None) -> ParetoResult:
+             progress: Callable[[int, int], None] | None = None,
+             on_stage: Callable[[ParetoResult], None] | None = None) -> ParetoResult:
     from pymoo.optimize import minimize
 
     validate_spec(spec)
@@ -291,9 +334,13 @@ def optimise(spec: OptimisationSpec, evaluate: Evaluator, site_id: str = "",
     algorithm = _algorithm(spec)
 
     started = time.perf_counter()
+    extra: dict[str, Any] = {}
+    if on_stage is not None:
+        extra["callback"] = _StageReporter(spec, site_id, records, failures,
+                                           started, on_stage)
     result = minimize(problem, algorithm, ("n_gen", spec.generations),
                       seed=spec.seed, verbose=False, save_history=False,
-                      return_least_infeasible=True)
+                      return_least_infeasible=True, **extra)
     runtime = time.perf_counter() - started
 
     warnings: list[EngineWarning] = []
@@ -305,6 +352,35 @@ def optimise(spec: OptimisationSpec, evaluate: Evaluator, site_id: str = "",
                      "evaluations failed and were treated as infeasible. First failure: "
                      f"{failures[0]}")))
 
+    front = _build_front(spec, result, records)
+
+    feasible = sum(1 for point in front if point.feasible)
+    if front and feasible == 0:
+        warnings.append(EngineWarning(
+            code="no_feasible_design", severity=Severity.SEVERE, origin="optimiser",
+            message=("No candidate satisfied every constraint. The designs returned are "
+                     "the least infeasible ones found and each carries its constraint "
+                     "violation. Widen a bound or relax the search space rather than "
+                     "reading these as recommendations.")))
+    return ParetoResult(
+        spec_hash=stable_hash(spec),
+        site_id=site_id,
+        front=tuple(front),
+        evaluated=len(records) + len(failures),
+        feasible_evaluated=feasible,
+        failed=len(failures),
+        objectives=spec.objectives,
+        runtime_s=runtime,
+        generation=spec.generations,
+        generations_planned=spec.generations,
+        complete=True,
+        warnings=tuple(warnings),
+        knee_hash=_knee([point for point in front if point.feasible] or front,
+                        spec.objectives))
+
+
+def _build_front(spec: OptimisationSpec, result: Any,
+                 records: dict) -> list[ParetoPoint]:
     front: list[ParetoPoint] = []
     solutions, objective_matrix, violations = _extract_population(result)
 
@@ -338,14 +414,6 @@ def optimise(spec: OptimisationSpec, evaluate: Evaluator, site_id: str = "",
                      if isinstance(value, (int, float))},
             flags=tuple(flags)))
 
-    feasible = sum(1 for point in front if point.feasible)
-    if front and feasible == 0:
-        warnings.append(EngineWarning(
-            code="no_feasible_design", severity=Severity.SEVERE, origin="optimiser",
-            message=("No candidate satisfied every constraint. The designs returned are "
-                     "the least infeasible ones found and each carries its constraint "
-                     "violation. Widen a bound or relax the search space rather than "
-                     "reading these as recommendations.")))
     seen_hashes: set[str] = set()
     unique_front: list[ParetoPoint] = []
     for point in front:
@@ -353,20 +421,7 @@ def optimise(spec: OptimisationSpec, evaluate: Evaluator, site_id: str = "",
             continue
         seen_hashes.add(point.design_hash)
         unique_front.append(point)
-    front = unique_front
-    feasible = sum(1 for point in front if point.feasible)
-    return ParetoResult(
-        spec_hash=stable_hash(spec),
-        site_id=site_id,
-        front=tuple(front),
-        evaluated=len(records) + len(failures),
-        feasible_evaluated=feasible,
-        failed=len(failures),
-        objectives=spec.objectives,
-        runtime_s=runtime,
-        warnings=tuple(warnings),
-        knee_hash=_knee([point for point in front if point.feasible] or front,
-                        spec.objectives))
+    return unique_front
 
 
 def cold_climate_variables(base: DesignSpec, mass_layer: int = 2,

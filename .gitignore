@@ -11,3 +11,9 @@ web/public/designs/
 data/runs.db
 api/**/__pycache__/
 api/*.egg-info/
+.claude/
+api/**/*.egg-info/
+engine/**/*.egg-info/
+.pytest_cache/
+build/layer0/
+**/__pycache__/

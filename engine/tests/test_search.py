@@ -349,3 +349,53 @@ def test_describe_band_names_the_dominant_input(library):
     text = describe_band(band)
     assert "to" in text
     assert "driven mainly by" in text
+
+
+def _staged_spec(population_size: int, generations: int) -> OptimisationSpec:
+    return OptimisationSpec(
+        base_design=fixtures.design(),
+        variables=(
+            DesignVariable(name="wall.layers.1.thickness_m", kind="real",
+                           low=0.05, high=0.30),
+            DesignVariable(name="windows.south.shutter.present", kind="binary"),
+        ),
+        population_size=population_size, generations=generations, seed=5,
+        objectives=("degree_hours_total_kh", "total_cost_inr"))
+
+
+def test_the_search_publishes_a_front_before_it_finishes(library):
+    spec = _staged_spec(8, 4)
+    stages: list = []
+    result = optimise(spec, lambda design: analytic_metrics(design, library),
+                      site_id="leh", on_stage=stages.append)
+
+    assert len(stages) >= 2
+    assert [item.generation for item in stages] == sorted(
+        item.generation for item in stages)
+    assert all(item.complete is False for item in stages)
+    assert all(item.front for item in stages)
+    assert stages[-1].evaluated <= result.evaluated
+    assert result.complete is True
+    assert result.generation == spec.generations
+
+
+def test_every_published_stage_names_a_best_design(library):
+    spec = _staged_spec(8, 3)
+    stages: list = []
+    optimise(spec, lambda design: analytic_metrics(design, library),
+             site_id="leh", on_stage=stages.append)
+
+    for stage in stages:
+        assert stage.knee_hash is not None
+        assert any(point.design_hash == stage.knee_hash for point in stage.front)
+
+
+def test_a_failing_stage_callback_cannot_kill_the_search(library):
+    def explode(_result):
+        raise RuntimeError("the consumer fell over")
+
+    spec = _staged_spec(8, 3)
+    result = optimise(spec, lambda design: analytic_metrics(design, library),
+                      site_id="leh", on_stage=explode)
+    assert result.front
+    assert result.complete is True

@@ -410,6 +410,22 @@ def test_self_check_reports_pending_provenance(engine):
     assert "reference_designs_uncited" in codes
 
 
+def test_a_price_without_its_own_source_is_called_out(engine):
+    codes = {item.code for item in engine.self_check()}
+    assert "capital_cost_unsourced" in codes
+
+
+def test_a_verified_thermal_source_does_not_vouch_for_the_price(library):
+    material = library.material("brick_solid")
+    priced = material.model_copy(update={
+        "source": material.source.model_copy(update={
+            "status": SourceStatus.VERIFIED}),
+        "cost_source": None,
+    })
+    assert priced.source.status is SourceStatus.VERIFIED
+    assert priced.cost_source is None
+
+
 def test_internal_partitions_reach_the_input_file(site, library):
     design = fixtures.design()
     built = build_constructions(design, library)
@@ -439,3 +455,43 @@ def test_a_larger_programme_damps_the_daily_swing(engine):
                   if value is not None]
         swings.append(max(values) - min(values))
     assert swings[1] < swings[0]
+
+
+def test_airflow_is_reported_per_zone_and_per_coupling(engine):
+    design = fixtures.design(arrangement=Arrangement.SUNSPACE)
+    result = engine.simulate(design, fixtures.winter_options(),
+                             with_uncertainty=False, with_reference=False)
+    airflow = result.airflow
+    assert airflow is not None
+    zones = {item.zone for item in airflow.zones}
+    assert "ROOM" in zones and "SUNSPACE" in zones
+    for item in airflow.zones:
+        assert item.volume_m3 > 0.0
+        assert item.infiltration_ach_peak >= item.infiltration_ach_mean
+    assert airflow.couplings
+    coupling = airflow.couplings[0]
+    assert coupling.to_zone == "ROOM"
+    assert coupling.volume_flow_m3_s_mean > 0.0
+
+
+def test_a_leakier_shelter_reports_a_higher_air_change_rate(engine):
+    tight = fixtures.design()
+    leaky = tight.model_copy(update={
+        "ventilation": tight.ventilation.model_copy(update={
+            "infiltration_ach": tight.ventilation.infiltration_ach * 2.0})})
+    options = fixtures.winter_options()
+    tight_flow = engine.simulate(tight, options, with_uncertainty=False,
+                                 with_reference=False).airflow
+    leaky_flow = engine.simulate(leaky, options, with_uncertainty=False,
+                                 with_reference=False).airflow
+    tight_ach = next(z.infiltration_ach_mean for z in tight_flow.zones
+                     if z.zone == "ROOM")
+    leaky_ach = next(z.infiltration_ach_mean for z in leaky_flow.zones
+                     if z.zone == "ROOM")
+    assert leaky_ach > tight_ach
+
+
+def test_airflow_states_it_is_not_a_velocity_field(engine):
+    result = engine.simulate(fixtures.design(), fixtures.winter_options(),
+                             with_uncertainty=False, with_reference=False)
+    assert "not a velocity field" in result.airflow.note

@@ -521,6 +521,25 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AirflowSummary */
+        AirflowSummary: {
+            /**
+             * Zones
+             * @default []
+             */
+            zones: components["schemas"]["ZoneAirflow"][];
+            /**
+             * Couplings
+             * @default []
+             */
+            couplings: components["schemas"]["ZoneCoupling"][];
+            source: components["schemas"]["SourceRef"];
+            /**
+             * Note
+             * @default Bulk air exchange reported by EnergyPlus per zone and per coupled zone pair. These are whole zone flow rates, not a velocity field: EnergyPlus does not resolve air movement inside a room, so nothing here says how air moves across a section. A velocity field requires the fluid dynamics run and is shown only on the detailed analysis tab, for the one design it was solved for.
+             */
+            note: string;
+        };
         /**
          * Arrangement
          * @enum {string}
@@ -1321,6 +1340,7 @@ export interface components {
             locally_available: boolean;
             appearance: components["schemas"]["MaterialAppearance"];
             source: components["schemas"]["SourceRef"];
+            cost_source?: components["schemas"]["SourceRef"] | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1491,6 +1511,7 @@ export interface components {
             mason_skill: "unskilled" | "semiskilled" | "skilled" | "specialist";
             appearance: components["schemas"]["MaterialAppearance"];
             source: components["schemas"]["SourceRef"];
+            cost_source?: components["schemas"]["SourceRef"] | null;
             conductivity_range?: components["schemas"]["UncertainRange"] | null;
             density_range?: components["schemas"]["UncertainRange"] | null;
         };
@@ -1797,6 +1818,21 @@ export interface components {
              * @default 0
              */
             runtime_s: number;
+            /**
+             * Generation
+             * @default 0
+             */
+            generation: number;
+            /**
+             * Generations Planned
+             * @default 0
+             */
+            generations_planned: number;
+            /**
+             * Complete
+             * @default true
+             */
+            complete: boolean;
             /**
              * Warnings
              * @default []
@@ -2120,6 +2156,7 @@ export interface components {
              * @default []
              */
             hourly: components["schemas"]["HourlySeries"][];
+            airflow?: components["schemas"]["AirflowSummary"] | null;
             surfaces?: components["schemas"]["SurfaceResults"] | null;
             reference?: components["schemas"]["ReferenceComparison"] | null;
             /**
@@ -2545,6 +2582,32 @@ export interface components {
              * @default 0.1
              */
             overhang_offset_m: number;
+        };
+        /** ZoneAirflow */
+        ZoneAirflow: {
+            /** Zone */
+            zone: string;
+            /** Volume M3 */
+            volume_m3: number;
+            /** Infiltration Ach Mean */
+            infiltration_ach_mean: number;
+            /** Infiltration Ach Peak */
+            infiltration_ach_peak: number;
+            /** Infiltration M3 S Mean */
+            infiltration_m3_s_mean: number;
+        };
+        /** ZoneCoupling */
+        ZoneCoupling: {
+            /** From Zone */
+            from_zone: string;
+            /** To Zone */
+            to_zone: string;
+            /** Volume Flow M3 S Mean */
+            volume_flow_m3_s_mean: number;
+            /** Volume Flow M3 S Peak */
+            volume_flow_m3_s_peak: number;
+            /** Mass Flow Kg S Mean */
+            mass_flow_kg_s_mean: number;
         };
     };
     responses: never;
