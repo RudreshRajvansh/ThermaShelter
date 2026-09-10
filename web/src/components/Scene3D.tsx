@@ -148,6 +148,7 @@ export function Scene3D({
   sunPath,
   terrain,
   airflow,
+  immersiveChrome = false,
   mode,
   onModeChange,
   hourIndex,
@@ -158,6 +159,7 @@ export function Scene3D({
   sunPath: SunPath | null | undefined;
   terrain: TerrainMesh | null | undefined;
   airflow?: AirflowSummary | null;
+  immersiveChrome?: boolean;
   mode: DisplayMode;
   onModeChange: (mode: DisplayMode) => void;
   hourIndex: number;
@@ -297,7 +299,7 @@ export function Scene3D({
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.localClippingEnabled = true;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.15;
+    renderer.toneMappingExposure = 0.92;
     mount.appendChild(renderer.domElement);
 
     const camera = new THREE.PerspectiveCamera(42, width / height, 0.5, 4000);
@@ -577,9 +579,9 @@ export function Scene3D({
       setSky: sky.setSun, fill,
     };
 
-    let theta = Math.PI * 0.82;
-    let phi = Math.PI * 0.33;
-    let distance = buildingRadius * 3.9;
+    let theta = Math.PI * 0.78;
+    let phi = Math.PI * 0.435;
+    let distance = buildingRadius * 2.5;
     let dragging = false;
     let engaged = false;
     let lastX = 0;
@@ -1081,10 +1083,18 @@ export function Scene3D({
       className={
         immersive
           ? "flex h-screen flex-col gap-2 bg-[var(--color-night)] p-3"
-          : "space-y-2"
+          : immersiveChrome
+            ? "relative"
+            : "space-y-2"
       }
     >
-      <div className="flex items-start justify-between gap-3">
+      <div
+        className={
+          immersiveChrome && !immersive
+            ? "absolute inset-x-3 top-3 z-10 flex items-start justify-between gap-3 rounded-xl border border-white/50 bg-white/75 p-2 shadow-lg backdrop-blur-md"
+            : "flex items-start justify-between gap-3"
+        }
+      >
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2">
         <div
           role="group"
@@ -1265,7 +1275,7 @@ export function Scene3D({
         </button>
       </div>
 
-      {!immersive && (
+      {!immersive && !immersiveChrome && (
         <p className="text-xs text-[var(--color-ink-faint)]">
           {engagedHint
             ? "drag to orbit, scroll to zoom, hover a face"
@@ -1276,8 +1286,12 @@ export function Scene3D({
       <div className={immersive ? "relative min-h-0 flex-1" : "relative"}>
         <div
           ref={mountRef}
-          className={`w-full overflow-hidden rounded-lg border border-[#1b2836] bg-[#070b11] shadow-[inset_0_0_60px_rgba(0,0,0,0.55)] ${
-            immersive ? "h-full" : "h-[clamp(420px,62vh,760px)]"
+          className={`w-full overflow-hidden rounded-xl border border-[#1b2836] bg-[#070b11] shadow-[inset_0_0_60px_rgba(0,0,0,0.55)] ${
+            immersive
+              ? "h-full"
+              : immersiveChrome
+                ? "h-[clamp(520px,78vh,900px)]"
+                : "h-[clamp(420px,62vh,760px)]"
           }`}
         />
 

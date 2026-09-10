@@ -93,7 +93,7 @@ export function createGround(radius: number): THREE.Mesh {
   const mesh = new THREE.Mesh(
     new THREE.CircleGeometry(radius, 96),
     new THREE.MeshStandardMaterial({
-      color: new THREE.Color("#a99c81"),
+      color: new THREE.Color("#8f8264"),
       roughness: 0.96,
       metalness: 0.0,
     }),
@@ -119,7 +119,7 @@ export function createTerrain(
   geometry.computeVertexNormals();
 
   const material = new THREE.MeshStandardMaterial({
-    color: new THREE.Color("#6b6250"),
+    color: new THREE.Color("#5d5641"),
     side: THREE.DoubleSide,
     flatShading: true,
     roughness: 0.98,

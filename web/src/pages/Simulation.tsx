@@ -87,6 +87,26 @@ export function Simulation({
       </Panel>
       )}
 
+      {viewportOnly ? (
+        !geometry ? (
+          <div className="flex h-[70vh] items-center justify-center rounded-xl border border-[var(--color-line)] bg-[var(--color-night-2)]">
+            <Loading label="building geometry…" />
+          </div>
+        ) : (
+          <Scene3D
+            immersiveChrome
+            geometry={geometry}
+            surfaces={surfaces}
+            sunPath={sunPath.data}
+            terrain={terrain.data}
+            airflow={simulation?.airflow}
+            mode={store.displayMode}
+            onModeChange={store.setDisplayMode}
+            hourIndex={index}
+            onHourChange={store.setHourIndex}
+          />
+        )
+      ) : (
       <Panel
         title="The geometry that was simulated"
         subtitle="Parametric, not a render. It rebuilds from your inputs, and the face names are the simulator's surface identifiers, so a painted value sits on the surface it belongs to."
@@ -187,6 +207,7 @@ export function Simulation({
           </div>
         )}
       </Panel>
+      )}
 
       {!viewportOnly && simulation && simulation.warnings.length > 0 && (
         <Panel
