@@ -34,6 +34,54 @@ def box_export(design_hash: str = DESIGN_HASH, label: str = "coldest_night",
         internal_convective_gain_w=400.0, infiltration_sensible_w=-900.0)
 
 
+ROOM_W_M = 6.0
+ROOM_D_M = 4.0
+ROOM_H_M = 2.6
+WINDOW = (2.0, 4.0, 0.9, 2.0)
+
+
+def closed_room_export(rotation_deg: float = 0.0, offset: tuple[float, float] = (10.0, -5.0),
+                       drop: str | None = None, bend: bool = False) -> CFDExport:
+    angle = np.radians(rotation_deg)
+    cos, sin = np.cos(angle), np.sin(angle)
+
+    def place(corners):
+        values = []
+        for x, y, z in corners:
+            values.extend((cos * x - sin * y + offset[0], sin * x + cos * y + offset[1], z))
+        return tuple(values)
+
+    w, d, h = ROOM_W_M, ROOM_D_M, ROOM_H_M
+    x0, x1, z0, z1 = WINDOW
+    rows = [
+        ("ROOM_FLOOR", SurfaceKind.FLOOR, [(0, 0, 0), (w, 0, 0), (w, d, 0), (0, d, 0)], 3.0),
+        ("ROOM_ROOF", SurfaceKind.ROOF, [(0, d, h), (w, d, h), (w, 0, h), (0, 0, h)], 2.0),
+        ("ROOM_WALL_SOUTH", SurfaceKind.WALL, [(0, 0, h), (0, 0, 0), (w, 0, 0), (w, 0, h)], 4.0),
+        ("ROOM_WALL_NORTH", SurfaceKind.WALL, [(w, d, h), (w, d, 0), (0, d, 0), (0, d, h)], 3.5),
+        ("ROOM_WALL_EAST", SurfaceKind.WALL, [(w, 0, h), (w, 0, 0), (w, d, 0), (w, d, h)], 3.6),
+        ("ROOM_WALL_WEST", SurfaceKind.WALL,
+         [(0, d, h), (0, d, 0), (0, 0, 0), (0.4 if bend else 0, 0, h)], 3.7),
+        ("ROOM_WALL_SOUTH_WIN", SurfaceKind.WINDOW,
+         [(x0, 0, z1), (x0, 0, z0), (x1, 0, z0), (x1, 0, z1)], -1.5),
+    ]
+    surfaces = []
+    for name, kind, corners, temperature in rows:
+        if name == drop:
+            continue
+        points = np.asarray(corners, dtype=float)
+        area = float(np.linalg.norm(np.cross(points[1] - points[0], points[3] - points[0])))
+        surfaces.append(CFDBoundarySurface(
+            name=name, kind=kind, positions=place(corners), indices=(0, 1, 2, 0, 2, 3),
+            area_m2=area, inside_face_temperature_c=temperature))
+    return CFDExport(
+        design_hash=DESIGN_HASH, zone="ROOM", label="coldest_night",
+        timestamp="2019-01-12T06:00:00", zone_air_temperature_c=4.0,
+        outdoor_air_temperature_c=-18.0, air_pressure_pa=67200.0,
+        zone_volume_m3=w * d * h, surfaces=tuple(surfaces),
+        internal_convective_gain_w=150.0, infiltration_sensible_w=-400.0,
+        mixing_sensible_w=0.0)
+
+
 def solver_record(converged: bool = True) -> CFDSolverRecord:
     return CFDSolverRecord(
         solver="ANSYS Fluent", version="2026 R1", turbulence_model="k-omega SST",

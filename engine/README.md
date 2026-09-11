@@ -311,6 +311,45 @@ change how many runs go in parallel.
 
 ---
 
+## ANSYS Fluent for the air inside the room
+
+EnergyPlus ranks designs and gives one air temperature per room. For the chosen design,
+`shelter_engine.ansys.run_fluent` solves the air inside the room at the exported hours:
+
+1. `build_room_mesh` meshes the room as a structured hex grid, 1 cm at every surface and
+   growing to 20 cm inside, with grid lines placed exactly on every window and wall segment
+   edge so each exported surface gets its own faces. Rooms that are not boxes are refused.
+2. The mesh is written as NASTRAN bulk data and imported with Fluent's
+   `file/import/nastran/bulkdata`. The CGNS route was dropped: Fluent 2026 R1's CGNS reader
+   crashed on half the imports of the same file.
+3. Every wall zone is matched to its exported surface by its own vertex bounds, and held at
+   the EnergyPlus inside face temperature. The internal convective gain, infiltration and
+   mixing heat flows for the hour go in as one uniform volumetric source.
+4. Steady pressure based solver, k-omega SST, full buoyancy with incompressible ideal gas at
+   the site pressure, body force weighted pressure. No radiation model, because the surface
+   temperatures are fixed and air is transparent.
+5. Scaled residuals plateau for air moved only by surface temperature differences, so
+   convergence is judged on the solution: across two consecutive windows of four 50
+   iteration chunks the volume average air temperature must drift less than 0.02 K and
+   stay inside a 0.1 K band, and the wall heat averaged over the last window must balance
+   the air heat source to 5 percent. That air never sits perfectly still, so the test is
+   for a stationary state rather than a frozen one. The basis is written into the field's
+   notes, and an unconverged field says so.
+
+Install the extra and run it from the repository root once Fluent is installed:
+
+```bash
+.venv/Scripts/python -m pip install -e ".[cfd]"
+.venv/Scripts/python ../scripts/run_cfd.py --design 993f0edc --label coldest_night
+```
+
+Fluent is found from `SHELTER_ANSYS_ROOT`, then `AWP_ROOT261` and friends, then the Windows
+machine environment. Fields land in `data/cfd/<fingerprint>_<hour>.field.json`; Fluent's
+case and data files stay under `build/cfd_runs`. `SHELTER_RUN_FLUENT=1` enables the one
+test that launches Fluent.
+
+---
+
 ## Still outstanding, and why it matters
 
 These are provenance gaps, not code gaps. The engine already warns about each one on every

@@ -265,7 +265,8 @@ def build_cfd_field(export: CFDExport, centres: Sequence[Sequence[float]] | np.n
                     temperature_c: Sequence[float] | np.ndarray,
                     solver: CFDSolverRecord,
                     speed_m_s: Sequence[float] | np.ndarray | None = None,
-                    dims: Sequence[int] = DEFAULT_FIELD_DIMS) -> CFDField:
+                    dims: Sequence[int] = DEFAULT_FIELD_DIMS,
+                    extra_notes: Sequence[str] = ()) -> CFDField:
     bounds_min, bounds_max = export_bounds(export)
     temperatures, speeds = sample_to_grid(centres, temperature_c, bounds_min,
                                           bounds_max, dims, speed_m_s)
@@ -282,6 +283,7 @@ def build_cfd_field(export: CFDExport, centres: Sequence[Sequence[float]] | np.n
         f"The surfaces were held at the inside face temperatures EnergyPlus reported for "
         f"{export.label.replace('_', ' ')} at {export.timestamp}.",
     ]
+    notes.extend(extra_notes)
     if not solver.converged:
         notes.insert(0, "The solver did not meet its convergence criteria. Treat this "
                         "field as unconverged and do not quote numbers from it.")

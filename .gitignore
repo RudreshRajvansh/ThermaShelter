@@ -16,4 +16,5 @@ api/**/*.egg-info/
 engine/**/*.egg-info/
 .pytest_cache/
 build/layer0/
+build/cfd_runs/
 **/__pycache__/

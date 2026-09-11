@@ -19,6 +19,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-cov>=5"]
 mesh = ["trimesh>=4"]
+cfd = ["gmsh>=4.13", "ansys-fluent-core>=0.42,<0.43"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

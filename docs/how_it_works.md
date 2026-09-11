@@ -61,7 +61,7 @@ It prints all of this. Nothing is silent.
 | `data/layer0_manifest.json` | provenance record | ingest |
 | `data/designs/*.json` | the stored design library | hand written, served by the API |
 | `data/runs.db` | simulation history and cached results | the API at runtime |
-| `data/cfd/` | `<fingerprint>_<hour>.boundary.json` inputs for ANSYS and `<fingerprint>_<hour>.field.json` solved fields | `precompute.py`, the ANSYS run |
+| `data/cfd/` | `<fingerprint>_<hour>.boundary.json` inputs for ANSYS and `<fingerprint>_<hour>.field.json` solved fields | `precompute.py`, `run_cfd.py` |
 | `data/validation/` | Layer 1 evidence | Mahi, when it exists |
 
 ### Step 4. One command brings the whole thing up
@@ -183,6 +183,7 @@ Two identities travel with every result and they are **not** the same thing:
 | `scripts/start.py` | one command to bring everything up |
 | `scripts/ingest_layer0.py` | the only writer of `data/` |
 | `scripts/precompute.py` | runs every stored design once so the first screen is not empty |
+| `scripts/run_cfd.py` | solves the air inside the room with ANSYS Fluent for every exported hour and stores the field |
 | `scripts/build_data.py` | the old synthetic generator, superseded by the ingest |
 
 ---
