@@ -408,8 +408,8 @@ Scale Spectral. Full screen icon.
 3D MODEL, construction mode, so material colours only, no thermal colours:
 - A single-storey flat-roofed rectangular barrack, 14 m × 6.4 m, 2.6 m high, with a
   glazed lean-to sunspace 1.8 m deep along the long south face.
-- Walls: warm brown rammed earth with a light lime-plaster finish, 540 mm thick, visible
-  at the window reveals. Flat roof with a low stone parapet and coping. Stone plinth
+- Walls: pale cement plaster outside over 100 mm insulation and 400 mm rammed earth,
+  540 mm thick, visible at the window reveals. Flat roof with a low stone parapet and coping. Stone plinth
   0.45 m high with three entry steps and a dark timber door.
 - Section cut through the building showing five rooms divided by thin partitions:
   two large sleeping bays, a kit store, an ablution room and an entry lobby. Rooms shown
