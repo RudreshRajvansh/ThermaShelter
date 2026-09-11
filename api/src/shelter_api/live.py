@@ -33,7 +33,7 @@ def _url(latitude: float, longitude: float) -> str:
             "temperature_2m", "relative_humidity_2m", "apparent_temperature",
             "wind_speed_10m", "surface_pressure", "cloud_cover",
         )),
-        "timezone": "Asia/Kolkata",
+        "timezone": "auto",
     })
     return f"{ENDPOINT}?{query}"
 

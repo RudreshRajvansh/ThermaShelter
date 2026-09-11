@@ -9,7 +9,7 @@ from shelter_engine.schema import (Assumption, CFDExport, CFDField, ClimateObjec
                                    DesignSpec, DesignVariable, EngineWarning,
                                    OptimisationConstraints, ParetoResult,
                                    OccupancySpec, PlanSpec, RunOptions,
-                                   RunPeriod, ShelterUse, SourceRef)
+                                   RunPeriod, ShelterUse, SiteSpec, SourceRef)
 
 DEFAULT_START = date(2019, 1, 1)
 DEFAULT_END = date(2019, 1, 31)
@@ -228,6 +228,53 @@ class CFDBoundarySet(Body):
     design_hash: str
     exports: list[CFDExport] = Field(min_length=1)
     rejected: list[str] = Field(default_factory=list)
+
+
+class PlaceResult(Body):
+    name: str
+    region: str = ""
+    country: str = ""
+    country_code: str | None = None
+    latitude_deg: float
+    longitude_deg: float
+    elevation_m: float | None = None
+
+
+class ResolveSiteRequest(Body):
+    latitude_deg: float = Field(ge=-90.0, le=90.0)
+    longitude_deg: float = Field(ge=-180.0, le=180.0)
+    name: str | None = Field(default=None, max_length=120)
+
+
+class SiteProvenance(Body):
+    elevation_source: str
+    horizon_source: str
+    horizon_directions: int
+    horizon_max_distance_km: float
+    weather_provider: str
+    weather_dataset: str
+    weather_year: int
+    grid_latitude_deg: float | None = None
+    grid_longitude_deg: float | None = None
+    grid_distance_km: float | None = None
+    time_zone: str | None = None
+    utc_offset_h: float
+    heating_degree_days: float
+    cooling_degree_days: float
+    annual_mean_c: float
+    coldest_month_mean_c: float
+    warmest_month_mean_c: float
+    place_name_source: str | None = None
+    country_code: str | None = None
+
+
+class SiteDetail(Body):
+    site: SiteSpec
+    summary: SiteSummary
+    provenance: SiteProvenance | None = None
+    notes: list[str] = Field(default_factory=list)
+    warnings: list[EngineWarning] = Field(default_factory=list)
+    created: bool = False
 
 
 class ValidationEvidence(Body):

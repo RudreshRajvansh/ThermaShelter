@@ -10,7 +10,8 @@ from shelter_engine import __version__ as engine_version
 from shelter_engine.config import energyplus_available, find_energyplus
 from shelter_engine.schema import (ClimateObjective, ComfortModel, DesignSpec,
                                    FixedComfortTarget, FuelModel, GlazingSystem,
-                                   Material, PhaseChangeMaterial, SourceStatus)
+                                   Material, PhaseChangeMaterial, SiteSpec,
+                                   SourceStatus)
 
 from ..deps import Context, get_context
 from ..live import fetch_live_weather
@@ -32,6 +33,17 @@ def _headline(objective: ClimateObjective) -> str:
     return "minimum_overnight_operative_c"
 
 
+def summarise_site(site: SiteSpec) -> SiteSummary:
+    return SiteSummary(
+        id=site.id, name=site.name, latitude_deg=site.latitude_deg,
+        longitude_deg=site.longitude_deg, elevation_m=site.elevation_m,
+        climate_objective=site.climate_objective,
+        headline_metric=_headline(site.climate_objective),
+        has_horizon=site.horizon is not None,
+        has_ground_temperatures=site.ground is not None,
+        weather_file=Path(site.epw_path).name)
+
+
 @router.get("/health", response_model=HealthResponse, tags=["meta"])
 def health(context: Context = Depends(get_context)) -> HealthResponse:
     blocking = [item for item in context.startup_warnings
@@ -50,16 +62,7 @@ def health(context: Context = Depends(get_context)) -> HealthResponse:
 @router.get("/meta", response_model=MetaResponse, tags=["meta"])
 def meta(context: Context = Depends(get_context)) -> MetaResponse:
     library = context.library
-    sites = [
-        SiteSummary(
-            id=site.id, name=site.name, latitude_deg=site.latitude_deg,
-            longitude_deg=site.longitude_deg, elevation_m=site.elevation_m,
-            climate_objective=site.climate_objective,
-            headline_metric=_headline(site.climate_objective),
-            has_horizon=site.horizon is not None,
-            has_ground_temperatures=site.ground is not None,
-            weather_file=Path(site.epw_path).name)
-        for site in context.sites.values()]
+    sites = [summarise_site(site) for site in context.sites.values()]
 
     gaps: list[str] = []
     if library is not None and library.unsourced():

@@ -17,5 +17,12 @@ engine/**/*.egg-info/
 .pytest_cache/
 build/layer0/
 build/cfd_runs/
+data/sites/n[0-9]*_*.json
+data/sites/s[0-9]*_*.json
+data/sites/provenance/
+data/weather/*_era5_*.epw
+data/terrain/n[0-9]*_*.obj
+data/terrain/s[0-9]*_*.obj
+data/terrain/tiles/
 pyfluent_watchdog.err
 **/__pycache__/

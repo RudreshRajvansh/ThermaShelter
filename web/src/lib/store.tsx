@@ -2,20 +2,25 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
-import type { DesignSpec, Window } from "./api";
+import type { DesignSpec, ParetoResult, Window } from "./api";
 
-export const STEPS = ["Design", "Evidence", "Report"] as const;
+export const OUTPUT_TABS = [
+  "recommendation",
+  "3d model",
+  "climate",
+  "construction",
+  "performance",
+  "compare",
+  "report",
+] as const;
 
-export const DESIGN_TABS = ["recommend", "model", "all inputs"] as const;
-export const EVIDENCE_TABS = ["climate", "construction", "results", "compare"] as const;
-
-export type DesignTab = (typeof DESIGN_TABS)[number];
-export type EvidenceTab = (typeof EVIDENCE_TABS)[number];
-export type Step = (typeof STEPS)[number];
+export type OutputTab = (typeof OUTPUT_TABS)[number];
+export type Page = "input" | "output";
 
 export const WINTER: Window = { start: "2019-01-10", end: "2019-01-16" };
 export const SUMMER: Window = { start: "2019-06-10", end: "2019-06-16" };
@@ -26,14 +31,34 @@ export type DisplayMode = "construction" | "surface_temperature" | "incident_sol
 
 export type Preview = { design: DesignSpec; label: string; hash: string };
 
+export type SearchBudget = { designs: number; size: number; label: string; minutes: number };
+
+export const BUDGETS: SearchBudget[] = [
+  { designs: 100, size: 20, label: "Quick look", minutes: 6 },
+  { designs: 300, size: 25, label: "Standard", minutes: 18 },
+  { designs: 500, size: 25, label: "Thorough", minutes: 31 },
+];
+
+export type SearchRequest = { token: number; budget: SearchBudget };
+
+export type SearchState = {
+  token: number | null;
+  jobId: string | null;
+  result: ParetoResult | null;
+  failure: string | null;
+};
+
+const IDLE_SEARCH: SearchState = { token: null, jobId: null, result: null, failure: null };
+
 type State = {
-  step: Step;
-  setStep: (step: Step) => void;
-  designTab: DesignTab;
-  setDesignTab: (tab: DesignTab) => void;
-  evidenceTab: EvidenceTab;
-  setEvidenceTab: (tab: EvidenceTab) => void;
-  go: (step: Step, tab?: DesignTab | EvidenceTab) => void;
+  page: Page;
+  setPage: (page: Page) => void;
+  outputTab: OutputTab;
+  open: (tab: OutputTab) => void;
+  searchRequest: SearchRequest | null;
+  requestSearch: (budget: SearchBudget) => void;
+  search: SearchState;
+  updateSearch: (patch: Partial<SearchState>) => void;
   siteId: string | null;
   setSiteId: (id: string) => void;
   designName: string;
@@ -61,26 +86,73 @@ type State = {
 
 const Context = createContext<State | null>(null);
 
+function readLocation(): { page: Page; tab: OutputTab } {
+  const parts = window.location.hash.replace(/^#\/?/, "").split("/");
+  if (parts[0] === "results") {
+    const tab = decodeURIComponent(parts[1] ?? "") as OutputTab;
+    return { page: "output", tab: OUTPUT_TABS.includes(tab) ? tab : "recommendation" };
+  }
+  return { page: "input", tab: "recommendation" };
+}
+
+function hashFor(page: Page, tab: OutputTab): string {
+  return page === "input" ? "#/input" : `#/results/${encodeURIComponent(tab)}`;
+}
+
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [step, setStep] = useState<Step>("Design");
+  const initial = readLocation();
+  const [page, setPageState] = useState<Page>(initial.page);
+  const [outputTab, setOutputTab] = useState<OutputTab>(initial.tab);
+  const [searchRequest, setSearchRequest] = useState<SearchRequest | null>(null);
+  const [search, setSearch] = useState<SearchState>(IDLE_SEARCH);
   const [siteId, setSiteId] = useState<string | null>(null);
   const [designName, setDesignName] = useState("single_room");
   const [design, setDesign] = useState<DesignSpec | null>(null);
   const [overrides, setOverrides] = useState<DesignSpec | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
-  const [designTab, setDesignTab] = useState<DesignTab>("recommend");
-  const [evidenceTab, setEvidenceTab] = useState<EvidenceTab>("climate");
   const [displayMode, setDisplayMode] = useState<DisplayMode>("construction");
   const [hourIndex, setHourIndex] = useState(0);
   const [cooling, setCooling] = useState(false);
   const [liveMode, setLiveMode] = useState(false);
   const [comfortModelId, setComfortModelId] = useState<string | null>(null);
 
-  const go = useCallback((next: Step, tab?: DesignTab | EvidenceTab) => {
-    setStep(next);
-    if (!tab) return;
-    if (next === "Design") setDesignTab(tab as DesignTab);
-    if (next === "Evidence") setEvidenceTab(tab as EvidenceTab);
+  useEffect(() => {
+    const target = hashFor(page, outputTab);
+    if (window.location.hash !== target) window.history.pushState(null, "", target);
+  }, [page, outputTab]);
+
+  useEffect(() => {
+    const follow = () => {
+      const next = readLocation();
+      setPageState(next.page);
+      setOutputTab(next.tab);
+    };
+    window.addEventListener("popstate", follow);
+    window.addEventListener("hashchange", follow);
+    return () => {
+      window.removeEventListener("popstate", follow);
+      window.removeEventListener("hashchange", follow);
+    };
+  }, []);
+
+  const setPage = useCallback((next: Page) => {
+    setPageState(next);
+    window.scrollTo({ top: 0 });
+  }, []);
+  const open = useCallback((tab: OutputTab) => {
+    setPageState("output");
+    setOutputTab(tab);
+    window.scrollTo({ top: 0 });
+  }, []);
+  const requestSearch = useCallback((budget: SearchBudget) => {
+    setSearchRequest({ token: Date.now(), budget });
+    setPreview(null);
+    setPageState("output");
+    setOutputTab("recommendation");
+    window.scrollTo({ top: 0 });
+  }, []);
+  const updateSearch = useCallback((patch: Partial<SearchState>) => {
+    setSearch((current) => ({ ...current, ...patch }));
   }, []);
   const applyOverride = useCallback((next: DesignSpec) => {
     setOverrides(next);
@@ -98,13 +170,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<State>(
     () => ({
-      step,
-      setStep,
-      designTab,
-      setDesignTab,
-      evidenceTab,
-      setEvidenceTab,
-      go,
+      page,
+      setPage,
+      outputTab,
+      open,
+      searchRequest,
+      requestSearch,
+      search,
+      updateSearch,
       siteId,
       setSiteId,
       designName,
@@ -130,10 +203,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setPreview,
     }),
     [
-      step,
-      designTab,
-      evidenceTab,
-      go,
+      page,
+      setPage,
+      outputTab,
+      open,
+      searchRequest,
+      requestSearch,
+      search,
+      updateSearch,
       siteId,
       designName,
       selectDesign,
@@ -161,4 +238,14 @@ export function useStore(): State {
 
 export function activeDesign(state: State): DesignSpec | null {
   return state.overrides ?? state.design;
+}
+
+export function describeDesign(design: DesignSpec): string {
+  const words = design.arrangement.replace(/_/g, " ");
+  const arrangement = words.charAt(0).toUpperCase() + words.slice(1);
+  const wall = design.wall.layers.reduce(
+    (total: number, layer: { thickness_m: number }) => total + layer.thickness_m,
+    0,
+  );
+  return `${arrangement}, ${Math.round(wall * 1000)} mm wall`;
 }

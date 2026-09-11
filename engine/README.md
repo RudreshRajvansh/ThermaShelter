@@ -311,6 +311,34 @@ change how many runs go in parallel.
 
 ---
 
+## Sites picked anywhere on the map
+
+Leh is the Layer 0 site with a station weather year. Any other point is built on demand by
+the API (`shelter_api.sites`), and the engine side of that lives in
+`shelter_engine.site_data`, which never touches the network:
+
+- **Elevation, horizon and terrain** come from AWS Terrain Tiles (Terrarium PNG, SRTM and
+  other open data). Zoom 12 tiles cover 6 km around the point and zoom 9 tiles reach
+  50 km. The 36 direction horizon takes 160 samples per direction with earth curvature
+  and standard refraction, and a 10 km terrain square is written as
+  `data/terrain/<site>.obj` for the 3D view. Tiles are cached under `data/terrain/tiles`.
+- **Weather** is one real year of ERA5 reanalysis from the Open-Meteo archive, downscaled
+  to the site elevation, interpolated onto local standard time hour ending stamps and
+  written as an EPW with ladybug. It is labelled as reanalysis, never as a typical year.
+- **Ground temperature** at 0.5 m follows from the monthly air means with the Kusuda and
+  Achenbach relation, and the climate objective from 18 °C degree days.
+- A failure part way removes every file written for that point, and a built site is
+  reused offline.
+
+Checked against real data at Leh: recomputing the horizon from the Layer 0 SRTM 1 arc second
+GeoTIFF agrees with the tile horizon to about 0.3° in almost every direction, and the
+Copernicus GLO-90 model agrees at the four directions sampled. The stored Layer 0 horizon
+table does not: it was computed at 34.16 N, 77.58 E rather than the site, several
+directions report blocking terrain 30 m away, and it differs by up to 6°. It has not been
+replaced, because every stored Leh result depends on it; that decision belongs to Layer 0.
+
+---
+
 ## ANSYS Fluent for the air inside the room
 
 EnergyPlus ranks designs and gives one air temperature per room. For the chosen design,

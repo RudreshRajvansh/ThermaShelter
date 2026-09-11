@@ -551,6 +551,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/places": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Places */
+        get: operations["places_api_places_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sites/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve Site */
+        post: operations["resolve_site_api_sites_resolve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sites/{site_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Site Detail */
+        get: operations["site_detail_api_sites__site_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1499,6 +1550,17 @@ export interface components {
             source: components["schemas"]["SourceRef"];
             cost_source?: components["schemas"]["SourceRef"] | null;
         };
+        /** GroundTemperatures */
+        GroundTemperatures: {
+            /** Monthly C */
+            monthly_c: number[];
+            /**
+             * Depth M
+             * @default 0.5
+             */
+            depth_m: number;
+            source: components["schemas"]["SourceRef"];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1572,6 +1634,14 @@ export interface components {
             thermal_bridge_kwh: number;
             /** @default derived */
             thermal_bridge_provenance: components["schemas"]["Provenance"];
+        };
+        /** HorizonProfile */
+        HorizonProfile: {
+            /** Azimuths Deg */
+            azimuths_deg: number[];
+            /** Blocked Altitude Deg */
+            blocked_altitude_deg: number[];
+            source: components["schemas"]["SourceRef"];
         };
         /** HourlySeries */
         HourlySeries: {
@@ -2086,6 +2156,29 @@ export interface components {
             appearance: components["schemas"]["MaterialAppearance"];
             source: components["schemas"]["SourceRef"];
         };
+        /** PlaceResult */
+        PlaceResult: {
+            /** Name */
+            name: string;
+            /**
+             * Region
+             * @default
+             */
+            region: string;
+            /**
+             * Country
+             * @default
+             */
+            country: string;
+            /** Country Code */
+            country_code?: string | null;
+            /** Latitude Deg */
+            latitude_deg: number;
+            /** Longitude Deg */
+            longitude_deg: number;
+            /** Elevation M */
+            elevation_m?: number | null;
+        };
         /** PlanSpec */
         PlanSpec: {
             /** @default barrack */
@@ -2176,6 +2269,15 @@ export interface components {
             rupees_saved_per_year?: number | null;
             /** Delta Cost Inr */
             delta_cost_inr?: number | null;
+        };
+        /** ResolveSiteRequest */
+        ResolveSiteRequest: {
+            /** Latitude Deg */
+            latitude_deg: number;
+            /** Longitude Deg */
+            longitude_deg: number;
+            /** Name */
+            name?: string | null;
         };
         /** RoomPayload */
         RoomPayload: {
@@ -2397,6 +2499,90 @@ export interface components {
              * @default false
              */
             cached: boolean;
+        };
+        /** SiteDetail */
+        SiteDetail: {
+            site: components["schemas"]["SiteSpec"];
+            summary: components["schemas"]["SiteSummary"];
+            provenance?: components["schemas"]["SiteProvenance"] | null;
+            /** Notes */
+            notes?: string[];
+            /** Warnings */
+            warnings?: components["schemas"]["EngineWarning"][];
+            /**
+             * Created
+             * @default false
+             */
+            created: boolean;
+        };
+        /** SiteProvenance */
+        SiteProvenance: {
+            /** Elevation Source */
+            elevation_source: string;
+            /** Horizon Source */
+            horizon_source: string;
+            /** Horizon Directions */
+            horizon_directions: number;
+            /** Horizon Max Distance Km */
+            horizon_max_distance_km: number;
+            /** Weather Provider */
+            weather_provider: string;
+            /** Weather Dataset */
+            weather_dataset: string;
+            /** Weather Year */
+            weather_year: number;
+            /** Grid Latitude Deg */
+            grid_latitude_deg?: number | null;
+            /** Grid Longitude Deg */
+            grid_longitude_deg?: number | null;
+            /** Grid Distance Km */
+            grid_distance_km?: number | null;
+            /** Time Zone */
+            time_zone?: string | null;
+            /** Utc Offset H */
+            utc_offset_h: number;
+            /** Heating Degree Days */
+            heating_degree_days: number;
+            /** Cooling Degree Days */
+            cooling_degree_days: number;
+            /** Annual Mean C */
+            annual_mean_c: number;
+            /** Coldest Month Mean C */
+            coldest_month_mean_c: number;
+            /** Warmest Month Mean C */
+            warmest_month_mean_c: number;
+            /** Place Name Source */
+            place_name_source?: string | null;
+            /** Country Code */
+            country_code?: string | null;
+        };
+        /** SiteSpec */
+        SiteSpec: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Latitude Deg */
+            latitude_deg: number;
+            /** Longitude Deg */
+            longitude_deg: number;
+            /** Elevation M */
+            elevation_m: number;
+            /** Time Zone H */
+            time_zone_h: number;
+            /** Epw Path */
+            epw_path: string;
+            /** @default heating_dominated */
+            climate_objective: components["schemas"]["ClimateObjective"];
+            /**
+             * Terrain
+             * @default Country
+             * @enum {string}
+             */
+            terrain: "Country" | "Suburbs" | "City" | "Ocean" | "Urban";
+            horizon?: components["schemas"]["HorizonProfile"] | null;
+            ground?: components["schemas"]["GroundTemperatures"] | null;
+            source?: components["schemas"]["SourceRef"] | null;
         };
         /** SiteSummary */
         SiteSummary: {
@@ -3779,6 +3965,102 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    places_api_places_get: {
+        parameters: {
+            query: {
+                query: string;
+                count?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaceResult"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolve_site_api_sites_resolve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveSiteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    site_detail_api_sites__site_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteDetail"];
                 };
             };
             /** @description Validation Error */

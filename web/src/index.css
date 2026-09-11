@@ -67,6 +67,15 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.leaflet-container {
+  font-family: var(--font-ui);
+  background: #dfe7ee;
+}
+
+.leaflet-container img {
+  max-width: none !important;
+}
+
 input[type="range"] {
   accent-color: var(--color-solar);
 }

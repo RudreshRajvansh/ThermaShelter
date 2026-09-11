@@ -226,7 +226,7 @@ export function Simulation({
       <div className="flex justify-end">
         <button
           type="button"
-          onClick={() => store.go("Evidence", "results")}
+          onClick={() => store.open("performance")}
           disabled={!simulation}
           className="rounded-md bg-[var(--color-solar)] px-4 py-2 text-sm font-medium text-[#0b1220] disabled:opacity-40"
         >

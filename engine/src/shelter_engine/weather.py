@@ -46,6 +46,7 @@ _MISSING = {
 }
 _CRITICAL = ("dry_bulb_c", "relative_humidity_pct", "pressure_pa",
              "direct_normal_wh_m2", "diffuse_horizontal_wh_m2")
+DERIVED_BY_ENERGYPLUS = ("horizontal_infrared_wh_m2",)
 
 PRESSURE_SOURCE = SourceRef(
     citation="ISO 2533 standard atmosphere barometric relation used to check the "
@@ -221,6 +222,15 @@ def _clean_missing(frame: pd.DataFrame, path: Path,
                                           limit_direction="both")
         remaining = int(interpolated.isna().sum())
         frame[column] = interpolated
+        if column in DERIVED_BY_ENERGYPLUS:
+            warnings.append(EngineWarning(
+                code="weather_infrared_derived", severity=Severity.INFO, origin="weather",
+                count=count,
+                message=(f"{path.name} leaves {column} missing in {count} hours "
+                         f"({fraction * 100:.2f} percent). EnergyPlus computes horizontal "
+                         "infrared from the sky cover, dry bulb and dew point in those "
+                         "hours, so the sky radiation is modelled rather than measured.")))
+            continue
         severity = Severity.SEVERE if (column in _CRITICAL
                                        and fraction > MISSING_FRACTION_SEVERE) \
             else Severity.WARNING

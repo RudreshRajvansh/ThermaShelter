@@ -28,6 +28,11 @@ export type MetaResponse = S["MetaResponse"];
 export type SiteSummary = S["SiteSummary"];
 export type Material = S["Material"];
 export type ValidationEvidence = S["ValidationEvidence"];
+export type GlazingSystem = S["GlazingSystem"];
+export type PlaceResult = S["PlaceResult"];
+export type SiteDetail = S["SiteDetail"];
+export type SiteProvenance = S["SiteProvenance"];
+export type SiteSpec = S["SiteSpec"];
 export type CFDExport = S["CFDExport"];
 export type CFDAbsent = S["CFDAbsent"];
 export type CFDField = S["CFDField"];
@@ -83,6 +88,15 @@ const post = <T,>(path: string, payload: unknown) =>
 export const api = {
   meta: () => get<MetaResponse>("/api/meta"),
   materials: () => get<Material[]>("/api/materials"),
+  glazing: () => get<GlazingSystem[]>("/api/glazing"),
+  places: (query: string) =>
+    get<PlaceResult[]>(`/api/places?query=${encodeURIComponent(query)}&count=8`),
+  resolveSite: (payload: {
+    latitude_deg: number;
+    longitude_deg: number;
+    name?: string | null;
+  }) => post<SiteDetail>("/api/sites/resolve", payload),
+  site: (siteId: string) => get<SiteDetail>(`/api/sites/${encodeURIComponent(siteId)}`),
   shelterUses: () => get<ShelterUseSummary[]>("/api/shelter-uses"),
   designs: () => get<DesignSummary[]>("/api/designs"),
   comfortModels: () => get<ComfortModel[]>("/api/comfort-models"),

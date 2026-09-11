@@ -12,6 +12,10 @@ dependencies = [
     "fastapi>=0.110,<1",
     "uvicorn[standard]>=0.27,<1",
     "pydantic>=2.6,<3",
+    "ladybug-core>=0.44,<0.45",
+    "timezonefinder>=6.5",
+    "tzdata>=2024.1",
+    "pillow>=10",
 ]
 
 [project.optional-dependencies]

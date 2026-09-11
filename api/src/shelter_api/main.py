@@ -13,7 +13,7 @@ from shelter_engine.errors import (ConfigurationError, EngineError, GeometryErro
 
 from .config import get_settings
 from .deps import get_context
-from .routers import catalog, design, search
+from .routers import catalog, design, search, sites
 
 DESCRIPTION = """
 HTTP surface over the passive shelter simulation engine.
@@ -74,6 +74,7 @@ def create_app() -> FastAPI:
     app.include_router(catalog.router, prefix="/api")
     app.include_router(design.router, prefix="/api")
     app.include_router(search.router, prefix="/api")
+    app.include_router(sites.router, prefix="/api")
 
     @app.exception_handler(SimulationTimeout)
     async def _timeout(request: Request, error: SimulationTimeout) -> JSONResponse:
