@@ -408,8 +408,8 @@ export function SiteInput({ meta }: { meta: MetaResponse | undefined }) {
       <div className="flex justify-end pt-2">
         <button
           type="button"
-          onClick={() => store.setStep("Climate Data")}
-          className="rounded-full bg-[var(--color-solar)] px-8 py-3 text-[15px] font-semibold text-white transition-all hover:brightness-110 active:scale-95 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--color-solar)] focus:outline-none shadow-md hover:shadow-lg flex items-center gap-2"
+          onClick={() => store.go("Evidence", "climate")}
+          className="rounded-md bg-[var(--color-solar)] px-4 py-2 text-sm font-medium text-[#0b1220]"
         >
           Use this site <span className="text-lg leading-none">→</span>
         </button>

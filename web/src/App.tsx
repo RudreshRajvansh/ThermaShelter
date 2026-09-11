@@ -2,8 +2,13 @@ import { useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { api, type DesignSpec } from "./lib/api";
-import { activeDesign, useStore } from "./lib/store";
-import { Warnings } from "./components/Kit";
+import {
+  DESIGN_TABS,
+  EVIDENCE_TABS,
+  activeDesign,
+  useStore,
+} from "./lib/store";
+import { Tabs, Warnings } from "./components/Kit";
 import { Navbar } from "./components/Navbar";
 import { SiteInput } from "./pages/SiteInput";
 import { ClimateData } from "./pages/ClimateData";
@@ -11,6 +16,7 @@ import { DesignParameters } from "./pages/DesignParameters";
 import { Simulation } from "./pages/Simulation";
 import { Results } from "./pages/Results";
 import { Compare } from "./pages/Compare";
+import { Recommend } from "./pages/Recommend";
 import { Reports } from "./pages/Reports";
 import { num } from "./lib/format";
 
@@ -50,7 +56,10 @@ export default function App() {
     setSiteId(meta.data.default_site_id ?? meta.data.sites[0].id);
   }, [meta.data, siteId, setSiteId]);
 
-  const site = meta.data?.sites.find((item) => item.id === siteId);
+  const site = useMemo(
+    () => meta.data?.sites.find((item) => item.id === siteId),
+    [meta.data, siteId],
+  );
   useEffect(() => {
     if (site) setCooling(site.climate_objective === "cooling_dominated");
   }, [site, setCooling]);
@@ -72,6 +81,14 @@ export default function App() {
     queryFn: () => api.geometry(design!, siteId),
     enabled: Boolean(design && siteId),
     staleTime: Infinity,
+  });
+
+  const previewGeometry = useQuery({
+    queryKey: ["geometry", store.preview?.design, siteId],
+    queryFn: () => api.geometry(store.preview!.design, siteId),
+    enabled: Boolean(store.preview && siteId),
+    staleTime: Infinity,
+    placeholderData: (previous) => previous,
   });
 
   const simulation = useQuery({
@@ -99,9 +116,18 @@ export default function App() {
     staleTime: Infinity,
   });
 
-  const candidateOptions = Object.keys(catalogue.data ?? {});
-  const referenceOptions = references.data?.map((item) => item.name) ?? [];
-  const designOptions = [...candidateOptions, ...referenceOptions];
+  const candidateOptions = useMemo(
+    () => Object.keys(catalogue.data ?? {}),
+    [catalogue.data],
+  );
+  const referenceOptions = useMemo(
+    () => references.data?.map((item) => item.name) ?? [],
+    [references.data],
+  );
+  const designOptions = useMemo(
+    () => [...candidateOptions, ...referenceOptions],
+    [candidateOptions, referenceOptions],
+  );
 
   const { designName, setDesignName } = store;
   useEffect(() => {
@@ -159,19 +185,29 @@ export default function App() {
           </motion.div>
         )}
 
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={store.step}
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -15 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="w-full"
-          >
-            {store.step === "Site Input" && <SiteInput meta={meta.data} />}
-            {store.step === "Climate Data" && <ClimateData />}
-            {store.step === "Design Parameters" && <DesignParameters />}
-            {store.step === "Simulation" && (
+        {store.step === "Design" && (
+          <div className="space-y-4">
+            <Tabs
+              tabs={DESIGN_TABS}
+              active={store.designTab}
+              onChange={store.setDesignTab}
+            />
+            {store.designTab === "recommend" && (
+              <div className="grid items-start gap-5 xl:grid-cols-[minmax(340px,400px)_1fr]">
+                <Recommend meta={meta.data} />
+                <div className="hidden xl:block">
+                  <Simulation
+                    viewportOnly
+                    preview={store.preview}
+                    geometry={store.preview ? previewGeometry.data : geometry.data}
+                    simulation={simulation.data}
+                    simulating={simulation.isPending}
+                    error={simulation.error ?? geometry.error}
+                  />
+                </div>
+              </div>
+            )}
+            {store.designTab === "model" && (
               <Simulation
                 geometry={geometry.data}
                 simulation={simulation.data}
@@ -179,19 +215,33 @@ export default function App() {
                 error={simulation.error ?? geometry.error}
               />
             )}
-            {store.step === "Results" && (
+            {store.designTab === "all inputs" && <SiteInput meta={meta.data} />}
+          </div>
+        )}
+
+        {store.step === "Evidence" && (
+          <div className="space-y-4">
+            <Tabs
+              tabs={EVIDENCE_TABS}
+              active={store.evidenceTab}
+              onChange={store.setEvidenceTab}
+            />
+            {store.evidenceTab === "climate" && <ClimateData />}
+            {store.evidenceTab === "construction" && <DesignParameters />}
+            {store.evidenceTab === "results" && (
               <Results
                 simulation={simulation.data}
                 simulating={simulation.isPending}
                 error={simulation.error}
               />
             )}
-            {store.step === "Compare Designs" && <Compare />}
-            {store.step === "Reports" && (
-              <Reports simulation={simulation.data} meta={meta.data} />
-            )}
-          </motion.div>
-        </AnimatePresence>
+            {store.evidenceTab === "compare" && <Compare />}
+          </div>
+        )}
+
+        {store.step === "Report" && (
+          <Reports simulation={simulation.data} meta={meta.data} />
+        )}
       </main>
     </div>
   );

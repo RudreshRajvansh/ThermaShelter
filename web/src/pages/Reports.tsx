@@ -75,20 +75,30 @@ export function Reports({
               {num(simulation.comfort.maximum_daytime_operative_c)} °C through the day.
             </>
           ) : (
-            <>
-              At {site?.name ?? store.siteId} the recommended design holds{" "}
-              {num(simulation.comfort.minimum_overnight_operative_c)} °C at its coldest
-              overnight against{" "}
-              {reference?.delta_minimum_overnight_k != null &&
-              simulation.comfort.minimum_overnight_operative_c != null
-                ? num(
-                    simulation.comfort.minimum_overnight_operative_c -
-                      reference.delta_minimum_overnight_k,
-                  )
-                : "—"}{" "}
-              °C for current construction, a difference of{" "}
-              {signed(reference?.delta_minimum_overnight_k)} K.
-            </>
+            simulation.design.name === reference?.reference_name ? (
+              <>
+                At {site?.name ?? store.siteId} current construction holds{" "}
+                {num(simulation.comfort.minimum_overnight_operative_c)} °C at its
+                coldest overnight. This report describes the baseline itself, so it
+                carries no improvement. Run a candidate design to report a difference
+                against it.
+              </>
+            ) : (
+              <>
+                At {site?.name ?? store.siteId} the recommended design holds{" "}
+                {num(simulation.comfort.minimum_overnight_operative_c)} °C at its coldest
+                overnight against{" "}
+                {reference?.delta_minimum_overnight_k != null &&
+                simulation.comfort.minimum_overnight_operative_c != null
+                  ? num(
+                      simulation.comfort.minimum_overnight_operative_c -
+                        reference.delta_minimum_overnight_k,
+                    )
+                  : "—"}{" "}
+                °C for current construction, a difference of{" "}
+                {signed(reference?.delta_minimum_overnight_k)} K.
+              </>
+            )
           )}{" "}
           {reference?.fuel_saved_units != null && reference.fuel_saved_units > 0 && (
             <>

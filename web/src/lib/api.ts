@@ -13,6 +13,7 @@ export type PartitionPayload = S["PartitionPayload"];
 export type ShelterUseSummary = S["ShelterUseSummary"];
 export type DesignSummary = S["DesignSummary"];
 export type ComfortModel = S["ComfortModel"];
+export type LiveWeather = S["LiveWeather"];
 export type SurfaceSeries = S["SurfaceSeries"];
 export type SurfaceResults = S["SurfaceResults"];
 export type AirflowSummary = S["AirflowSummary"];
@@ -39,6 +40,19 @@ export type ParetoResult = S["ParetoResult"];
 export type ParetoPoint = S["ParetoPoint"];
 export type OptimisationJob = S["OptimisationJob"];
 export type DesignVariable = S["DesignVariable"];
+export interface ThermalFieldPayload {
+  design_hash: string;
+  zone: string;
+  hour_index: number;
+  timestamp: string;
+  dims: [number, number, number];
+  bounds_min: [number, number, number];
+  bounds_max: [number, number, number];
+  values: number[];
+  min_c: number;
+  max_c: number;
+  surface_count: number;
+}
 
 export class ApiError extends Error {
   constructor(readonly status: number, message: string, readonly body?: unknown) {
@@ -83,6 +97,8 @@ export const api = {
   shelterUses: () => get<ShelterUseSummary[]>("/api/shelter-uses"),
   designs: () => get<DesignSummary[]>("/api/designs"),
   comfortModels: () => get<ComfortModel[]>("/api/comfort-models"),
+  liveWeather: (siteId: string | null) =>
+    get<LiveWeather>(`/api/live-weather${siteId ? `?site_id=${siteId}` : ""}`),
   design: (identifier: string) => get<DesignSpec>(`/api/designs/${identifier}`),
   references: () => get<DesignSpec[]>("/api/references"),
   reference: (name: string) => get<DesignSpec>(`/api/references/${name}`),
@@ -136,6 +152,15 @@ export const api = {
       `/api/terrain?inner_radius_m=${inner}&outer_radius_m=${outer}` +
         (siteId ? `&site_id=${siteId}` : ""),
     ),
+  thermalField: (payload: {
+    design: DesignSpec;
+    site_id?: string | null;
+    hour_index: number;
+    zone?: string;
+    resolution?: [number, number, number];
+    period: Window;
+    surface_period?: Window | null;
+  }) => post<ThermalFieldPayload>("/api/thermal-field", payload),
 };
 
 export function isCfdAbsent(value: CFDExport | CFDAbsent): value is CFDAbsent {

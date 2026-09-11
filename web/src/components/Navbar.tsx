@@ -1,4 +1,5 @@
-import { type MetaResponse } from "../lib/api";
+import { useQuery } from "@tanstack/react-query";
+import { api, type MetaResponse } from "../lib/api";
 import { STEPS, useStore, type Step } from "../lib/store";
 import { motion } from "framer-motion";
 import { Map, Wind, Settings2, Play, BarChart2, Split, FileText, Check } from "lucide-react";
@@ -62,6 +63,24 @@ function Stepper({ step, onChange }: { step: Step; onChange: (step: Step) => voi
 
 function ModeToggle() {
   const store = useStore();
+  const live = useQuery({
+    queryKey: ["live-weather", store.siteId],
+    queryFn: () => api.liveWeather(store.siteId),
+    enabled: store.liveMode && Boolean(store.siteId),
+    refetchInterval: 300000,
+    retry: false,
+  });
+
+  const observed = live.data?.observation?.air_temperature_c;
+  const reading =
+    live.data?.available && typeof observed === "number"
+      ? `${observed.toFixed(1)} °C now`
+      : live.data && !live.data.available
+        ? "unreachable"
+        : live.isFetching
+          ? "fetching…"
+          : null;
+
   return (
     <div className="flex items-center gap-1 rounded-xl border border-[var(--color-line)] bg-[var(--color-night-2)]/80 p-1 text-xs shadow-sm backdrop-blur-md">
       <button
@@ -79,11 +98,15 @@ function ModeToggle() {
       </button>
       <button
         type="button"
-        disabled
-        className="cursor-not-allowed flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[var(--color-ink-faint)] font-medium opacity-60"
-        title="Fetching a recent observed weather year from a network service is not wired into this build."
+        onClick={() => store.setLiveMode(true)}
+        title="Current conditions at the site, for context. The simulation always runs against the stored weather year, so results stay reproducible and work with the network unplugged."
+        className={`rounded-lg px-3 py-1.5 transition-colors ${
+          store.liveMode
+            ? "bg-[var(--color-cold)]/15 font-medium text-[var(--color-cold)] shadow-sm"
+            : "text-[var(--color-ink-faint)] hover:bg-white"
+        }`}
       >
-        ○ Live Weather
+        ○ Live conditions{reading ? ` · ${reading}` : ""}
       </button>
     </div>
   );
@@ -101,7 +124,8 @@ export function Navbar({
   referenceOptions: string[];
 }) {
   const store = useStore();
-  
+  const owned = store.step === "Design";
+
   return (
     <header className="sticky top-0 z-50 border-b border-[var(--color-line)] bg-white/70 backdrop-blur-xl transition-all">
       <div className="mx-auto flex max-w-[1360px] flex-wrap items-center gap-6 px-4 py-4 sm:px-8">
@@ -116,7 +140,8 @@ export function Navbar({
           </h1>
         </div>
 
-        <div className="no-print ml-auto flex flex-wrap items-center gap-3">
+        <div className="no-print ml-auto flex flex-wrap items-center gap-4">
+          {!owned && (
           <select
             value={siteId ?? ""}
             onChange={(event) => store.setSiteId(event.target.value)}
@@ -128,6 +153,8 @@ export function Navbar({
               </option>
             ))}
           </select>
+          )}
+          {!owned && (
           <select
             value={store.designName}
             onChange={(event) => store.setDesignName(event.target.value)}
@@ -148,6 +175,7 @@ export function Navbar({
               ))}
             </optgroup>
           </select>
+          )}
           <ModeToggle />
         </div>
       </div>

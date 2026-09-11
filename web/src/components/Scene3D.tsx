@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import type {
-  AirflowSummary,
-  GeometryPayload,
-  SunPath,
-  SurfaceResults,
-  TerrainMesh,
+import {
+  api,
+  type AirflowSummary,
+  type GeometryPayload,
+  type SunPath,
+  type SurfaceResults,
+  type TerrainMesh,
 } from "../lib/api";
+import { buildSolid } from "../lib/solid";
+import { buildArchitecture } from "../lib/architecture";
+import { createThermalVolume, probeTemperature, type ThermalFieldData } from "../lib/thermal_volume";
+import { activeDesign, useStore } from "../lib/store";
 import {
   COLD_TO_HOT,
   SOLAR_SCALE,
@@ -18,18 +23,26 @@ import {
 import {
   createCompass,
   createGround,
-  createSky,
   createSunDisc,
   createSunPathArc,
-  createAirflow,
   createLayout,
   createTerrain,
   disposeObject,
-  makeLabel,
   sunVector,
 } from "../lib/scene";
+import { createParticleAirflow } from "../lib/flow_paths";
+import {
+  createPipeline,
+  createSkyDome,
+  detailMaps,
+  detectQuality,
+  type Pipeline,
+  type Quality,
+} from "../lib/render_pipeline";
+import { createGizmos, computeNewDesign, type HandleType } from "../lib/manipulate";
+import type { DesignSpec } from "../lib/api";
 
-export type DisplayMode = "construction" | "surface_temperature" | "incident_solar";
+export type DisplayMode = "construction" | "surface_temperature" | "incident_solar" | "interior_temperature";
 
 export type RampName = "diverging" | "spectral" | "solar";
 
@@ -57,10 +70,11 @@ const MODE_LABEL: Record<DisplayMode, string> = {
   construction: "Construction",
   surface_temperature: "Surface temperature",
   incident_solar: "Incident solar",
+  interior_temperature: "Interior estimate",
 };
 
 const MODE_FIELD: Record<
-  Exclude<DisplayMode, "construction">,
+  Exclude<DisplayMode, "construction" | "interior_temperature">,
   "inside_face_temperature_c" | "incident_solar_w_m2"
 > = {
   surface_temperature: "inside_face_temperature_c",
@@ -71,9 +85,10 @@ const MODE_UNIT: Record<DisplayMode, string> = {
   construction: "",
   surface_temperature: "°C",
   incident_solar: "W/m²",
+  interior_temperature: "°C",
 };
 
-type Hover = { name: string; value: number | null; area: number; x: number; y: number };
+type Hover = { name: string; value: number | null; area: number; x: number; y: number; point?: THREE.Vector3 };
 
 function extentOf(
   surfaces: SurfaceResults | null,
@@ -100,8 +115,8 @@ function hourOf(stamp: string | undefined): number {
 }
 
 function interpolateSun(path: SunPath | null | undefined, hour: number) {
-  if (!path || path.positions.length === 0) return null;
-  const positions = path.positions;
+  const positions = path?.positions;
+  if (!positions || positions.length === 0) return null;
   for (let index = 0; index < positions.length - 1; index += 1) {
     const a = positions[index];
     const b = positions[index + 1];
@@ -133,6 +148,9 @@ export function Scene3D({
   sunPath,
   terrain,
   airflow,
+  immersiveChrome = false,
+  designOverride = null,
+  badge = null,
   mode,
   onModeChange,
   hourIndex,
@@ -143,12 +161,24 @@ export function Scene3D({
   sunPath: SunPath | null | undefined;
   terrain: TerrainMesh | null | undefined;
   airflow?: AirflowSummary | null;
+  immersiveChrome?: boolean;
+  designOverride?: DesignSpec | null;
+  badge?: string | null;
   mode: DisplayMode;
   onModeChange: (mode: DisplayMode) => void;
   hourIndex: number;
   onHourChange: (index: number) => void;
 }) {
+  const store = useStore();
+  const design = designOverride ?? activeDesign(store);
   const mountRef = useRef<HTMLDivElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
+  const cameraRef = useRef<{
+    theta: number;
+    phi: number;
+    distance: number;
+    radius: number;
+  } | null>(null);
   const meshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
   const sunRef = useRef<{
     light: THREE.DirectionalLight;
@@ -164,17 +194,33 @@ export function Scene3D({
   } | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const sunGroupRef = useRef<THREE.Group | null>(null);
+  const gizmoRef = useRef<ReturnType<typeof createGizmos> | null>(null);
+  const modeRef = useRef(mode);
+  useEffect(() => { modeRef.current = mode; }, [mode]);
 
   const [playing, setPlaying] = useState(false);
   const [cut, setCut] = useState(false);
   const [showRooms, setShowRooms] = useState(true);
   const [shell, setShell] = useState<Shell>("solid");
+  const [dressed, setDressed] = useState(true);
+  const [immersive, setImmersive] = useState(false);
+  const [idle, setIdle] = useState(false);
+  const [elements, setElements] = useState<string[]>([]);
+  const architectureRef = useRef<THREE.Group | null>(null);
   const [showAirflow, setShowAirflow] = useState(false);
   const [airflowLegend, setAirflowLegend] = useState<
     { label: string; detail: string }[]
   >([]);
-  const airflowRef = useRef<THREE.Group | null>(null);
+  const airflowRef = useRef<{
+    group: THREE.Group;
+    tick: (delta: number) => void;
+    dispose: () => void;
+  } | null>(null);
   const edgesRef = useRef<THREE.Group | null>(null);
+  const solidRef = useRef<{
+    group: THREE.Group;
+    parts: Map<string, THREE.Mesh[]>;
+  } | null>(null);
   const [ramp, setRamp] = useState<RampName>("diverging");
   const [rooms, setRooms] = useState<
     { name: string; colour: string; area: number }[]
@@ -183,13 +229,34 @@ export function Scene3D({
   const [hover, setHover] = useState<Hover | null>(null);
   const [engagedHint, setEngagedHint] = useState(false);
 
+  const thermalRef = useRef<{
+    mesh: THREE.Mesh;
+    update: (data: ThermalFieldData) => void;
+    dispose: () => void;
+    setOpacity: (v: number) => void;
+    setClipHeight: (h: number) => void;
+  } | null>(null);
+  const [thermalFieldData, setThermalFieldData] = useState<ThermalFieldData | null>(null);
+  const pipelineRef = useRef<Pipeline | null>(null);
+  const qualityRef = useRef<Quality>(detectQuality());
+  const [quality, setQualityState] = useState<Quality>(qualityRef.current);
+
+  const changeQuality = (next: Quality) => {
+    qualityRef.current = next;
+    setQualityState(next);
+    pipelineRef.current?.setQuality(next);
+  };
+  const [thermalOpacity, setThermalOpacity] = useState(0.6);
+  const [probeTemp, setProbeTemp] = useState<{ value: number; x: number; y: number } | null>(null);
+
+
   const hours = surfaces?.timestamps ?? [];
   const maxIndex = Math.max(0, hours.length - 1);
   const safeIndex = Math.min(hourIndex, maxIndex);
   const currentStamp = hours[safeIndex];
   const clockHour = hourOf(currentStamp);
 
-  const field = mode === "construction" ? null : MODE_FIELD[mode];
+  const field = (mode === "construction" || mode === "interior_temperature") ? null : MODE_FIELD[mode];
 
   const valuesBySurface = useMemo(() => {
     const map = new Map<string, (number | null)[]>();
@@ -213,6 +280,11 @@ export function Scene3D({
 
   const sun = useMemo(() => interpolateSun(sunPath, clockHour), [sunPath, clockHour]);
 
+  const volumeTotal = useMemo(
+    () => Object.values(geometry.zone_volumes_m3 ?? {}).reduce((a, b) => a + b, 0),
+    [geometry],
+  );
+
   useEffect(() => {
     if (!playing || maxIndex === 0) return;
     const timer = window.setInterval(() => {
@@ -235,15 +307,45 @@ export function Scene3D({
     renderer.setSize(width, height);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.localClippingEnabled = true;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.08;
+    renderer.toneMappingExposure = 0.92;
     mount.appendChild(renderer.domElement);
 
     const camera = new THREE.PerspectiveCamera(42, width / height, 0.5, 4000);
 
     const group = new THREE.Group();
     const meshes = new Map<string, THREE.Mesh>();
+
+    const makeOpaque = (surface: { colour: string; finish: string; opacity: number }) =>
+      new THREE.MeshStandardMaterial({
+        color: new THREE.Color(surface.colour),
+        roughness: surface.finish === "smooth" ? 0.42 : 0.92,
+        metalness: surface.finish === "smooth" ? 0.12 : 0.02,
+        envMapIntensity: 0.8,
+        clippingPlanes: [clipRef.current],
+        clipShadows: true,
+      });
+    const makeGlass = (surface: { colour: string }) =>
+      new THREE.MeshPhysicalMaterial({
+        color: new THREE.Color(surface.colour),
+        transparent: true,
+        opacity: 0.36,
+        roughness: 0.05,
+        metalness: 0,
+        transmission: 0.75,
+        thickness: 0.03,
+        ior: 1.52,
+        clearcoat: 1,
+        clearcoatRoughness: 0.03,
+        side: THREE.DoubleSide,
+        clippingPlanes: [clipRef.current],
+      });
+
+    const solid = buildSolid(geometry, design ?? null, makeOpaque, makeGlass);
+
+
     for (const surface of geometry.surfaces) {
       const buffer = new THREE.BufferGeometry();
       buffer.setAttribute(
@@ -252,20 +354,49 @@ export function Scene3D({
       );
       buffer.setIndex(Array.from(surface.indices));
       buffer.computeVertexNormals();
+      const detail = detailMaps(surface.finish);
+      const glazed = surface.finish === "transparent" || surface.opacity < 1;
       const transparent = surface.opacity < 1;
-      const material = new THREE.MeshLambertMaterial({
-        color: new THREE.Color(surface.colour),
-        side: THREE.DoubleSide,
-        transparent,
-        opacity: surface.opacity,
-        clippingPlanes: [clipRef.current],
-        clipShadows: true,
-      });
+      const material = glazed
+        ? new THREE.MeshPhysicalMaterial({
+            color: new THREE.Color(surface.colour),
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: Math.min(surface.opacity, 0.42),
+            roughness: 0.06,
+            metalness: 0,
+            transmission: 0.7,
+            thickness: 0.04,
+            ior: 1.52,
+            reflectivity: 0.5,
+            clearcoat: 1,
+            clearcoatRoughness: 0.04,
+            clippingPlanes: [clipRef.current],
+            clipShadows: true,
+          })
+        : new THREE.MeshStandardMaterial({
+            color: new THREE.Color(surface.colour),
+            side: THREE.DoubleSide,
+            transparent,
+            opacity: surface.opacity,
+            roughness: surface.finish === "smooth" ? 0.42 : 0.92,
+            metalness: surface.finish === "smooth" ? 0.12 : 0.02,
+            envMapIntensity: 0.9,
+            normalMap: detail.normal,
+            normalScale: new THREE.Vector2(
+              surface.finish === "rough" ? 0.9 : 0.35,
+              surface.finish === "rough" ? 0.9 : 0.35,
+            ),
+            roughnessMap: detail.rough,
+            clippingPlanes: [clipRef.current],
+            clipShadows: true,
+          });
       const mesh = new THREE.Mesh(buffer, material);
       mesh.name = surface.name;
       mesh.userData.baseColour = surface.colour;
       mesh.castShadow = !transparent;
       mesh.receiveShadow = true;
+      mesh.visible = solid === null;
       group.add(mesh);
       meshes.set(surface.name, mesh);
 
@@ -278,7 +409,19 @@ export function Scene3D({
           clippingPlanes: [clipRef.current],
         }),
       );
+      edges.visible = solid === null;
       group.add(edges);
+    }
+    if (solid) {
+      for (const [name, list] of solid.parts) {
+        for (const mesh of list) mesh.userData.baseColour = meshes.get(name)
+          ? (meshes.get(name)!.userData.baseColour as string)
+          : "#ffffff";
+      }
+      solidRef.current = solid;
+      group.add(solid.group);
+    } else {
+      solidRef.current = null;
     }
     meshesRef.current = meshes;
 
@@ -287,6 +430,21 @@ export function Scene3D({
     const size = box.getSize(new THREE.Vector3());
     group.position.set(-centre.x, -centre.y, 0);
     scene.add(group);
+    const architecture = buildArchitecture(
+      geometry,
+      design ?? null,
+      geometry.layout,
+    );
+    if (architecture) {
+      architecture.group.position.set(-centre.x, -centre.y, 0);
+      architecture.group.visible = dressed;
+      architectureRef.current = architecture.group;
+      setElements(architecture.elements);
+      scene.add(architecture.group);
+    } else {
+      architectureRef.current = null;
+      setElements([]);
+    }
 
     const buildingRadius = Math.max(size.length(), 6);
     const sceneRadius = buildingRadius * 11;
@@ -297,27 +455,10 @@ export function Scene3D({
     const measured = Boolean(
       terrain && terrain.positions.length > 0 && !terrain.derived_from_horizon,
     );
-    const sky = createSky(sceneRadius * 3.2);
+    const sky = createSkyDome(sceneRadius * 3.2);
     scene.add(sky.mesh);
     scene.add(createGround(measured ? buildingRadius * 1.9 : sceneRadius * 1.4));
     scene.add(createCompass(buildingRadius * 2.1));
-
-    for (const [text, azimuth] of [
-      ["N", 0],
-      ["E", 90],
-      ["S", 180],
-      ["W", 270],
-    ] as [string, number][]) {
-      const label = makeLabel(text, text === "N" ? "#c53030" : "#3d4753");
-      const angle = THREE.MathUtils.degToRad(azimuth);
-      label.position.set(
-        buildingRadius * 2.35 * Math.sin(angle),
-        buildingRadius * 2.35 * Math.cos(angle),
-        1.2,
-      );
-      label.scale.set(buildingRadius * 0.42, buildingRadius * 0.21, 1);
-      scene.add(label);
-    }
 
     if (terrain && terrain.positions.length > 0) {
       const mesh = createTerrain(
@@ -330,10 +471,13 @@ export function Scene3D({
     }
 
     if (geometry.layout) {
-      const built = createLayout(geometry.layout, {
-        x: -centre.x,
-        y: -centre.y,
-      });
+      const built = createLayout(
+        geometry.layout,
+        geometry.surfaces.find(
+          (item) => item.kind === "floor" && item.zone.toUpperCase() === "ROOM",
+        ) ?? geometry.surfaces.find((item) => item.kind === "floor"),
+      );
+      built.group.position.set(-centre.x, -centre.y, 0);
       layoutRef.current = built.group;
       setRooms(built.rooms);
       scene.add(built.group);
@@ -358,18 +502,21 @@ export function Scene3D({
     edgesRef.current = edges;
     scene.add(edges);
 
-    if (airflow && (airflow.zones.length > 0 || airflow.couplings.length > 0)) {
-      const built = createAirflow(
+    if (airflow && ((airflow.zones?.length ?? 0) > 0
+                    || (airflow.couplings?.length ?? 0) > 0)) {
+      if (airflowRef.current) airflowRef.current.dispose();
+      const built = createParticleAirflow(
         airflow,
         geometry.layout,
         { x: -centre.x, y: -centre.y },
         Math.max(size.z, 2),
       );
       built.group.visible = false;
-      airflowRef.current = built.group;
+      airflowRef.current = built;
       setAirflowLegend(built.legend);
       scene.add(built.group);
     } else {
+      if (airflowRef.current) airflowRef.current.dispose();
       airflowRef.current = null;
       setAirflowLegend([]);
     }
@@ -379,6 +526,19 @@ export function Scene3D({
     scene.add(sunGroup);
     if (sunPath) {
       sunGroup.add(createSunPathArc(Array.from(sunPath.positions), sceneRadius * 0.8));
+    }
+
+    if (design) {
+      const width = Math.sqrt(design.plan.floor_area_m2 * design.plan.aspect_ratio);
+      const depth = Math.sqrt(design.plan.floor_area_m2 / design.plan.aspect_ratio);
+      const height = design.plan.ceiling_height_m;
+      const gizmos = createGizmos(width, depth, height);
+      gizmos.group.position.set(-centre.x, -centre.y, 0);
+      gizmos.group.visible = modeRef.current === "construction";
+      gizmoRef.current = gizmos;
+      scene.add(gizmos.group);
+    } else {
+      gizmoRef.current = null;
     }
 
     const sunDisc = createSunDisc(buildingRadius * 0.2);
@@ -399,22 +559,54 @@ export function Scene3D({
     scene.add(light);
     scene.add(light.target);
 
-    const fill = new THREE.HemisphereLight(0xdfe9f5, 0x6b6350, 1.15);
+    const fill = new THREE.HemisphereLight(0xdfe9f5, 0x6b6350, 0.9);
     scene.add(fill);
+
+    const bounce = new THREE.DirectionalLight(0xcfe0f2, 0.35);
+    bounce.position.set(-1, -0.6, 0.5);
+    scene.add(bounce);
+
+    const environment = new THREE.PMREMGenerator(renderer);
+    environment.compileEquirectangularShader();
+    const envScene = new THREE.Scene();
+    const envSky = new THREE.Mesh(
+      new THREE.SphereGeometry(10, 24, 16),
+      new THREE.MeshBasicMaterial({
+        color: new THREE.Color("#b9cfe4"),
+        side: THREE.BackSide,
+      }),
+    );
+    envScene.add(envSky);
+    const envGround = new THREE.Mesh(
+      new THREE.CircleGeometry(10, 32),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color("#a9976f") }),
+    );
+    envGround.rotation.x = -Math.PI / 2;
+    envGround.position.y = -1.5;
+    envScene.add(envGround);
+    const envTarget = environment.fromScene(envScene, 0.04);
+    scene.environment = envTarget.texture;
+    envSky.geometry.dispose();
+    envGround.geometry.dispose();
+    environment.dispose();
     sunRef.current = {
       light, disc: sunDisc.group, setDisc: sunDisc.setState,
       setSky: sky.setSun, fill,
     };
 
-    let theta = Math.PI * 0.86;
-    let phi = Math.PI * 0.27;
-    let distance = buildingRadius * 3.0;
+    const remembered = cameraRef.current;
+    let theta = remembered ? remembered.theta : Math.PI * 0.78;
+    let phi = remembered ? remembered.phi : Math.PI * 0.435;
+    let distance = remembered
+      ? remembered.distance * (buildingRadius / remembered.radius)
+      : buildingRadius * 2.5;
     let dragging = false;
     let engaged = false;
     let lastX = 0;
     let lastY = 0;
 
     const place = () => {
+      cameraRef.current = { theta, phi, distance, radius: buildingRadius };
       camera.position.set(
         distance * Math.sin(phi) * Math.sin(theta),
         distance * Math.sin(phi) * Math.cos(theta),
@@ -426,11 +618,59 @@ export function Scene3D({
     place();
     raycastRef.current = { raycaster: new THREE.Raycaster(), camera };
 
+    let activeGizmo: {
+      handle: HandleType;
+      mesh: THREE.Mesh;
+      startPoint: THREE.Vector3;
+      startDesign: DesignSpec;
+      plane: THREE.Plane;
+    } | null = null;
+
     const pointer = new THREE.Vector2();
     const onMove = (event: PointerEvent) => {
       const rect = renderer.domElement.getBoundingClientRect();
       pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      if (activeGizmo && gizmoRef.current) {
+        const kit = raycastRef.current;
+        if (kit) {
+          kit.raycaster.setFromCamera(pointer, kit.camera);
+          const currentPoint = new THREE.Vector3();
+          kit.raycaster.ray.intersectPlane(activeGizmo.plane, currentPoint);
+          if (currentPoint) {
+            let delta = 0;
+            if (activeGizmo.handle === "east") delta = currentPoint.x - activeGizmo.startPoint.x;
+            else if (activeGizmo.handle === "west") delta = -(currentPoint.x - activeGizmo.startPoint.x);
+            else if (activeGizmo.handle === "north") delta = currentPoint.y - activeGizmo.startPoint.y;
+            else if (activeGizmo.handle === "south") delta = -(currentPoint.y - activeGizmo.startPoint.y);
+            else if (activeGizmo.handle === "top") delta = currentPoint.z - activeGizmo.startPoint.z;
+
+            const newDesign = computeNewDesign(activeGizmo.startDesign, activeGizmo.handle, delta);
+            const w = Math.sqrt(newDesign.plan.floor_area_m2 * newDesign.plan.aspect_ratio);
+            const d = Math.sqrt(newDesign.plan.floor_area_m2 / newDesign.plan.aspect_ratio);
+            const h = newDesign.plan.ceiling_height_m;
+            gizmoRef.current.updateGhost(w, d, h);
+          }
+        }
+        return;
+      }
+
+      if (modeRef.current === "construction" && gizmoRef.current && !dragging) {
+        const kit = raycastRef.current;
+        if (kit) {
+          kit.raycaster.setFromCamera(pointer, kit.camera);
+          const hits = kit.raycaster.intersectObjects(gizmoRef.current.handles, false);
+          gizmoRef.current.handles.forEach(h => {
+             (h.material as THREE.MeshBasicMaterial).color.setHex(0xffffff);
+          });
+          if (hits.length > 0) {
+            const mat = (hits[0].object as THREE.Mesh).material as THREE.MeshBasicMaterial;
+            mat.color.setHex(0xffa500);
+          }
+        }
+      }
+
       if (dragging) {
         theta -= (event.clientX - lastX) * 0.007;
         phi = THREE.MathUtils.clamp(phi - (event.clientY - lastY) * 0.007, 0.08, 1.52);
@@ -443,21 +683,60 @@ export function Scene3D({
       const kit = raycastRef.current;
       if (!kit) return;
       kit.raycaster.setFromCamera(pointer, kit.camera);
-      const hits = kit.raycaster.intersectObjects([...meshes.values()], false);
+      const pickable: THREE.Object3D[] = solid
+        ? [...solid.parts.values()].flat()
+        : [...meshes.values()];
+      const hits = kit.raycaster.intersectObjects(pickable, false);
       if (hits.length === 0) {
         setHover(null);
         return;
       }
-      const name = hits[0].object.name;
+      const hit = hits[0];
+      const name = hit.object.name;
       setHover({
         name,
         value: null,
         area: areaBySurface.get(name) ?? 0,
         x: event.clientX - rect.left,
         y: event.clientY - rect.top,
+        point: hit.point,
       });
     };
     const onDown = (event: PointerEvent) => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      if (modeRef.current === "construction" && gizmoRef.current && design) {
+        const kit = raycastRef.current;
+        if (kit) {
+          kit.raycaster.setFromCamera(pointer, kit.camera);
+          const hits = kit.raycaster.intersectObjects(gizmoRef.current.handles, false);
+          if (hits.length > 0) {
+            const hit = hits[0];
+            const mesh = hit.object as THREE.Mesh;
+            const type = mesh.userData.type as HandleType;
+            const normal = type === "top" ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1);
+            
+            activeGizmo = {
+              handle: type,
+              mesh,
+              startPoint: hit.point,
+              startDesign: design,
+              plane: new THREE.Plane().setFromNormalAndCoplanarPoint(normal, hit.point)
+            };
+            
+            gizmoRef.current.ghost.visible = true;
+            (mesh.material as THREE.MeshBasicMaterial).color.setHex(0xffa500);
+            dragging = true;
+            engaged = true;
+            setEngagedHint(true);
+            renderer.domElement.setPointerCapture(event.pointerId);
+            return;
+          }
+        }
+      }
+
       dragging = true;
       engaged = true;
       setEngagedHint(true);
@@ -471,6 +750,35 @@ export function Scene3D({
         renderer.domElement.releasePointerCapture(event.pointerId);
       } catch {
         /* pointer already released */
+      }
+
+      if (activeGizmo && gizmoRef.current) {
+        const kit = raycastRef.current;
+        if (kit) {
+          const rect = renderer.domElement.getBoundingClientRect();
+          pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+          pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+          kit.raycaster.setFromCamera(pointer, kit.camera);
+          
+          const currentPoint = new THREE.Vector3();
+          kit.raycaster.ray.intersectPlane(activeGizmo.plane, currentPoint);
+          if (currentPoint) {
+            let delta = 0;
+            if (activeGizmo.handle === "east") delta = currentPoint.x - activeGizmo.startPoint.x;
+            else if (activeGizmo.handle === "west") delta = -(currentPoint.x - activeGizmo.startPoint.x);
+            else if (activeGizmo.handle === "north") delta = currentPoint.y - activeGizmo.startPoint.y;
+            else if (activeGizmo.handle === "south") delta = -(currentPoint.y - activeGizmo.startPoint.y);
+            else if (activeGizmo.handle === "top") delta = currentPoint.z - activeGizmo.startPoint.z;
+
+            const newDesign = computeNewDesign(activeGizmo.startDesign, activeGizmo.handle, delta);
+            store.applyOverride(newDesign);
+          }
+        }
+        
+        (activeGizmo.mesh.material as THREE.MeshBasicMaterial).color.setHex(0xffffff);
+        gizmoRef.current.ghost.visible = false;
+        activeGizmo = null;
+        return;
       }
     };
     const onLeave = () => {
@@ -500,27 +808,47 @@ export function Scene3D({
       if (!w || !h) return;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
+      pipeline.resize(w, h);
     };
     const observer = new ResizeObserver(resize);
     observer.observe(mount);
 
+    const pipeline = createPipeline(renderer, scene, camera, width, height,
+                                    qualityRef.current);
+    pipelineRef.current = pipeline;
+
+    let lastTime = performance.now();
     let frame = 0;
     const animate = () => {
-      renderer.render(scene, camera);
+      const now = performance.now();
+      const delta = (now - lastTime) / 1000;
+      lastTime = now;
+
+      if (airflowRef.current && airflowRef.current.group.visible) {
+        airflowRef.current.tick(delta);
+      }
+
+      pipeline.render();
       frame = requestAnimationFrame(animate);
     };
     animate();
 
     return () => {
       cancelAnimationFrame(frame);
+      pipeline.dispose();
+      pipelineRef.current = null;
       observer.disconnect();
       renderer.domElement.removeEventListener("pointerdown", onDown);
       renderer.domElement.removeEventListener("pointermove", onMove);
       renderer.domElement.removeEventListener("pointerup", onUp);
       renderer.domElement.removeEventListener("pointerleave", onLeave);
       renderer.domElement.removeEventListener("wheel", onWheel);
+      if (gizmoRef.current) {
+        gizmoRef.current.dispose();
+        gizmoRef.current = null;
+      }
       disposeObject(scene);
+      renderer.forceContextLoss();
       renderer.dispose();
       if (renderer.domElement.parentNode === mount) {
         mount.removeChild(renderer.domElement);
@@ -529,7 +857,7 @@ export function Scene3D({
       raycastRef.current = null;
       sceneRef.current = null;
     };
-  }, [geometry, terrain, sunPath, airflow, areaBySurface]);
+  }, [geometry, design, terrain, sunPath, airflow, areaBySurface]);
 
   useEffect(() => {
     const kit = sunRef.current;
@@ -549,10 +877,10 @@ export function Scene3D({
   }, [sun, terrain]);
 
   useEffect(() => {
-    const meshes = meshesRef.current;
     const stops = rampStops(mode, ramp);
-    meshes.forEach((mesh, name) => {
-      const material = mesh.material as THREE.MeshLambertMaterial;
+    const paint = (mesh: THREE.Mesh, name: string) => {
+      const material = mesh.material as THREE.MeshStandardMaterial;
+      if (!material.color) return;
       if (mode === "construction" || !extent) {
         material.color.set(mesh.userData.baseColour as string);
         return;
@@ -562,8 +890,17 @@ export function Scene3D({
         material.color.set("#aeb5bd");
         return;
       }
-      material.color.set(lerpColour((value - extent.min) / (extent.max - extent.min), stops));
-    });
+      material.color.set(
+        lerpColour((value - extent.min) / (extent.max - extent.min), stops),
+      );
+    };
+    meshesRef.current.forEach((mesh, name) => paint(mesh, name));
+    const solid = solidRef.current;
+    if (solid) {
+      for (const [name, list] of solid.parts) {
+        for (const mesh of list) paint(mesh, name);
+      }
+    }
   }, [mode, ramp, safeIndex, valuesBySurface, extent, geometry]);
 
   useEffect(() => {
@@ -571,14 +908,24 @@ export function Scene3D({
   }, [showRooms, geometry]);
 
   useEffect(() => {
-    if (airflowRef.current) airflowRef.current.visible = showAirflow;
+    if (architectureRef.current) architectureRef.current.visible = dressed;
+  }, [dressed, geometry]);
+
+  useEffect(() => {
+    if (airflowRef.current) airflowRef.current.group.visible = showAirflow;
   }, [showAirflow, geometry, airflow]);
 
   useEffect(() => {
-    const meshes = meshesRef.current;
     if (edgesRef.current) edgesRef.current.visible = shell !== "solid";
-    meshes.forEach((mesh) => {
-      const material = mesh.material as THREE.MeshLambertMaterial;
+    const targets: THREE.Mesh[] = [];
+    const solid = solidRef.current;
+    if (solid) {
+      for (const list of solid.parts.values()) targets.push(...list);
+    } else {
+      meshesRef.current.forEach((mesh) => targets.push(mesh));
+    }
+    targets.forEach((mesh) => {
+      const material = mesh.material as THREE.MeshStandardMaterial;
       if (shell === "wireframe") {
         material.transparent = true;
         material.opacity = 0.06;
@@ -617,6 +964,100 @@ export function Scene3D({
   const painted = mode !== "construction";
   const unit = MODE_UNIT[mode];
 
+  // Fetch thermal field data
+  useEffect(() => {
+    if (mode !== "interior_temperature" || !design || !store.period) return;
+    
+    let cancelled = false;
+    
+    api.thermalField({
+      design,
+      site_id: store.siteId,
+      hour_index: safeIndex,
+      period: store.period,
+    }).then((res: any) => {
+      if (!cancelled) setThermalFieldData(res as ThermalFieldData);
+    }).catch(err => {
+      console.warn("Failed to fetch thermal field:", err);
+      if (!cancelled) setThermalFieldData(null);
+    });
+    
+    return () => { cancelled = true; };
+  }, [mode, design, store.siteId, store.period, safeIndex]);
+
+  // Create or update the thermal volume mesh
+  useEffect(() => {
+    if (mode !== "interior_temperature" || !thermalFieldData || !sceneRef.current) {
+      if (thermalRef.current) {
+        if (sceneRef.current) sceneRef.current.remove(thermalRef.current.mesh);
+        thermalRef.current.dispose();
+        thermalRef.current = null;
+      }
+      return;
+    }
+    
+    const stops = rampStops(mode, ramp);
+    if (!thermalRef.current) {
+      const volume = createThermalVolume(thermalFieldData, stops);
+      volume.setOpacity(thermalOpacity);
+      sceneRef.current.add(volume.mesh);
+      thermalRef.current = volume;
+    } else {
+      thermalRef.current.update(thermalFieldData);
+      thermalRef.current.setOpacity(thermalOpacity);
+    }
+    
+    // Handle clip height
+    if (thermalRef.current) {
+      let maxZ = 9999;
+      if (cut) {
+        const box = new THREE.Box3();
+        geometry.surfaces.forEach((surface) => {
+          for (let index = 0; index < surface.positions.length; index += 3) {
+            box.expandByPoint(
+              new THREE.Vector3(
+                surface.positions[index],
+                surface.positions[index + 1],
+                surface.positions[index + 2],
+              ),
+            );
+          }
+        });
+        const centre = box.getCenter(new THREE.Vector3());
+        maxZ = centre.z;
+      }
+      thermalRef.current.setClipHeight(maxZ);
+    }
+  }, [mode, thermalFieldData, ramp, thermalOpacity, cut, geometry]);
+
+  useEffect(() => {
+    if (gizmoRef.current) {
+      gizmoRef.current.group.visible = mode === "construction";
+    }
+  }, [mode]);
+
+  // Visibility management / shell adjustment
+  useEffect(() => {
+    if (mode === "interior_temperature") {
+      setShell("xray");
+    } else if (shell === "xray") {
+      setShell("solid");
+    }
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode !== "interior_temperature" || !hover?.point || !thermalFieldData) {
+      setProbeTemp(null);
+      return;
+    }
+    const temp = probeTemperature(thermalFieldData, hover.point);
+    if (temp !== null) {
+      setProbeTemp({ value: temp, x: hover.x, y: hover.y });
+    } else {
+      setProbeTemp(null);
+    }
+  }, [hover, mode, thermalFieldData]);
+
   const jumpToNoon = useCallback(() => {
     if (!sunPath || hours.length === 0) return;
     let best = 0;
@@ -631,25 +1072,116 @@ export function Scene3D({
     onHourChange(best);
   }, [sunPath, hours, onHourChange]);
 
+  const toggleImmersive = useCallback(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => undefined);
+    } else {
+      void shell.requestFullscreen().catch(() => undefined);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!immersive) {
+      setIdle(false);
+      return;
+    }
+    let timer = window.setTimeout(() => setIdle(true), 2600);
+    const wake = () => {
+      setIdle(false);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setIdle(true), 2600);
+    };
+    window.addEventListener("pointermove", wake);
+    window.addEventListener("pointerdown", wake);
+    window.addEventListener("wheel", wake, { passive: true });
+    window.addEventListener("keydown", wake);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("pointermove", wake);
+      window.removeEventListener("pointerdown", wake);
+      window.removeEventListener("wheel", wake);
+      window.removeEventListener("keydown", wake);
+    };
+  }, [immersive]);
+
+  useEffect(() => {
+    const onChange = () => setImmersive(Boolean(document.fullscreenElement));
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName)) return;
+      if (event.key === "f" || event.key === "F") toggleImmersive();
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [toggleImmersive]);
+
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
-        {(Object.keys(MODE_LABEL) as DisplayMode[]).map((item) => (
-          <button
-            key={item}
-            type="button"
-            onClick={() => onModeChange(item)}
-            disabled={item !== "construction" && !surfaces}
-            className={`rounded-md border px-2.5 py-1 text-xs transition ${
-              mode === item
-                ? "border-[var(--color-ink)] bg-[var(--color-ink)] text-white"
-                : "border-[var(--color-line)] bg-white text-[var(--color-ink-faint)] hover:border-[var(--color-ink-faint)] disabled:opacity-40"
-            }`}
-          >
-            {MODE_LABEL[item]}
-          </button>
-        ))}
-        <span className="mx-1 h-4 w-px bg-[var(--color-line)]" />
+    <div
+      ref={shellRef}
+      className={
+        immersive
+          ? "flex h-screen flex-col bg-black"
+          : immersiveChrome
+            ? "relative"
+            : "space-y-2"
+      }
+    >
+      <div
+        className={
+          immersive
+            ? `absolute inset-x-4 top-4 z-20 flex items-start justify-between gap-3 rounded-xl border border-white/40 bg-white/80 p-2 shadow-2xl backdrop-blur-md transition-opacity duration-300 ${
+                idle ? "pointer-events-none opacity-0" : "opacity-100"
+              }`
+            : immersiveChrome
+              ? "absolute inset-x-3 top-3 z-10 flex items-start justify-between gap-3 rounded-xl border border-white/50 bg-white/75 p-2 shadow-lg backdrop-blur-md"
+              : "flex items-start justify-between gap-3"
+        }
+      >
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2">
+        <div
+          role="group"
+          aria-label="What is painted on the surfaces"
+          className="flex items-center rounded-lg border border-[var(--color-line)] bg-white p-0.5"
+        >
+          {(Object.keys(MODE_LABEL) as DisplayMode[])
+            .filter((item) => item !== "interior_temperature")
+            .map((item) => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => onModeChange(item)}
+                disabled={item !== "construction" && !surfaces}
+                aria-pressed={mode === item}
+                className={`rounded-md px-2.5 py-1 text-xs transition-colors ${
+                  mode === item
+                    ? "bg-[var(--color-ink)] font-medium text-white"
+                    : "text-[var(--color-ink-faint)] hover:text-[var(--color-ink)] disabled:opacity-40"
+                }`}
+              >
+                {MODE_LABEL[item]}
+              </button>
+            ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => onModeChange("interior_temperature")}
+          disabled={!surfaces}
+          aria-pressed={mode === "interior_temperature"}
+          title="Interpolated between the surface temperatures EnergyPlus reported. Not a solved field."
+          className={`rounded-md border border-dashed px-2.5 py-1 text-xs transition-colors ${
+            mode === "interior_temperature"
+              ? "border-[var(--color-earth)] bg-[var(--color-earth)]/12 font-medium text-[var(--color-earth)]"
+              : "border-[var(--color-line)] bg-white text-[var(--color-ink-faint)] hover:text-[var(--color-ink)] disabled:opacity-40"
+          }`}
+        >
+          {MODE_LABEL.interior_temperature}
+        </button>
         <button
           type="button"
           onClick={() => setCut((value) => !value)}
@@ -661,19 +1193,29 @@ export function Scene3D({
         >
           Section
         </button>
-        <select
-          value={shell}
-          onChange={(event) => setShell(event.target.value as Shell)}
-          className="rounded-md border border-[var(--color-line)] bg-white px-2 py-1 text-xs text-[var(--color-ink-faint)]"
-          aria-label="Shell rendering"
+        <div
+          role="group"
+          aria-label="How the shell is drawn"
+          className="flex items-center rounded-lg border border-[var(--color-line)] bg-white p-0.5"
         >
           {(Object.keys(SHELL_LABEL) as Shell[]).map((item) => (
-            <option key={item} value={item}>
+            <button
+              key={item}
+              type="button"
+              onClick={() => setShell(item)}
+              aria-pressed={shell === item}
+              className={`rounded-md px-2.5 py-1 text-xs transition-colors ${
+                shell === item
+                  ? "bg-[var(--color-ink)] font-medium text-white"
+                  : "text-[var(--color-ink-faint)] hover:text-[var(--color-ink)]"
+              }`}
+            >
               {SHELL_LABEL[item]}
-            </option>
+            </button>
           ))}
-        </select>
-        {airflow && (airflow.zones.length > 0 || airflow.couplings.length > 0) && (
+        </div>
+        {airflow && ((airflow.zones?.length ?? 0) > 0
+                     || (airflow.couplings?.length ?? 0) > 0) && (
           <button
             type="button"
             onClick={() => setShowAirflow((value) => !value)}
@@ -686,6 +1228,18 @@ export function Scene3D({
             Air exchange
           </button>
         )}
+        <button
+          type="button"
+          onClick={() => setDressed((value) => !value)}
+          className={`rounded-md border px-2.5 py-1 text-xs ${
+            dressed
+              ? "border-[var(--color-ink)] bg-[var(--color-ink)] text-white"
+              : "border-[var(--color-line)] bg-white text-[var(--color-ink-faint)]"
+          }`}
+          title="Plinth, parapet, door and steps. Construction detail drawn from the design; it carries no result and is never painted with one."
+        >
+          Built detail
+        </button>
         {geometry.layout && (
           <button
             type="button"
@@ -699,6 +1253,17 @@ export function Scene3D({
             Rooms
           </button>
         )}
+        <select
+          value={quality}
+          onChange={(event) => changeQuality(event.target.value as Quality)}
+          className="rounded-md border border-[var(--color-line)] bg-white px-2 py-1 text-xs text-[var(--color-ink-faint)]"
+          aria-label="Render quality"
+          title="Ambient occlusion, bloom and antialiasing cost frame rate. Drop this if the view stutters."
+        >
+          <option value="high">High render</option>
+          <option value="balanced">Balanced</option>
+          <option value="plain">Plain</option>
+        </select>
         {mode !== "construction" && (
           <select
             value={ramp}
@@ -712,6 +1277,18 @@ export function Scene3D({
               </option>
             ))}
           </select>
+        )}
+        {!immersive && mode === "interior_temperature" && (
+          <input
+            type="range"
+            min={0.1}
+            max={1.0}
+            step={0.05}
+            value={thermalOpacity}
+            onChange={(e) => setThermalOpacity(Number(e.target.value))}
+            className="w-24 accent-[var(--color-ink)]"
+            title="Volume Opacity"
+          />
         )}
         {hours.length > 0 && (
           <>
@@ -735,18 +1312,80 @@ export function Scene3D({
             </button>
           </>
         )}
-        <span className="ml-auto text-xs text-[var(--color-ink-faint)]">
+        </div>
+
+        <button
+          type="button"
+          onClick={toggleImmersive}
+          className="shrink-0 rounded-md border border-[var(--color-line)] bg-white px-2.5 py-1 text-xs whitespace-nowrap text-[var(--color-ink-faint)] transition-colors hover:border-[var(--color-ink-faint)] hover:text-[var(--color-ink)]"
+          title="Fill the screen. Press F to toggle."
+        >
+          {immersive ? "Exit full screen" : "Full screen"}
+        </button>
+      </div>
+
+      {!immersive && !immersiveChrome && (
+        <p className="text-xs text-[var(--color-ink-faint)]">
           {engagedHint
             ? "drag to orbit, scroll to zoom, hover a face"
             : "click the view to take control, then drag and scroll"}
-        </span>
-      </div>
+        </p>
+      )}
 
-      <div className="relative">
+      <div className={immersive ? "relative min-h-0 flex-1" : "relative"}>
         <div
           ref={mountRef}
-          className="h-[440px] w-full overflow-hidden rounded-lg border border-[var(--color-line)]"
+          className={`w-full overflow-hidden bg-[#070b11] ${
+            immersive
+              ? "h-full"
+              : "rounded-xl border border-[#1b2836] shadow-[inset_0_0_60px_rgba(0,0,0,0.55)]"
+          } ${
+            immersive
+              ? ""
+              : immersiveChrome
+                ? "h-[clamp(520px,78vh,900px)]"
+                : "h-[clamp(420px,62vh,760px)]"
+          }`}
         />
+
+        {badge && (
+          <div
+            key={badge}
+            role="status"
+            aria-live="polite"
+            className="badge-flash pointer-events-none absolute bottom-4 left-4 z-10 max-w-[70%] rounded-lg border border-white/50 bg-white/85 px-3 py-2 text-xs font-medium text-[var(--color-ink)] shadow-lg backdrop-blur-md"
+          >
+            {badge}
+          </div>
+        )}
+
+        <div className="pointer-events-none absolute inset-0 rounded-lg">
+          <span className="absolute left-2 top-2 h-4 w-4 border-l border-t border-[#2f4a63]" />
+          <span className="absolute right-2 top-2 h-4 w-4 border-r border-t border-[#2f4a63]" />
+          <span className="absolute bottom-2 left-2 h-4 w-4 border-b border-l border-[#2f4a63]" />
+          <span className="absolute bottom-2 right-2 h-4 w-4 border-b border-r border-[#2f4a63]" />
+        </div>
+
+        <div className="pointer-events-none absolute left-4 top-4 flex flex-col gap-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[#6f97b3]">
+          <span className="text-[13px] normal-case tracking-normal text-[#dbe9f4]">
+            {geometry.arrangement.replace(/_/g, " ")}
+          </span>
+          <span className="tabular-nums">
+            {geometry.surfaces.length} surfaces ·{" "}
+            {num(volumeTotal, 1)} m³
+          </span>
+          <span className="tabular-nums">
+            azimuth {num(geometry.azimuth_deg, 0)}°
+          </span>
+        </div>
+
+        <div className="pointer-events-none absolute right-4 top-4 flex flex-col items-end gap-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[#6f97b3]">
+          <span className="text-[#dbe9f4]">{MODE_LABEL[mode]}</span>
+          <span className="tabular-nums">
+            alt {num(sun?.altitude, 1)}° · az {num(sun?.azimuth, 1)}°
+          </span>
+          <span>{quality}</span>
+        </div>
 
         {hover && (
           <div
@@ -759,10 +1398,15 @@ export function Scene3D({
             <div className="font-mono font-medium">{hover.name}</div>
             <div className="text-[var(--color-ink-faint)]">
               {num(hover.area, 2)} m²
-              {painted && hoverValue !== undefined && hoverValue !== null
+              {mode !== "interior_temperature" && painted && hoverValue !== undefined && hoverValue !== null
                 ? ` · ${num(hoverValue)} ${unit}`
                 : ""}
             </div>
+            {mode === "interior_temperature" && probeTemp && (
+              <div className="text-[var(--color-solar)] font-medium mt-0.5">
+                Air: {num(probeTemp.value, 1)} °C
+              </div>
+            )}
           </div>
         )}
 
@@ -868,7 +1512,7 @@ export function Scene3D({
         </div>
       )}
 
-      {geometry.layout && showRooms && rooms.length > 0 && (
+      {!immersive && geometry.layout && showRooms && rooms.length > 0 && (
         <div className="space-y-1.5">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
             <span className="font-medium text-[var(--color-ink)]">
@@ -892,12 +1536,27 @@ export function Scene3D({
             {geometry.layout.thermal_zoning}{" "}
             {num(geometry.layout.partition_area_m2, 1)} m² of partition enters the
             simulation as internal mass.
-            {geometry.layout.notes.length > 1 ? ` ${geometry.layout.notes[0]}` : ""}
+            {(geometry.layout.notes?.length ?? 0) > 1
+              ? ` ${geometry.layout.notes[0]}`
+              : ""}
           </p>
         </div>
       )}
 
-      {showAirflow && airflow && (
+      {mode === "interior_temperature" && thermalFieldData && (
+        <p className="rounded-md border border-[var(--color-line)] bg-[var(--color-night-2)]/60 p-3 text-xs leading-relaxed text-[var(--color-ink-faint)]">
+          <span className="text-[var(--color-ink-dim)]">
+            This volume is interpolated, not solved.
+          </span>{" "}
+          EnergyPlus carries one well mixed air node per zone and does not resolve
+          temperature inside a room. The surfaces bounding this volume are solver
+          output; the air between them is inverse distance weighted between them with
+          an assumed stratification, so read it as a sketch of where the cold sits,
+          never as a fluid dynamics result.
+        </p>
+      )}
+
+      {!immersive && showAirflow && airflow && (
         <div className="space-y-1.5 rounded-md border border-[var(--color-line)] bg-[var(--color-night-2)]/60 p-3">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
             <span className="font-medium text-[var(--color-ink)]">Air exchange</span>
@@ -912,7 +1571,28 @@ export function Scene3D({
         </div>
       )}
 
-      {painted && extent && (
+      {mode === "interior_temperature" && (
+        <p className="rounded-md border border-dashed border-[var(--color-earth)]/50 bg-[var(--color-earth)]/8 px-3 py-2 text-xs leading-relaxed text-[var(--color-ink-dim)]">
+          <span className="font-medium text-[var(--color-ink)]">
+            This one is an estimate, not a solved field.
+          </span>{" "}
+          EnergyPlus models the air in a zone as a single well mixed node, so it
+          reports no temperature distribution inside the room. What you see is
+          interpolated between the surface temperatures it did report, with an assumed
+          vertical stratification. Use it to read the shape of the problem, never as a
+          measured value. A solved field needs the fluid dynamics run.
+        </p>
+      )}
+
+      {!immersive && dressed && elements.length > 0 && (
+        <p className="text-xs leading-relaxed text-[var(--color-ink-faint)]">
+          Drawn as it would be built: {elements.join(", ")}. These are construction
+          elements derived from the design, not simulated surfaces. Nothing here is
+          painted with a result, and the faces that carry results are unchanged.
+        </p>
+      )}
+
+      {!immersive && painted && extent && (
         <div className="flex items-center gap-2 text-xs text-[var(--color-ink-faint)]">
           <span className="tabular-nums">
             {num(extent.min)} {unit}
@@ -928,17 +1608,17 @@ export function Scene3D({
       )}
 
       <p className="text-xs leading-relaxed text-[var(--color-ink-faint)]">
-        {painted
-          ? "Every painted face is one number EnergyPlus reported for that surface at that hour, and the face names come from the simulation, so the value sits on the surface it belongs to."
-          : "Material colours come from the Layer 0 database. The geometry drawn here is the geometry that was simulated, built from one description."}{" "}
+        {mode === "interior_temperature"
+          ? "The volumetric field is an approximate interpolation of room air temperatures over the grid, meant for rapid visualization. It is not a computational fluid dynamics (CFD) result."
+          : painted
+            ? "Every painted face is one number EnergyPlus reported for that surface at that hour, and the face names come from the simulation, so the value sits on the surface it belongs to."
+            : "Material colours come from the Layer 0 database. The geometry drawn here is the geometry that was simulated, built from one description."}{" "}
         {terrain && terrain.positions.length > 0
           ? terrain.derived_from_horizon
             ? "The skyline is the terrain horizon table the simulation shades with, so what blocks the sun on screen is what blocked it in the run."
             : `The ground is the measured elevation model, ${terrain.vertex_count.toLocaleString()} points out to ${Math.round((terrain.outer_radius_m ?? 0) / 1000)} km, shaded by height above the site. It is the same ground the horizon profile the simulation shades with was measured from, and it is scaled uniformly so every skyline angle is the angle the run used. Heights are not exaggerated, and the colour is a display ramp over real elevation rather than observed snow.`
           : "No terrain is attached, so the simulation assumed a flat skyline in every direction."}{" "}
-        There is no air temperature or velocity field here because the engine computes
-        neither; those live in the detailed analysis tab and come from a fluid dynamics
-        solver.
+        {mode !== "interior_temperature" && "There is no air temperature or velocity field here because the engine computes neither; those live in the detailed analysis tab and come from a fluid dynamics solver."}
       </p>
     </div>
   );

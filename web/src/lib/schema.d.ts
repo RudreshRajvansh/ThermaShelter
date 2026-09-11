@@ -157,6 +157,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/live-weather": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Live Weather */
+        get: operations["live_weather_api_live_weather_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/comfort-models": {
         parameters: {
             query?: never;
@@ -287,6 +304,23 @@ export interface paths {
         put?: never;
         /** Surface Results */
         post: operations["surface_results_api_surface_results_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/thermal-field": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Thermal Field */
+        post: operations["thermal_field_api_thermal_field_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1458,6 +1492,45 @@ export interface components {
             notes: string[];
             source: components["schemas"]["SourceRef"];
         };
+        /** LiveObservation */
+        LiveObservation: {
+            /** Air Temperature C */
+            air_temperature_c?: number | null;
+            /** Apparent Temperature C */
+            apparent_temperature_c?: number | null;
+            /** Relative Humidity Pct */
+            relative_humidity_pct?: number | null;
+            /** Wind Speed M S */
+            wind_speed_m_s?: number | null;
+            /** Surface Pressure Pa */
+            surface_pressure_pa?: number | null;
+            /** Cloud Cover Pct */
+            cloud_cover_pct?: number | null;
+        };
+        /** LiveWeather */
+        LiveWeather: {
+            /** Site Id */
+            site_id: string;
+            /** Available */
+            available: boolean;
+            observation?: components["schemas"]["LiveObservation"] | null;
+            /** Observed At */
+            observed_at?: string | null;
+            /** Fetched At */
+            fetched_at?: string | null;
+            /** Location */
+            location?: string | null;
+            /** Provider Elevation M */
+            provider_elevation_m?: number | null;
+            /** Elevation Mismatch */
+            elevation_mismatch?: string | null;
+            /** Detail */
+            detail?: string | null;
+            /** Provider */
+            provider: string;
+            /** Note */
+            note: string;
+        };
         /** Material */
         Material: {
             /** Id */
@@ -2418,6 +2491,98 @@ export interface components {
              */
             vertex_count: number;
         };
+        /** ThermalFieldPayload */
+        ThermalFieldPayload: {
+            /** Design Hash */
+            design_hash: string;
+            /** Zone */
+            zone: string;
+            /** Hour Index */
+            hour_index: number;
+            /** Timestamp */
+            timestamp: string;
+            /** Dims */
+            dims: [
+                number,
+                number,
+                number
+            ];
+            /** Bounds Min */
+            bounds_min: [
+                number,
+                number,
+                number
+            ];
+            /** Bounds Max */
+            bounds_max: [
+                number,
+                number,
+                number
+            ];
+            /** Values */
+            values: number[];
+            /** Min C */
+            min_c: number;
+            /** Max C */
+            max_c: number;
+            /** Surface Count */
+            surface_count: number;
+            /**
+             * Stratification
+             * @default 0
+             */
+            stratification: number;
+            /** @default {
+             *       "citation": "Inverse distance weighted interpolation between the inside face temperatures EnergyPlus reported for this zone, with an assumed vertical stratification term applied on top",
+             *       "status": "derived",
+             *       "note": "EnergyPlus solves one well mixed air node per zone and does not resolve temperature inside a room. This volume is interpolated between real surface temperatures, so the surfaces are solver output but the air between them is an estimate. It is not a computational fluid dynamics result and must not be read as one."
+             *     } */
+            source: components["schemas"]["SourceRef"];
+            /** @default derived */
+            provenance: components["schemas"]["Provenance"];
+        };
+        /** ThermalFieldRequest */
+        ThermalFieldRequest: {
+            design: components["schemas"]["DesignSpec"];
+            /** Site Id */
+            site_id?: string | null;
+            /** Comfort Model Id */
+            comfort_model_id?: string | null;
+            /**
+             * Hour Index
+             * @default 0
+             */
+            hour_index: number;
+            /**
+             * Zone
+             * @default ROOM
+             */
+            zone: string;
+            /**
+             * Resolution
+             * @default [
+             *       32,
+             *       32,
+             *       16
+             *     ]
+             */
+            resolution: [
+                number,
+                number,
+                number
+            ];
+            /** @default {
+             *       "start": "2019-01-01",
+             *       "end": "2019-01-31"
+             *     } */
+            period: components["schemas"]["Window"];
+            surface_period?: components["schemas"]["Window"] | null;
+            /**
+             * Timestep Per Hour
+             * @default 6
+             */
+            timestep_per_hour: number;
+        };
         /** UncertainRange */
         UncertainRange: {
             /** Low */
@@ -2820,6 +2985,37 @@ export interface operations {
             };
         };
     };
+    live_weather_api_live_weather_get: {
+        parameters: {
+            query?: {
+                site_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveWeather"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     comfort_models_api_comfort_models_get: {
         parameters: {
             query?: never;
@@ -3006,6 +3202,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SurfaceResults"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    thermal_field_api_thermal_field_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ThermalFieldRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThermalFieldPayload"];
                 };
             };
             /** @description Validation Error */

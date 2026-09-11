@@ -86,7 +86,7 @@ function extentOf(
   return max - min < 1e-6 ? { min: min - 0.5, max: max + 0.5 } : { min, max };
 }
 
-export type DrawMode = "construction" | "surface_temperature" | "incident_solar";
+export type DrawMode = "construction" | "surface_temperature" | "incident_solar" | "interior_temperature";
 
 export function PlanView({
   geometry,

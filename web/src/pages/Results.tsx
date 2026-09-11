@@ -36,6 +36,9 @@ function Recommendation({ result }: { result: SimulationResult }) {
     result.comfort.minimum_overnight_operative_c != null
       ? result.comfort.minimum_overnight_operative_c - reference.delta_minimum_overnight_k
       : null;
+  const isBaseline =
+    reference != null &&
+    result.design.name === reference.reference_name;
 
   return (
     <div className="py-2">
@@ -55,15 +58,20 @@ function Recommendation({ result }: { result: SimulationResult }) {
               {num(result.comfort.minimum_overnight_operative_c)} °C
             </span>{" "}
             at its coldest overnight
-            {baselineValue !== null && (
+            {isBaseline ? (
+              " . This is current construction itself, so there is nothing to"
+              + " compare it against. Choose a candidate design to see a difference."
+            ) : baselineValue !== null ? (
               <>
                 , where current construction holds{" "}
                 <span className="text-rose-500">
                   {num(baselineValue)} °C
                 </span>
+                .
               </>
+            ) : (
+              "."
             )}
-            .
           </>
         )}
       </p>

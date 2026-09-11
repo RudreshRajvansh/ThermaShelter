@@ -9,7 +9,8 @@ from shelter_engine.schema import (Assumption, ClimateObjective, DesignSpec,
                                    DesignVariable, EngineWarning,
                                    OptimisationConstraints, ParetoResult,
                                    OccupancySpec, PlanSpec, RunOptions,
-                                   RunPeriod, ShelterUse, SourceRef)
+                                   RunPeriod, ShelterUse, SourceRef,
+                                   ThermalFieldPayload)
 
 DEFAULT_START = date(2019, 1, 1)
 DEFAULT_END = date(2019, 1, 31)
@@ -39,6 +40,29 @@ class GeometryRequest(Body):
     design: DesignSpec
     site_id: str | None = None
     comfort_model_id: str | None = None
+
+
+class LiveObservation(Body):
+    air_temperature_c: float | None = None
+    apparent_temperature_c: float | None = None
+    relative_humidity_pct: float | None = None
+    wind_speed_m_s: float | None = None
+    surface_pressure_pa: float | None = None
+    cloud_cover_pct: float | None = None
+
+
+class LiveWeather(Body):
+    site_id: str
+    available: bool
+    observation: LiveObservation | None = None
+    observed_at: str | None = None
+    fetched_at: str | None = None
+    location: str | None = None
+    provider_elevation_m: float | None = None
+    elevation_mismatch: str | None = None
+    detail: str | None = None
+    provider: str
+    note: str
 
 
 class DesignSummary(Body):
@@ -80,6 +104,26 @@ class SurfaceRequest(Body):
     design: DesignSpec
     site_id: str | None = None
     comfort_model_id: str | None = None
+    period: Window = Window()
+    surface_period: Window | None = None
+    timestep_per_hour: int = Field(default=6, ge=1, le=60)
+
+    def to_options(self) -> RunOptions:
+        return RunOptions(
+            period=self.period.to_period(),
+            surface_output_period=(self.surface_period.to_period("surface")
+                                   if self.surface_period else None),
+            timestep_per_hour=self.timestep_per_hour,
+            conditioned_run=False, surface_output=True)
+
+
+class ThermalFieldRequest(Body):
+    design: DesignSpec
+    site_id: str | None = None
+    comfort_model_id: str | None = None
+    hour_index: int = Field(default=0, ge=0)
+    zone: str = "ROOM"
+    resolution: tuple[int, int, int] = (32, 32, 16)
     period: Window = Window()
     surface_period: Window | None = None
     timestep_per_hour: int = Field(default=6, ge=1, le=60)

@@ -895,6 +895,32 @@ class GeometryPayload(Frozen):
         return tuple(surface.name for surface in self.surfaces)
 
 
+class ThermalFieldPayload(Frozen):
+    design_hash: str
+    zone: str
+    hour_index: int
+    timestamp: str
+    dims: tuple[int, int, int]
+    bounds_min: tuple[float, float, float]
+    bounds_max: tuple[float, float, float]
+    values: tuple[float, ...]
+    min_c: float
+    max_c: float
+    surface_count: int
+    stratification: float = 0.0
+    source: SourceRef = SourceRef(
+        citation="Inverse distance weighted interpolation between the inside face "
+                 "temperatures EnergyPlus reported for this zone, with an assumed "
+                 "vertical stratification term applied on top",
+        status=SourceStatus.DERIVED,
+        note="EnergyPlus solves one well mixed air node per zone and does not resolve "
+             "temperature inside a room. This volume is interpolated between real "
+             "surface temperatures, so the surfaces are solver output but the air "
+             "between them is an estimate. It is not a computational fluid dynamics "
+             "result and must not be read as one.")
+    provenance: Provenance = Provenance.DERIVED
+
+
 class HourlySeries(Frozen):
     name: str
     unit: str
