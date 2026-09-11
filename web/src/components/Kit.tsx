@@ -156,7 +156,7 @@ export function Stat({
       <div className="mt-1 flex items-baseline gap-1">
         <span
           className={`tnum font-semibold ${large ? "text-3xl" : "text-xl"} ${
-            tone === "solar" ? "text-[var(--color-solar)]" : ""
+            tone === "solar" ? "text-[var(--color-solar-ink)]" : ""
           }`}
         >
           {value}
@@ -182,9 +182,9 @@ export function Stat({
 }
 
 const SEVERITY_STYLE: Record<string, string> = {
-  fatal: "border-[var(--color-diesel)] bg-[var(--color-diesel)]/10 text-[#ffb4ae]",
-  severe: "border-[var(--color-diesel)] bg-[var(--color-diesel)]/10 text-[#ffb4ae]",
-  warning: "border-[var(--color-solar)]/60 bg-[var(--color-solar)]/10 text-[#f6cf8f]",
+  fatal: "border-[var(--color-diesel)] bg-[var(--color-diesel)]/10 text-[var(--color-danger-ink)]",
+  severe: "border-[var(--color-diesel)] bg-[var(--color-diesel)]/10 text-[var(--color-danger-ink)]",
+  warning: "border-[var(--color-solar)]/60 bg-[var(--color-solar)]/10 text-[var(--color-warn-ink)]",
   info: "border-[var(--color-line)] bg-[var(--color-night-2)] text-[var(--color-ink-faint)]",
 };
 
@@ -259,7 +259,7 @@ export function AssumptionTable({ assumptions }: { assumptions: Assumption[] }) 
                     className={`rounded px-1.5 py-0.5 text-[10px] ${
                       item.source.status === "verified"
                         ? "bg-[var(--color-good)]/20 text-[var(--color-good)]"
-                        : "bg-[var(--color-solar)]/15 text-[var(--color-solar)]"
+                        : "bg-[var(--color-solar)]/15 text-[var(--color-solar-ink)]"
                     }`}
                   >
                     {item.source.status}
@@ -298,7 +298,7 @@ export function Loading({ label }: { label: string }) {
 export function Failure({ error }: { error: unknown }) {
   const message = error instanceof Error ? error.message : String(error);
   return (
-    <div className="rounded-md border border-[var(--color-diesel)] bg-[var(--color-diesel)]/10 p-3 text-sm text-[#ffb4ae]">
+    <div className="rounded-md border border-[var(--color-diesel)] bg-[var(--color-diesel)]/10 p-3 text-sm text-[var(--color-danger-ink)]">
       {message}
     </div>
   );

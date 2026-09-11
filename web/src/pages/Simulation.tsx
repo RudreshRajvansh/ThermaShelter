@@ -125,7 +125,7 @@ export function Simulation({
                   disabled={mode !== "construction" && !surfaces}
                   className={`rounded-md border px-2.5 py-1 text-[11px] transition ${
                     store.displayMode === mode
-                      ? "border-[var(--color-solar)] bg-[var(--color-solar)] text-[#0b1220]"
+                      ? "border-[var(--color-solar)] bg-[var(--color-solar)] text-white"
                       : "border-[var(--color-line)] text-[var(--color-ink-dim)] disabled:opacity-40"
                   }`}
                 >
@@ -174,7 +174,7 @@ export function Simulation({
                     onClick={() => setSectionAxis(item)}
                     className={`rounded-md border px-2.5 py-1 text-[11px] ${
                       sectionAxis === item
-                        ? "border-[var(--color-solar)] text-[var(--color-solar)]"
+                        ? "border-[var(--color-solar)] text-[var(--color-solar-ink)]"
                         : "border-[var(--color-line)] text-[var(--color-ink-dim)]"
                     }`}
                   >
@@ -228,7 +228,7 @@ export function Simulation({
           type="button"
           onClick={() => store.open("performance")}
           disabled={!simulation}
-          className="rounded-md bg-[var(--color-solar)] px-4 py-2 text-sm font-medium text-[#0b1220] disabled:opacity-40"
+          className="rounded-md bg-[var(--color-solar)] px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
         >
           See the results →
         </button>

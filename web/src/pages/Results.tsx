@@ -46,7 +46,7 @@ function Recommendation({ result }: { result: SimulationResult }) {
         {cooling ? (
           <>
             The design peaks at{" "}
-            <span className="text-[var(--color-solar)]">
+            <span className="text-[var(--color-solar-ink)]">
               {num(result.comfort.maximum_daytime_operative_c)} °C
             </span>{" "}
             through the day. Mass buffers the same large day to night swing as in Ladakh,
@@ -56,7 +56,7 @@ function Recommendation({ result }: { result: SimulationResult }) {
         ) : (
           <>
             This design holds{" "}
-            <span className="text-[var(--color-solar)]">
+            <span className="text-[var(--color-solar-ink)]">
               {num(result.comfort.minimum_overnight_operative_c)} °C
             </span>{" "}
             at its coldest overnight
@@ -291,9 +291,9 @@ export function Results({
                         <span
                           className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
                             item.priority === "high"
-                              ? "bg-[var(--color-diesel)]/20 text-[#ffb4ae]"
+                              ? "bg-[var(--color-diesel)]/20 text-[var(--color-danger-ink)]"
                               : item.priority === "medium"
-                                ? "bg-[var(--color-solar)]/15 text-[var(--color-solar)]"
+                                ? "bg-[var(--color-solar)]/15 text-[var(--color-solar-ink)]"
                                 : "bg-[var(--color-line)] text-[var(--color-ink-faint)]"
                           }`}
                         >
@@ -360,7 +360,7 @@ export function Results({
                           className={`mr-1.5 rounded px-1 py-0.5 text-[10px] ${
                             item.source.status === "verified"
                               ? "bg-[var(--color-good)]/20 text-[var(--color-good)]"
-                              : "bg-[var(--color-solar)]/15 text-[var(--color-solar)]"
+                              : "bg-[var(--color-solar)]/15 text-[var(--color-solar-ink)]"
                           }`}
                         >
                           {item.source.status}
@@ -395,7 +395,7 @@ export function Results({
               ))}
               <p className="pt-2 text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
                 Solar gain through the glazing over the same period was{" "}
-                <span className="text-[var(--color-solar)]">
+                <span className="text-[var(--color-solar-ink)]">
                   {num(shares.windows_solar_gain_kwh, 0)} kWh
                 </span>
                 , and internal gains from people and equipment{" "}

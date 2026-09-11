@@ -52,7 +52,7 @@ export function OutputPage({
         <button
           type="button"
           onClick={() => store.setPage("input")}
-          className="rounded-lg border border-[var(--color-line)] bg-white px-4 py-2 text-sm text-[var(--color-ink)] transition hover:border-[var(--color-solar)]"
+          className="rounded-lg border border-[var(--color-line)] bg-[var(--color-night-2)] px-4 py-2 text-sm text-[var(--color-ink)] transition hover:border-[var(--color-solar)]"
         >
           ← Edit inputs
         </button>

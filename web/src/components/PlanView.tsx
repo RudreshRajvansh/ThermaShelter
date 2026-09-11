@@ -149,7 +149,7 @@ export function PlanView({
               <path
                 d="M 1 0 L 0 0 0 1"
                 fill="none"
-                stroke="#1a2942"
+                stroke="var(--color-line)"
                 strokeWidth={stroke * 0.25}
               />
             </pattern>
@@ -191,7 +191,7 @@ export function PlanView({
                 width={w < 1e-6 ? thin : w}
                 height={h < 1e-6 ? thin : h}
                 fill={paint(poly.name, poly.colour)}
-                stroke="#0b1220"
+                stroke="var(--color-ink)"
                 strokeWidth={stroke * 0.4}
                 opacity={hover && hover !== poly.name ? 0.55 : 1}
                 onMouseEnter={() => setHover(poly.name)}
@@ -216,7 +216,7 @@ export function PlanView({
                 width={w < 1e-6 ? thin : w}
                 height={h < 1e-6 ? thin : h}
                 fill={paint(poly.name, "#8fd0ef")}
-                stroke="#eaf2f7"
+                stroke="var(--color-night-2)"
                 strokeWidth={stroke * 0.35}
                 onMouseEnter={() => setHover(poly.name)}
                 onMouseLeave={() => setHover(null)}
@@ -224,7 +224,7 @@ export function PlanView({
             );
           })}
 
-          <g stroke="#6b7d94" strokeWidth={stroke * 0.4} fill="none">
+          <g stroke="var(--color-ink-faint)" strokeWidth={stroke * 0.4} fill="none">
             <line x1={x.min} y1={-(y.min - pad * 0.45)} x2={x.max} y2={-(y.min - pad * 0.45)} />
             <line
               x1={x.min - pad * 0.45}
@@ -236,7 +236,7 @@ export function PlanView({
           <text
             x={(x.min + x.max) / 2}
             y={-(y.min - pad * 0.72)}
-            fill="#9fb0c4"
+            fill="var(--color-ink-dim)"
             fontSize={pad * 0.3}
             textAnchor="middle"
           >
@@ -245,7 +245,7 @@ export function PlanView({
           <text
             x={x.min - pad * 0.62}
             y={-(y.min + y.max) / 2}
-            fill="#9fb0c4"
+            fill="var(--color-ink-dim)"
             fontSize={pad * 0.3}
             textAnchor="middle"
             transform={`rotate(-90 ${x.min - pad * 0.62} ${-(y.min + y.max) / 2})`}
@@ -379,7 +379,7 @@ export function SectionView({
                   height={t < 1e-6 ? thin : t}
                   fill={paint(poly.name, isWindow ? "#8fd0ef" : poly.colour)}
                   fillOpacity={isWindow ? 0.9 : isSlab ? 1 : 0.95}
-                  stroke="#0b1220"
+                  stroke="var(--color-ink)"
                   strokeWidth={stroke * 0.35}
                 >
                   <title>{poly.name}</title>
@@ -389,7 +389,7 @@ export function SectionView({
           <text
             x={h.min}
             y={-(z.max + pad * 0.4)}
-            fill="#9fb0c4"
+            fill="var(--color-ink-dim)"
             fontSize={pad * 0.32}
           >
             {axis === "north-south" ? "south ←→ north" : "west ←→ east"} · ceiling{" "}

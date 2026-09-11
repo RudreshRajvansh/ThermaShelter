@@ -42,7 +42,7 @@ export function SearchPanel({ meta }: { meta: MetaResponse | undefined }) {
               key={budget.designs}
               type="button"
               onClick={() => store.requestSearch(budget)}
-              className="rounded-lg border border-[var(--color-line)] bg-white px-4 py-2 text-left text-sm transition hover:border-[var(--color-solar)]"
+              className="rounded-lg border border-[var(--color-line)] bg-[var(--color-night-2)] px-4 py-2 text-left text-sm transition hover:border-[var(--color-solar)]"
             >
               <span className="block font-medium">{budget.label}</span>
               <span className="text-[12px] text-[var(--color-ink-faint)]">
@@ -171,7 +171,7 @@ export function SearchPanel({ meta }: { meta: MetaResponse | undefined }) {
                 store.applyOverride(best.design);
                 store.open("performance");
               }}
-              className="rounded-lg border border-[var(--color-line)] bg-white px-4 py-2 text-sm"
+              className="rounded-lg border border-[var(--color-line)] bg-[var(--color-night-2)] px-4 py-2 text-sm"
             >
               Full performance for this design
             </button>
@@ -207,6 +207,7 @@ export function SearchPanel({ meta }: { meta: MetaResponse | undefined }) {
                   cursor={{ strokeDasharray: "3 3" }}
                   contentStyle={{
                     background: "var(--color-day)",
+                    color: "var(--color-ink)",
                     border: "1px solid var(--color-line)",
                     borderRadius: 8,
                     fontSize: 12,

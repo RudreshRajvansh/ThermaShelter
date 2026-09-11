@@ -21,6 +21,7 @@ export const OUTPUT_TABS = [
 
 export type OutputTab = (typeof OUTPUT_TABS)[number];
 export type Page = "input" | "output";
+export type ThemePreference = "system" | "light" | "dark";
 
 export const WINTER: Window = { start: "2019-01-10", end: "2019-01-16" };
 export const SUMMER: Window = { start: "2019-06-10", end: "2019-06-16" };
@@ -49,12 +50,17 @@ export type SearchState = {
 };
 
 const IDLE_SEARCH: SearchState = { token: null, jobId: null, result: null, failure: null };
+const THEME_KEY = "entropy-zero-theme";
+const DARK_QUERY = "(prefers-color-scheme: dark)";
 
 type State = {
   page: Page;
   setPage: (page: Page) => void;
   outputTab: OutputTab;
   open: (tab: OutputTab) => void;
+  theme: ThemePreference;
+  resolvedTheme: "light" | "dark";
+  setTheme: (theme: ThemePreference) => void;
   searchRequest: SearchRequest | null;
   requestSearch: (budget: SearchBudget) => void;
   search: SearchState;
@@ -99,10 +105,25 @@ function hashFor(page: Page, tab: OutputTab): string {
   return page === "input" ? "#/input" : `#/results/${encodeURIComponent(tab)}`;
 }
 
+function readTheme(): ThemePreference {
+  try {
+    const stored = window.localStorage.getItem(THEME_KEY);
+    return stored === "light" || stored === "dark" ? stored : "system";
+  } catch {
+    return "system";
+  }
+}
+
+function systemPrefersDark(): boolean {
+  return typeof window.matchMedia === "function" && window.matchMedia(DARK_QUERY).matches;
+}
+
 export function StoreProvider({ children }: { children: ReactNode }) {
   const initial = readLocation();
   const [page, setPageState] = useState<Page>(initial.page);
   const [outputTab, setOutputTab] = useState<OutputTab>(initial.tab);
+  const [theme, setThemeState] = useState<ThemePreference>(readTheme);
+  const [systemDark, setSystemDark] = useState(systemPrefersDark);
   const [searchRequest, setSearchRequest] = useState<SearchRequest | null>(null);
   const [search, setSearch] = useState<SearchState>(IDLE_SEARCH);
   const [siteId, setSiteId] = useState<string | null>(null);
@@ -115,6 +136,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [cooling, setCooling] = useState(false);
   const [liveMode, setLiveMode] = useState(false);
   const [comfortModelId, setComfortModelId] = useState<string | null>(null);
+
+  const resolvedTheme: "light" | "dark" =
+    theme === "system" ? (systemDark ? "dark" : "light") : theme;
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia(DARK_QUERY);
+    const follow = (event: MediaQueryListEvent) => setSystemDark(event.matches);
+    query.addEventListener("change", follow);
+    return () => query.removeEventListener("change", follow);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", resolvedTheme);
+  }, [resolvedTheme]);
 
   useEffect(() => {
     const target = hashFor(page, outputTab);
@@ -135,6 +171,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const setTheme = useCallback((next: ThemePreference) => {
+    setThemeState(next);
+    try {
+      window.localStorage.setItem(THEME_KEY, next);
+    } catch {
+      return;
+    }
+  }, []);
   const setPage = useCallback((next: Page) => {
     setPageState(next);
     window.scrollTo({ top: 0 });
@@ -174,6 +218,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setPage,
       outputTab,
       open,
+      theme,
+      resolvedTheme,
+      setTheme,
       searchRequest,
       requestSearch,
       search,
@@ -207,6 +254,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setPage,
       outputTab,
       open,
+      theme,
+      resolvedTheme,
+      setTheme,
       searchRequest,
       requestSearch,
       search,

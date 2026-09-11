@@ -62,8 +62,8 @@ function Compass({ bearing }: { bearing: number }) {
   const y = 28 - 20 * Math.cos(angle);
   return (
     <svg viewBox="0 0 56 56" width={56} height={56} aria-hidden="true">
-      <circle cx={28} cy={28} r={24} fill="#f8fafc" stroke="var(--color-line)" />
-      <text x={28} y={9} textAnchor="middle" fontSize={8} fill="#64748b">N</text>
+      <circle cx={28} cy={28} r={24} fill="var(--color-field)" stroke="var(--color-line)" />
+      <text x={28} y={9} textAnchor="middle" fontSize={8} fill="var(--color-ink-faint)">N</text>
       <line x1={28} y1={28} x2={x} y2={y} stroke="var(--color-solar)" strokeWidth={3} strokeLinecap="round" />
       <circle cx={28} cy={28} r={2.5} fill="var(--color-ink)" />
     </svg>
@@ -473,7 +473,7 @@ export function InputPage({
                 className={`rounded-xl border p-4 text-left transition ${
                   active
                     ? "border-[var(--color-solar)] bg-[var(--color-solar)]/8 shadow-sm"
-                    : "border-[var(--color-line)] bg-white hover:border-[var(--color-solar)]/60"
+                    : "border-[var(--color-line)] bg-[var(--color-night-2)] hover:border-[var(--color-solar)]/60"
                 }`}
               >
                 <span className="block text-sm font-semibold">{item.label}</span>
@@ -497,7 +497,7 @@ export function InputPage({
             type="button"
             disabled={!site}
             onClick={() => store.open("3d model")}
-            className="rounded-lg border border-[var(--color-line)] bg-white px-5 py-2.5 text-sm text-[var(--color-ink)] transition hover:border-[var(--color-solar)] disabled:opacity-40"
+            className="rounded-lg border border-[var(--color-line)] bg-[var(--color-night-2)] px-5 py-2.5 text-sm text-[var(--color-ink)] transition hover:border-[var(--color-solar)] disabled:opacity-40"
           >
             Analyse this design without a search
           </button>

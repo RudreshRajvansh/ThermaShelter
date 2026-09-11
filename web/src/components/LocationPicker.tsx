@@ -253,7 +253,7 @@ export function LocationPicker({
           <button
             type="submit"
             disabled={places.isPending || query.trim().length < 2}
-            className="rounded-lg border border-[var(--color-line)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-ink)] transition hover:border-[var(--color-solar)] disabled:opacity-40"
+            className="rounded-lg border border-[var(--color-line)] bg-[var(--color-night-2)] px-4 py-2 text-sm font-medium text-[var(--color-ink)] transition hover:border-[var(--color-solar)] disabled:opacity-40"
           >
             {places.isPending ? "Searching…" : "Search"}
           </button>
@@ -280,7 +280,7 @@ export function LocationPicker({
                         12,
                       )
                     }
-                    className="rounded-full border border-[var(--color-line)] bg-white px-3 py-1 text-[12px] text-[var(--color-ink-dim)] transition hover:border-[var(--color-solar)] hover:text-[var(--color-ink)]"
+                    className="rounded-full border border-[var(--color-line)] bg-[var(--color-night-2)] px-3 py-1 text-[12px] text-[var(--color-ink-dim)] transition hover:border-[var(--color-solar)] hover:text-[var(--color-ink)]"
                   >
                     {place.name}
                     <span className="text-[var(--color-ink-faint)]">
@@ -306,6 +306,7 @@ export function LocationPicker({
             <LayersControl position="topright">
               <LayersControl.BaseLayer checked name="Terrain">
                 <TileLayer
+                  className="map-drawn"
                   url="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"
                   subdomains={["a", "b", "c"]}
                   maxZoom={17}
@@ -314,6 +315,7 @@ export function LocationPicker({
               </LayersControl.BaseLayer>
               <LayersControl.BaseLayer name="Streets">
                 <TileLayer
+                  className="map-drawn"
                   url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
                   maxZoom={19}
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -409,14 +411,14 @@ export function LocationPicker({
             onClick={() =>
               pick({ latitude: typedLatitude, longitude: typedLongitude, name: null }, 13)
             }
-            className="rounded-lg border border-[var(--color-line)] bg-white px-4 py-2 text-sm text-[var(--color-ink)] transition hover:border-[var(--color-solar)] disabled:opacity-40"
+            className="rounded-lg border border-[var(--color-line)] bg-[var(--color-night-2)] px-4 py-2 text-sm text-[var(--color-ink)] transition hover:border-[var(--color-solar)] disabled:opacity-40"
           >
             Show on map
           </button>
         </div>
 
         {pending && (
-          <div className="space-y-2 rounded-xl border border-orange-300 bg-orange-50/80 p-4 text-sm">
+          <div className="space-y-2 rounded-xl border border-[var(--color-pick-line)] bg-[var(--color-pick-bg)] p-4 text-sm">
             <p>
               <span className="font-medium text-[var(--color-ink)]">
                 {pending.name ?? "Picked point"}

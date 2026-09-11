@@ -61,7 +61,7 @@ export function Reports({
         <button
           type="button"
           onClick={() => window.print()}
-          className="rounded-md bg-[var(--color-solar)] px-3 py-1.5 text-xs font-medium text-[#0b1220]"
+          className="rounded-md bg-[var(--color-solar)] px-3 py-1.5 text-xs font-medium text-white"
         >
           Print or save as PDF
         </button>
@@ -260,7 +260,7 @@ export function Reports({
           </div>
         </div>
         {simulation.buildability.seismic_note && (
-          <p className="mt-3 rounded-md border border-[var(--color-diesel)] bg-[var(--color-diesel)]/10 p-3 text-xs text-[#ffb4ae]">
+          <p className="mt-3 rounded-md border border-[var(--color-diesel)] bg-[var(--color-diesel)]/10 p-3 text-xs text-[var(--color-danger-ink)]">
             {simulation.buildability.seismic_note}
           </p>
         )}

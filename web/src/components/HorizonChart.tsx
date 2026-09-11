@@ -38,8 +38,8 @@ export function HorizonChart({
         role="img"
         aria-label={`Horizon profile, blocked up to ${num(blocked[peak], 1)} degrees toward ${num(azimuths[peak], 0)} degrees`}
       >
-        <circle cx={centre} cy={centre} r={radius} fill="#c9b79c" />
-        <polygon points={skyline} fill="#e8f1fb" stroke="#7a6a52" strokeWidth={1} />
+        <circle cx={centre} cy={centre} r={radius} fill="var(--color-horizon-ground)" />
+        <polygon points={skyline} fill="var(--color-horizon-sky)" stroke="var(--color-horizon-edge)" strokeWidth={1} />
         {[30, 60].map((altitude) => (
           <circle
             key={altitude}
@@ -47,11 +47,11 @@ export function HorizonChart({
             cy={centre}
             r={radius * (1 - altitude / 90)}
             fill="none"
-            stroke="#b6c7da"
+            stroke="var(--color-horizon-ring)"
             strokeDasharray="2 3"
           />
         ))}
-        <circle cx={centre} cy={centre} r={2} fill="#475569" />
+        <circle cx={centre} cy={centre} r={2} fill="var(--color-ink-dim)" />
         {COMPASS.map((item) => {
           const [x, y] = toPoint(item.azimuth, -12);
           return (
@@ -62,7 +62,7 @@ export function HorizonChart({
               textAnchor="middle"
               dominantBaseline="central"
               fontSize={10}
-              fill="#475569"
+              fill="var(--color-ink-dim)"
             >
               {item.label}
             </text>
