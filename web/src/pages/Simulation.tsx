@@ -53,10 +53,7 @@ export function Simulation({
 
   return (
     <div className="space-y-4">
-      <Panel
-        title="Simulation setup"
-        subtitle="EnergyPlus runs a free floating case for comfort and a conditioned case for remaining heating demand, then eight corner runs for the uncertainty band and one run of the reference design."
-      >
+      <Panel title="Simulation Status">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Stat
             label="Run period"
@@ -66,7 +63,6 @@ export function Simulation({
           <Stat
             label="Per surface output"
             value={`${store.surfacePeriod.start} → ${store.surfacePeriod.end}`}
-            note="a representative window, not the whole period"
           />
           <Stat
             label="Solver"
@@ -84,10 +80,9 @@ export function Simulation({
       </Panel>
 
       <Panel
-        title="The geometry that was simulated"
-        subtitle="Parametric, not a render. It rebuilds from your inputs, and the face names are the simulator's surface identifiers, so a painted value sits on the surface it belongs to."
+        title="Parametric Geometry"
         right={
-          <div className="flex gap-1">
+          <div className="flex gap-1.5 p-1 bg-slate-100/80 rounded-xl shadow-inner">
             {(["construction", "surface_temperature", "incident_solar"] as const).map(
               (mode) => (
                 <button
@@ -95,10 +90,10 @@ export function Simulation({
                   type="button"
                   onClick={() => store.setDisplayMode(mode)}
                   disabled={mode !== "construction" && !surfaces}
-                  className={`rounded-md border px-2.5 py-1 text-[11px] transition ${
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-300 ${
                     store.displayMode === mode
-                      ? "border-[var(--color-solar)] bg-[var(--color-solar)] text-[#0b1220]"
-                      : "border-[var(--color-line)] text-[var(--color-ink-dim)] disabled:opacity-40"
+                      ? "bg-white text-[var(--color-solar)] shadow-sm"
+                      : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50 disabled:opacity-40"
                   }`}
                 >
                   {mode === "construction"
@@ -114,7 +109,7 @@ export function Simulation({
       >
         <Tabs tabs={VIEWS} active={view} onChange={setView} />
 
-        <div className="mt-3">
+        <div className="mt-4">
           {!geometry ? (
             <Loading label="building geometry…" />
           ) : view === "3d view" ? (
@@ -130,24 +125,24 @@ export function Simulation({
               onHourChange={store.setHourIndex}
             />
           ) : view === "plan view" ? (
-            <PlanView
+             <PlanView
               geometry={geometry}
               surfaces={surfaces}
               hourIndex={index}
               mode={store.displayMode}
             />
           ) : view === "sections" ? (
-            <div className="space-y-2">
-              <div className="flex gap-1">
+            <div className="space-y-4">
+              <div className="flex gap-2">
                 {(["north-south", "east-west"] as const).map((item) => (
                   <button
                     key={item}
                     type="button"
                     onClick={() => setSectionAxis(item)}
-                    className={`rounded-md border px-2.5 py-1 text-[11px] ${
+                    className={`rounded-lg border px-4 py-1.5 text-xs font-medium transition-all focus-visible:ring-2 focus-visible:ring-[var(--color-solar)] focus:outline-none ${
                       sectionAxis === item
-                        ? "border-[var(--color-solar)] text-[var(--color-solar)]"
-                        : "border-[var(--color-line)] text-[var(--color-ink-dim)]"
+                        ? "border-transparent bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200"
+                        : "border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
                     }`}
                   >
                     Section {item === "north-south" ? "A–A" : "B–B"} ({item})
@@ -168,16 +163,17 @@ export function Simulation({
         </div>
 
         {view !== "3d view" && hours.length > 0 && (
-          <div className="mt-3 flex items-center gap-3">
+          <div className="mt-5 flex items-center gap-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
             <input
               type="range"
+              aria-label="Hour index"
               min={0}
               max={hours.length - 1}
               value={index}
               onChange={(event) => store.setHourIndex(Number(event.target.value))}
-              className="flex-1"
+              className="flex-1 cursor-pointer"
             />
-            <span className="tnum w-40 text-right text-xs text-[var(--color-ink-dim)]">
+            <span className="tnum w-40 text-right text-xs font-medium text-slate-600 bg-white px-3 py-1.5 rounded-lg shadow-sm border border-slate-200">
               {hours[index]?.replace("T", " ")}
             </span>
           </div>
@@ -185,22 +181,19 @@ export function Simulation({
       </Panel>
 
       {simulation && simulation.warnings.length > 0 && (
-        <Panel
-          title="What the simulation reported about itself"
-          subtitle="Passed straight up from the EnergyPlus error file. A tool that reports its own problems is more credible than one that hides them."
-        >
+        <Panel title="Solver Warnings">
           <Warnings warnings={simulation.warnings} />
         </Panel>
       )}
 
-      <div className="flex justify-end">
+      <div className="flex justify-end pt-2">
         <button
           type="button"
           onClick={() => store.setStep("Results")}
           disabled={!simulation}
-          className="rounded-md bg-[var(--color-solar)] px-4 py-2 text-sm font-medium text-[#0b1220] disabled:opacity-40"
+          className="rounded-full bg-gradient-to-r from-[var(--color-solar)] to-indigo-500 px-8 py-3 text-[15px] font-semibold text-white transition-all hover:brightness-110 active:scale-95 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--color-solar)] focus:outline-none shadow-md hover:shadow-lg shadow-indigo-500/25 disabled:opacity-40 disabled:pointer-events-none disabled:shadow-none flex items-center gap-2"
         >
-          See the results →
+          See the results <span className="text-lg leading-none">→</span>
         </button>
       </div>
     </div>

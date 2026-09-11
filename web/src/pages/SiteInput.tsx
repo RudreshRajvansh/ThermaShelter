@@ -105,10 +105,7 @@ export function SiteInput({ meta }: { meta: MetaResponse | undefined }) {
 
   return (
     <div className="space-y-4">
-      <Panel
-        title="Tier one — six fields and a button"
-        subtitle="This is the demo path. The location alone resolves the weather file, latitude, altitude, terrain horizon and terrain mesh; you do not enter any of those."
-      >
+      <Panel title="Base Parameters">
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <Field
             label="Location"
@@ -252,10 +249,7 @@ export function SiteInput({ meta }: { meta: MetaResponse | undefined }) {
         )}
       </Panel>
 
-      <Accordion
-        title="Tier two — the specific site"
-        subtitle="for someone who has walked the plot"
-      >
+      <Accordion title="Site Specifics">
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <Field
             label="Plot orientation"
@@ -271,7 +265,7 @@ export function SiteInput({ meta }: { meta: MetaResponse | undefined }) {
                   plan: set(design.plan, { azimuth_deg: Number(event.target.value) }),
                 })
               }
-              className="w-full px-2 py-1.5 text-sm"
+              className="w-full px-3 py-2 text-sm"
             />
           </Field>
 
@@ -287,7 +281,7 @@ export function SiteInput({ meta }: { meta: MetaResponse | undefined }) {
                   plan: set(design.plan, { aspect_ratio: Number(event.target.value) }),
                 })
               }
-              className="w-full px-2 py-1.5 text-sm"
+              className="w-full px-3 py-2 text-sm"
             />
           </Field>
 
@@ -295,7 +289,7 @@ export function SiteInput({ meta }: { meta: MetaResponse | undefined }) {
             <select
               value={design.arrangement}
               disabled
-              className="w-full px-2 py-1.5 text-sm opacity-70"
+              className="w-full px-3 py-2 text-sm opacity-60 cursor-not-allowed bg-gray-100 text-gray-500 border-dashed"
             >
               <option value={design.arrangement}>
                 {design.arrangement.replace(/_/g, " ")}
@@ -321,7 +315,7 @@ export function SiteInput({ meta }: { meta: MetaResponse | undefined }) {
                 );
                 update({ windows: windows as DesignSpec["windows"] });
               }}
-              className="w-full px-2 py-1.5 text-sm"
+              className="w-full px-3 py-2 text-sm"
             >
               <option value="true">Yes, shutters fitted and closed nightly</option>
               <option value="false">No shutters</option>
@@ -336,16 +330,13 @@ export function SiteInput({ meta }: { meta: MetaResponse | undefined }) {
               type="text"
               readOnly
               value="April to October"
-              className="w-full px-2 py-1.5 text-sm opacity-70"
+              className="w-full px-3 py-2 text-sm opacity-70"
             />
           </Field>
         </div>
       </Accordion>
 
-      <Accordion
-        title="Tier three — advanced"
-        subtitle="every property editable, kept out of the way"
-      >
+      <Accordion title="Advanced Configuration">
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="Infiltration" hint="air changes per hour">
             <input
@@ -414,13 +405,13 @@ export function SiteInput({ meta }: { meta: MetaResponse | undefined }) {
         </p>
       </Accordion>
 
-      <div className="flex justify-end">
+      <div className="flex justify-end pt-2">
         <button
           type="button"
           onClick={() => store.setStep("Climate Data")}
-          className="rounded-md bg-[var(--color-solar)] px-4 py-2 text-sm font-medium text-[#0b1220]"
+          className="rounded-full bg-[var(--color-solar)] px-8 py-3 text-[15px] font-semibold text-white transition-all hover:brightness-110 active:scale-95 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--color-solar)] focus:outline-none shadow-md hover:shadow-lg flex items-center gap-2"
         >
-          Use this site →
+          Use this site <span className="text-lg leading-none">→</span>
         </button>
       </div>
     </div>

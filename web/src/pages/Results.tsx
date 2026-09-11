@@ -38,17 +38,15 @@ function Recommendation({ result }: { result: SimulationResult }) {
       : null;
 
   return (
-    <div>
-      <p className="display max-w-4xl text-xl leading-snug">
+    <div className="py-2">
+      <p className="display max-w-4xl text-[28px] font-bold tracking-tight leading-snug text-gray-900">
         {cooling ? (
           <>
             The design peaks at{" "}
             <span className="text-[var(--color-solar)]">
               {num(result.comfort.maximum_daytime_operative_c)} °C
             </span>{" "}
-            through the day. Mass buffers the same large day to night swing as in Ladakh,
-            with the sign flipped: it stores night coolth and releases it through the
-            afternoon.
+            through the day.
           </>
         ) : (
           <>
@@ -60,7 +58,7 @@ function Recommendation({ result }: { result: SimulationResult }) {
             {baselineValue !== null && (
               <>
                 , where current construction holds{" "}
-                <span className="text-[var(--color-diesel)]">
+                <span className="text-rose-500">
                   {num(baselineValue)} °C
                 </span>
               </>
@@ -70,7 +68,7 @@ function Recommendation({ result }: { result: SimulationResult }) {
         )}
       </p>
       {top && (
-        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--color-ink-dim)]">
+        <p className="mt-4 max-w-3xl text-[15px] leading-relaxed text-gray-500 font-medium border-l-[3px] border-[var(--color-solar)] pl-4">
           {top.detail}
         </p>
       )}
@@ -207,10 +205,7 @@ export function Results({
         />
       </div>
 
-      <Panel
-        title="Performance over time"
-        subtitle="Operative temperature, not air temperature. The faint red line is what current construction does under the same weather, the same occupancy and the same period."
-      >
+      <Panel title="Performance over time">
         <PerformanceChart result={simulation} />
       </Panel>
 
@@ -259,90 +254,90 @@ export function Results({
                     : undefined
                 }
               />
-              <div className="sm:col-span-2 lg:col-span-4">
-                <h3 className="mb-2 text-sm font-medium">
-                  Recommendations, generated from the numbers above
+              <div className="sm:col-span-2 lg:col-span-4 mt-4">
+                <h3 className="mb-4 text-[15px] font-bold tracking-tight text-slate-800">
+                  Recommendations based on the simulation
                 </h3>
-                <ol className="space-y-2.5">
+                <div className="space-y-3">
                   {simulation.recommendations.map((item) => (
-                    <li
+                    <div
                       key={item.code}
-                      className="border-l-2 border-[var(--color-line)] pl-3"
+                      className="group rounded-2xl border border-slate-100 bg-slate-50/50 p-4 transition-all hover:bg-slate-50 hover:shadow-sm"
                     >
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-3">
                         <span
-                          className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
+                          className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest ${
                             item.priority === "high"
-                              ? "bg-[var(--color-diesel)]/20 text-[#ffb4ae]"
+                              ? "bg-rose-100 text-rose-700"
                               : item.priority === "medium"
-                                ? "bg-[var(--color-solar)]/15 text-[var(--color-solar)]"
-                                : "bg-[var(--color-line)] text-[var(--color-ink-faint)]"
+                                ? "bg-amber-100 text-amber-700"
+                                : "bg-slate-200/50 text-slate-600"
                           }`}
                         >
                           {item.priority}
                         </span>
-                        <span className="text-sm font-medium">{item.title}</span>
+                        <span className="text-[15px] font-semibold text-slate-800">{item.title}</span>
                       </div>
-                      <p className="mt-1 text-xs leading-relaxed text-[var(--color-ink-dim)]">
+                      <p className="mt-2 pl-[4.5rem] text-sm leading-relaxed text-slate-600">
                         {item.detail}
                       </p>
-                      <p className="mt-1 font-mono text-[10px] text-[var(--color-ink-faint)]">
+                      <p className="mt-1.5 pl-[4.5rem] font-mono text-[11px] text-slate-400">
                         {Object.entries(item.triggered_by)
                           .map(([key, value]) => `${key}=${num(value as number, 3)}`)
                           .join("  ")}
                       </p>
-                    </li>
+                    </div>
                   ))}
-                </ol>
+                </div>
               </div>
             </div>
           )}
 
           {tab === "materials" && design && (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="text-[var(--color-ink-faint)]">
+              <table className="w-full text-left text-sm">
+                <thead className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-200">
                   <tr>
-                    <th className="py-1 pr-3 font-medium">Material</th>
-                    <th className="py-1 pr-3 text-right font-medium">k (W/mK)</th>
-                    <th className="py-1 pr-3 text-right font-medium">ρ (kg/m³)</th>
-                    <th className="py-1 pr-3 text-right font-medium">cost (₹/m³)</th>
-                    <th className="py-1 pr-3 font-medium">local</th>
-                    <th className="py-1 pr-3 font-medium">skill</th>
-                    <th className="py-1 font-medium">source</th>
+                    <th className="py-3 pr-3 font-semibold">Material</th>
+                    <th className="py-3 pr-3 text-right font-semibold">k (W/mK)</th>
+                    <th className="py-3 pr-3 text-right font-semibold">ρ (kg/m³)</th>
+                    <th className="py-3 pr-3 text-right font-semibold">cost (₹/m³)</th>
+                    <th className="py-3 pr-3 font-semibold">local</th>
+                    <th className="py-3 pr-3 font-semibold">skill</th>
+                    <th className="py-3 font-semibold">source</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-slate-100">
                   {(materials.data ?? []).map((item) => (
-                    <tr key={item.id} className="border-t border-[var(--color-line-soft)]">
-                      <td className="py-1.5 pr-3">
-                        <span className="flex items-center gap-2">
+                    <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="py-2.5 pr-3">
+                        <span className="flex items-center gap-2 font-medium text-slate-800">
                           <span
-                            className="inline-block h-2.5 w-2.5 rounded-sm"
+                            className="inline-block h-3 w-3 rounded-full shadow-sm"
                             style={{ background: item.appearance.colour }}
                           />
                           {item.name}
                         </span>
                       </td>
-                      <td className="tnum py-1.5 pr-3 text-right">
+                      <td className="tnum py-2.5 pr-3 text-right text-slate-600">
                         {num(item.conductivity_w_mk, 3)}
                       </td>
-                      <td className="tnum py-1.5 pr-3 text-right">
+                      <td className="tnum py-2.5 pr-3 text-right text-slate-600">
                         {num(item.density_kg_m3, 0)}
                       </td>
-                      <td className="tnum py-1.5 pr-3 text-right">
+                      <td className="tnum py-2.5 pr-3 text-right text-slate-600">
                         {num(item.cost_inr_m3, 0)}
                       </td>
-                      <td className="py-1.5 pr-3">
+                      <td className="py-2.5 pr-3 text-slate-600">
                         {item.locally_available ? "yes" : `×${item.transport_multiplier}`}
                       </td>
-                      <td className="py-1.5 pr-3">{item.mason_skill}</td>
-                      <td className="py-1.5 text-[var(--color-ink-faint)]">
+                      <td className="py-2.5 pr-3 text-slate-600">{item.mason_skill}</td>
+                      <td className="py-2.5 text-slate-500 text-xs">
                         <span
-                          className={`mr-1.5 rounded px-1 py-0.5 text-[10px] ${
+                          className={`mr-2 inline-block rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${
                             item.source.status === "verified"
-                              ? "bg-[var(--color-good)]/20 text-[var(--color-good)]"
-                              : "bg-[var(--color-solar)]/15 text-[var(--color-solar)]"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-amber-100 text-amber-700"
                           }`}
                         >
                           {item.source.status}
@@ -359,18 +354,18 @@ export function Results({
           {tab === "heat flow" && (
             <div className="space-y-2">
               {lossPaths.map(([label, value]) => (
-                <div key={label} className="flex items-center gap-3 text-xs">
-                  <span className="w-44 shrink-0 text-[var(--color-ink-dim)]">{label}</span>
-                  <span className="h-3 flex-1 overflow-hidden rounded bg-[var(--color-night)]">
+                <div key={label} className="grid grid-cols-[1fr_2fr_auto_auto] sm:grid-cols-[11rem_1fr_4rem_5rem] items-center gap-3 text-xs">
+                  <span className="text-[var(--color-ink-dim)] truncate" title={label}>{label}</span>
+                  <span className="h-3 overflow-hidden rounded bg-[var(--color-night)]">
                     <span
-                      className="block h-full rounded bg-[var(--color-cold)]"
+                      className="block h-full rounded bg-[var(--color-cold)] transition-all duration-1000 ease-out"
                       style={{ width: `${(value / lossTotal) * 100}%` }}
                     />
                   </span>
-                  <span className="tnum w-16 text-right">
+                  <span className="tnum text-right">
                     {num((value / lossTotal) * 100, 1)} %
                   </span>
-                  <span className="tnum w-20 text-right text-[var(--color-ink-faint)]">
+                  <span className="tnum text-right text-[var(--color-ink-faint)]">
                     {num(value, 0)} kWh
                   </span>
                 </div>
@@ -432,36 +427,36 @@ export function Results({
                     {num(cfd.data.outdoor_air_temperature_c)} °C, volume{" "}
                     {num(cfd.data.zone_volume_m3)} m³.
                   </div>
-                  <table className="w-full text-left text-xs">
-                    <thead className="text-[var(--color-ink-faint)]">
+                  <table className="w-full text-left text-sm mt-4">
+                    <thead className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-200">
                       <tr>
-                        <th className="py-1 pr-3 font-medium">Surface</th>
-                        <th className="py-1 pr-3 text-right font-medium">Inside face °C</th>
-                        <th className="py-1 pr-3 text-right font-medium">Area m²</th>
-                        <th className="py-1 text-right font-medium">Emissivity</th>
+                        <th className="py-3 pr-3 font-semibold">Surface</th>
+                        <th className="py-3 pr-3 text-right font-semibold">Inside face °C</th>
+                        <th className="py-3 pr-3 text-right font-semibold">Area m²</th>
+                        <th className="py-3 text-right font-semibold">Emissivity</th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-slate-100">
                       {cfd.data.surfaces.map((surface) => (
                         <tr
                           key={surface.name}
-                          className="border-t border-[var(--color-line-soft)]"
+                          className="hover:bg-slate-50/50 transition-colors"
                         >
-                          <td className="py-1.5 pr-3 font-mono">{surface.name}</td>
-                          <td className="tnum py-1.5 pr-3 text-right">
+                          <td className="py-2.5 pr-3 font-mono text-[13px] text-slate-700">{surface.name}</td>
+                          <td className="tnum py-2.5 pr-3 text-right font-medium text-slate-800">
                             {num(surface.inside_face_temperature_c)}
                           </td>
-                          <td className="tnum py-1.5 pr-3 text-right">
+                          <td className="tnum py-2.5 pr-3 text-right text-slate-600">
                             {num(surface.area_m2, 2)}
                           </td>
-                          <td className="tnum py-1.5 text-right">
+                          <td className="tnum py-2.5 text-right text-slate-600">
                             {num(surface.emissivity, 2)}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  <ul className="space-y-1 text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
+                  <ul className="space-y-1 text-xs leading-relaxed text-[var(--color-ink-faint)]">
                     {cfd.data.notes.map((note, index) => (
                       <li key={index}>· {note}</li>
                     ))}

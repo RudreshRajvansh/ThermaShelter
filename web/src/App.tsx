@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { api, type DesignSpec } from "./lib/api";
 import { activeDesign, useStore } from "./lib/store";
@@ -125,14 +126,18 @@ export default function App() {
         {blocking.length > 0 && <Warnings warnings={blocking} />}
 
         {site && (
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-[var(--color-line)] bg-[var(--color-night-2)]/60 px-3 py-2 text-[11px] text-[var(--color-ink-dim)]">
+          <motion.div 
+            initial={{ opacity: 0, y: -5 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-[var(--color-line)] bg-white/60 px-4 py-2.5 text-[11px] font-medium text-[var(--color-ink-dim)] shadow-sm backdrop-blur-sm"
+          >
             <span>
-              <span className="text-[var(--color-ink)]">{site.name}</span> ·{" "}
+              <span className="text-[var(--color-ink)] font-semibold">{site.name}</span> ·{" "}
               {num(site.elevation_m, 0)} m · {site.climate_objective.replace(/_/g, " ")}
             </span>
             <span>
               leading with{" "}
-              <span className="text-[var(--color-solar)]">
+              <span className="text-[var(--color-solar)] font-semibold">
                 {site.headline_metric.replace(/_/g, " ")}
               </span>
             </span>
@@ -140,7 +145,7 @@ export default function App() {
               simulated {store.period.start} → {store.period.end}
             </span>
             {store.overrides && (
-              <span className="rounded bg-[var(--color-solar)]/15 px-1.5 py-0.5 text-[var(--color-solar)]">
+              <span className="rounded-md bg-[var(--color-solar)]/10 px-2 py-0.5 text-[var(--color-solar)] font-semibold border border-[var(--color-solar)]/20">
                 edited design
               </span>
             )}
@@ -151,31 +156,42 @@ export default function App() {
                 stored runs
               </span>
             )}
-          </div>
+          </motion.div>
         )}
 
-        {store.step === "Site Input" && <SiteInput meta={meta.data} />}
-        {store.step === "Climate Data" && <ClimateData />}
-        {store.step === "Design Parameters" && <DesignParameters />}
-        {store.step === "Simulation" && (
-          <Simulation
-            geometry={geometry.data}
-            simulation={simulation.data}
-            simulating={simulation.isPending}
-            error={simulation.error ?? geometry.error}
-          />
-        )}
-        {store.step === "Results" && (
-          <Results
-            simulation={simulation.data}
-            simulating={simulation.isPending}
-            error={simulation.error}
-          />
-        )}
-        {store.step === "Compare Designs" && <Compare />}
-        {store.step === "Reports" && (
-          <Reports simulation={simulation.data} meta={meta.data} />
-        )}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={store.step}
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -15 }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+            className="w-full"
+          >
+            {store.step === "Site Input" && <SiteInput meta={meta.data} />}
+            {store.step === "Climate Data" && <ClimateData />}
+            {store.step === "Design Parameters" && <DesignParameters />}
+            {store.step === "Simulation" && (
+              <Simulation
+                geometry={geometry.data}
+                simulation={simulation.data}
+                simulating={simulation.isPending}
+                error={simulation.error ?? geometry.error}
+              />
+            )}
+            {store.step === "Results" && (
+              <Results
+                simulation={simulation.data}
+                simulating={simulation.isPending}
+                error={simulation.error}
+              />
+            )}
+            {store.step === "Compare Designs" && <Compare />}
+            {store.step === "Reports" && (
+              <Reports simulation={simulation.data} meta={meta.data} />
+            )}
+          </motion.div>
+        </AnimatePresence>
       </main>
     </div>
   );
