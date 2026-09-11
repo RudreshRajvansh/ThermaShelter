@@ -6,11 +6,18 @@ import numpy as np
 import pytest
 
 from cfd_fixtures import closed_room_export
+from pydantic import ValidationError
+
 from shelter_engine.ansys import (ChunkRecord, FluentOptions, build_room_mesh,
-                                  cell_volumes, find_ansys_root, judge_convergence,
-                                  match_zone, parse_residuals, run_fluent,
-                                  wall_heat_from_report)
+                                  cell_volumes, find_ansys_root, judge_average,
+                                  judge_convergence, match_zone, parse_residuals,
+                                  run_fluent, wall_heat_from_report)
 from shelter_engine.errors import ConfigurationError, ResultsUnavailable
+from shelter_engine.schema import CFDSolverRecord
+
+TRANSIENT = FluentOptions(time_step_s=2.0, sample_every_steps=5, spinup_s=60.0,
+                          average_window_samples=3, average_drift_tolerance_k=0.05,
+                          max_flow_time_s=600.0)
 
 OPTIONS = FluentOptions(chunk_iterations=50, min_iterations=150, stable_chunks=3,
                         drift_tolerance_k=0.02, band_tolerance_k=0.1)
@@ -71,10 +78,60 @@ def test_without_a_heat_report_convergence_says_the_balance_was_not_evaluated():
     assert converged and "could not be evaluated" in basis
 
 
+SWINGING = [7.9, 7.5, 8.2, 7.7, 8.0, 7.6, 8.1, 7.8, 7.7, 8.1, 7.6, 7.9]
+
+
+def test_a_swinging_flow_whose_average_holds_and_balances_converges_in_time():
+    samples = history(SWINGING[-6:], heat=-490.0)
+    converged, basis = judge_average(samples, 496.1, TRANSIENT)
+    assert converged
+    assert "time averaged air temperature drifted" in basis and "closed" in basis
+
+
+def test_a_time_average_that_still_drifts_does_not_converge():
+    samples = history([7.0, 7.1, 7.2, 7.4, 7.5, 7.6], heat=-490.0)
+    converged, basis = judge_average(samples, 496.1, TRANSIENT)
+    assert not converged and "still drifts" in basis
+
+
+def test_a_time_average_that_does_not_balance_does_not_converge():
+    samples = history(SWINGING[-6:], heat=-120.0)
+    converged, basis = judge_average(samples, 496.1, TRANSIENT)
+    assert not converged and "unbalanced" in basis
+
+
+def test_a_time_average_needs_two_full_windows_and_every_heat_sample():
+    assert not judge_average(history(SWINGING[-5:], heat=-490.0), 496.1, TRANSIENT)[0]
+    samples = history(SWINGING[-6:], heat=-490.0)
+    samples[0] = ChunkRecord(samples[0].iteration, samples[0].mean_air_c, None)
+    converged, basis = judge_average(samples, 496.1, TRANSIENT)
+    assert converged and "could not be evaluated" in basis
+    nan = history([7.9, float("nan"), 8.0, 7.8, 7.9, 8.0], heat=-490.0)
+    assert not judge_average(nan, 496.1, TRANSIENT)[0]
+
+
+def test_a_solver_record_carries_its_averaging_with_its_time_step():
+    base = dict(solver="ANSYS Fluent", version="2026 R1", turbulence_model="k-omega SST",
+                buoyancy_model="full buoyancy", radiation_model="none",
+                operating_pressure_pa=67000.0, cell_count=10, iterations=5,
+                converged=True)
+    assert CFDSolverRecord(**base).averaging_s is None
+    assert CFDSolverRecord(**base, time_step_s=2.0, averaging_s=240.0).averaging_s == 240.0
+    with pytest.raises(ValidationError):
+        CFDSolverRecord(**base, averaging_s=240.0)
+    with pytest.raises(ValidationError):
+        CFDSolverRecord(**base, time_step_s=0.0, averaging_s=240.0)
+
+
 @pytest.mark.parametrize("kwargs", [dict(processor_count=0), dict(chunk_iterations=0),
                                     dict(max_iterations=10, chunk_iterations=50),
                                     dict(min_iterations=5000), dict(stable_chunks=1),
-                                    dict(drift_tolerance_k=0.0), dict(band_tolerance_k=0.0)])
+                                    dict(drift_tolerance_k=0.0), dict(band_tolerance_k=0.0),
+                                    dict(time_step_s=0.0), dict(iterations_per_step=0),
+                                    dict(sample_every_steps=0), dict(spinup_s=-1.0),
+                                    dict(average_window_samples=1),
+                                    dict(average_drift_tolerance_k=0.0),
+                                    dict(max_flow_time_s=100.0)])
 def test_fluent_options_refuse_nonsense(kwargs):
     with pytest.raises(ConfigurationError):
         FluentOptions(**kwargs)

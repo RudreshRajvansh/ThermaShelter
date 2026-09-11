@@ -1307,6 +1307,15 @@ class CFDSolverRecord(Frozen):
     iterations: int = Field(ge=0)
     converged: bool
     residuals: dict[str, float] = Field(default_factory=dict)
+    time_step_s: float | None = Field(default=None, gt=0.0)
+    averaging_s: float | None = Field(default=None, gt=0.0)
+
+    @model_validator(mode="after")
+    def _averaging_needs_a_step(self) -> "CFDSolverRecord":
+        if (self.time_step_s is None) != (self.averaging_s is None):
+            raise ValueError("a time averaged field records both its time step and its "
+                             "averaging period")
+        return self
 
 
 class CFDField(Frozen):

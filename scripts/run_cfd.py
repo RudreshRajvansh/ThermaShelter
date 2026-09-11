@@ -23,7 +23,10 @@ def main() -> int:
     parser.add_argument("--design", help="design fingerprint, or its first characters")
     parser.add_argument("--label", help="coldest_night or peak_solar")
     parser.add_argument("--processors", type=int, default=4)
-    parser.add_argument("--max-iterations", type=int, default=2000)
+    parser.add_argument("--max-iterations", type=int, default=1000,
+                        help="steady iterations before switching to a time averaged run")
+    parser.add_argument("--max-flow-time", type=float, default=1800.0,
+                        help="seconds of simulated flow allowed for a time averaged run")
     parser.add_argument("--force", action="store_true",
                         help="solve again even when a current field exists")
     args = parser.parse_args()
@@ -40,7 +43,8 @@ def main() -> int:
         return 1
 
     options = FluentOptions(processor_count=args.processors,
-                            max_iterations=args.max_iterations)
+                            max_iterations=args.max_iterations,
+                            max_flow_time_s=args.max_flow_time)
     failures = 0
     for path in exports:
         export = load_cfd_export(path)

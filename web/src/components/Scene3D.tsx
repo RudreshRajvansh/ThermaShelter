@@ -1617,8 +1617,11 @@ export function Scene3D({
                 {num(activeField.energyplus_zone_air_c)} °C EnergyPlus reported for the room as
                 one well mixed volume. {activeField.solver.turbulence_model},{" "}
                 {activeField.solver.cell_count.toLocaleString()} cells. Each voxel is the
-                nearest solver cell and empty voxels lie outside the air. This is one solved
-                hour, so the timeline does not move it.
+                nearest solver cell and empty voxels lie outside the air.{" "}
+                {activeField.solver.averaging_s != null
+                  ? `The air at this hour never settles, so this is its average over ${num(activeField.solver.averaging_s, 0)} s of simulated flow.`
+                  : "This is a steady solution for that hour."}{" "}
+                The timeline does not move it.
               </p>
             </>
           ) : null}

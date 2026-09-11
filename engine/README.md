@@ -335,6 +335,18 @@ EnergyPlus ranks designs and gives one air temperature per room. For the chosen 
    the air heat source to 5 percent. That air never sits perfectly still, so the test is
    for a stationary state rather than a frozen one. The basis is written into the field's
    notes, and an unconverged field says so.
+6. Some hours never settle. At peak sun the warm air arriving from a sunspace keeps the
+   room moving, and a steady solver swings without closing the heat balance. After 1000
+   steady iterations the driver switches to a transient run from where it stopped: 2 s
+   steps, 10 iterations each, 60 s of spin up, then a sample of every cell every 10 s. It
+   stops when the time averaged air temperature drifts less than 0.05 K between two 120 s
+   windows and the time averaged wall heat balances the air heat source, and the stored
+   field is the average over those 240 s. The record carries `time_step_s` and
+   `averaging_s`, and the interface says the field is a time average. A transient run costs
+   roughly five seconds of computer time per second of simulated flow on four cores.
+
+Every solve starts from the air at the EnergyPlus zone air temperature, which puts it close
+to the heat balance EnergyPlus already found.
 
 Install the extra and run it from the repository root once Fluent is installed:
 

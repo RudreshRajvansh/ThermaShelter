@@ -851,6 +851,10 @@ export interface components {
             residuals?: {
                 [key: string]: number;
             };
+            /** Time Step S */
+            time_step_s?: number | null;
+            /** Averaging S */
+            averaging_s?: number | null;
         };
         /** ClimateMonth */
         ClimateMonth: {

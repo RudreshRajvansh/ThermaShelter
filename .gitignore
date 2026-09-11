@@ -17,4 +17,5 @@ engine/**/*.egg-info/
 .pytest_cache/
 build/layer0/
 build/cfd_runs/
+pyfluent_watchdog.err
 **/__pycache__/

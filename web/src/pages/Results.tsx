@@ -465,7 +465,10 @@ export function Results({
                       {field.solver.turbulence_model} · {field.solver.buoyancy_model} · radiation{" "}
                       {field.solver.radiation_model} · {field.solver.cell_count.toLocaleString()}{" "}
                       cells · {field.solver.iterations} iterations · operating pressure{" "}
-                      {num(field.solver.operating_pressure_pa, 0)} Pa
+                      {num(field.solver.operating_pressure_pa, 0)} Pa ·{" "}
+                      {field.solver.averaging_s != null
+                        ? `time averaged over ${num(field.solver.averaging_s, 0)} s of flow at ${num(field.solver.time_step_s ?? null, 1)} s steps`
+                        : "steady solution"}
                     </div>
                     <ul className="space-y-0.5 text-[11px] text-[var(--color-ink-faint)]">
                       {field.notes.map((note, index) => (

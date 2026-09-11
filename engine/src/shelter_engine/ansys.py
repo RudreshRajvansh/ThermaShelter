@@ -4,6 +4,7 @@ import math
 import os
 import re
 import time
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
@@ -341,12 +342,20 @@ class FluentOptions:
     processor_count: int = 4
     chunk_iterations: int = 50
     min_iterations: int = 300
-    max_iterations: int = 2000
+    max_iterations: int = 1000
     stable_chunks: int = 4
     drift_tolerance_k: float = 0.02
     band_tolerance_k: float = 0.1
     heat_balance_fraction: float = 0.05
     heat_balance_floor_w: float = 10.0
+    transient_fallback: bool = True
+    time_step_s: float = 2.0
+    iterations_per_step: int = 10
+    sample_every_steps: int = 5
+    spinup_s: float = 60.0
+    average_window_samples: int = 12
+    average_drift_tolerance_k: float = 0.05
+    max_flow_time_s: float = 1800.0
     start_timeout_s: int = 600
     first_cell_m: float = FIRST_CELL_M
     largest_cell_m: float = LARGEST_CELL_M
@@ -363,8 +372,19 @@ class FluentOptions:
         if self.stable_chunks < 2:
             raise ConfigurationError("stability needs at least two monitored chunks")
         if self.drift_tolerance_k <= 0.0 or self.band_tolerance_k <= 0.0 \
-                or self.heat_balance_fraction <= 0.0 or self.heat_balance_floor_w < 0.0:
+                or self.heat_balance_fraction <= 0.0 or self.heat_balance_floor_w < 0.0 \
+                or self.average_drift_tolerance_k <= 0.0:
             raise ConfigurationError("convergence tolerances must be positive")
+        if self.time_step_s <= 0.0 or self.iterations_per_step < 1 \
+                or self.sample_every_steps < 1 or self.spinup_s < 0.0 \
+                or self.average_window_samples < 2:
+            raise ConfigurationError("transient steps, samples and windows must be positive")
+        needed = self.spinup_s + 2 * self.average_window_samples \
+            * self.sample_every_steps * self.time_step_s
+        if self.max_flow_time_s < needed:
+            raise ConfigurationError(
+                f"max_flow_time_s must cover the spin up and two averaging windows, "
+                f"{needed:g} s")
 
 
 @dataclass(frozen=True)
@@ -413,6 +433,39 @@ def judge_convergence(history: Sequence[ChunkRecord], net_source_w: float | None
                            f"source ({net_source_w:.1f} W) leave {imbalance:.1f} W "
                            "unbalanced")
         return True, f"{stability}, and the air heat balance closed to {imbalance:.1f} W"
+    return True, f"{stability}; the wall heat balance could not be evaluated"
+
+
+def judge_average(samples: Sequence[ChunkRecord], net_source_w: float | None,
+                  options: FluentOptions) -> tuple[bool, str]:
+    count = options.average_window_samples
+    window_s = count * options.sample_every_steps * options.time_step_s
+    if len(samples) < 2 * count:
+        return False, (f"fewer than two {window_s:g} s averaging windows were sampled")
+    recent = samples[-count:]
+    earlier = samples[-2 * count:-count]
+    temperatures = [item.mean_air_c for item in earlier + recent]
+    if not all(math.isfinite(value) for value in temperatures):
+        return False, "the mean air temperature is not finite"
+    drift = abs(float(np.mean(temperatures[count:])) - float(np.mean(temperatures[:count])))
+    if drift > options.average_drift_tolerance_k:
+        return False, (f"the time averaged air temperature still drifts {drift:.3f} K "
+                       f"between the last two {window_s:g} s windows")
+    stability = (f"the time averaged air temperature drifted {drift:.3f} K between two "
+                 f"{window_s:g} s windows")
+    heats = [item.wall_heat_w for item in earlier + recent
+             if item.wall_heat_w is not None and math.isfinite(item.wall_heat_w)]
+    if net_source_w is not None and len(heats) == 2 * count:
+        wall_heat = float(np.mean(heats))
+        imbalance = wall_heat + net_source_w
+        allowed = max(options.heat_balance_floor_w,
+                      options.heat_balance_fraction * abs(net_source_w))
+        if abs(imbalance) > allowed:
+            return False, (f"time averaged heat through the walls ({wall_heat:.1f} W) and "
+                           f"the air heat source ({net_source_w:.1f} W) leave "
+                           f"{imbalance:.1f} W unbalanced")
+        return True, (f"{stability}, and the time averaged air heat balance closed to "
+                      f"{imbalance:.1f} W")
     return True, f"{stability}; the wall heat balance could not be evaluated"
 
 
@@ -628,6 +681,21 @@ def _apply_physics(settings, export: CFDExport, mesh: RoomMesh,
                                          "value": net_source_w / mesh.volume_m3}]})
 
 
+def _initialise(settings, air_k: float) -> str:
+    initialization = settings.solution.initialization
+    try:
+        initialization.defaults["temperature"] = air_k
+        initialization.standard_initialize()
+        return "the air at the EnergyPlus zone air temperature"
+    except Exception:
+        initialization.hybrid_initialize()
+        return "Fluent's hybrid initialisation"
+
+
+def _describe_heat(value: float | None) -> str:
+    return "n/a" if value is None else f"{value:.1f} W"
+
+
 def _version(solver) -> str:
     try:
         text = str(solver.get_fluent_version())
@@ -709,10 +777,17 @@ def run_fluent(export: CFDExport, workdir: str | Path,
                 "surfaces")
 
         _apply_physics(settings, export, mesh, assignment, fluid, net_source_w)
-        settings.solution.initialization.hybrid_initialize()
+        initialisation = _initialise(settings, export.zone_air_temperature_c + KELVIN)
         centroids = _cell_data(solver, fluid, "SV_CENTROID").reshape(-1, 3)
         volumes = cell_volumes(mesh, centroids)
         report = _wall_heat_report(settings, walls)
+
+        def volume_mean(values: np.ndarray) -> float:
+            return float(np.dot(values, volumes) / volumes.sum())
+
+        def speed_now() -> np.ndarray:
+            return np.sqrt(sum(_cell_data(solver, fluid, name) ** 2
+                               for name in ("SV_U", "SV_V", "SV_W")))
 
         history: list[ChunkRecord] = []
         converged, basis = False, "no iterations were run"
@@ -720,18 +795,57 @@ def run_fluent(export: CFDExport, workdir: str | Path,
         while iteration < options.max_iterations:
             settings.solution.run_calculation.iterate(iter_count=options.chunk_iterations)
             iteration += options.chunk_iterations
-            temperature = _cell_data(solver, fluid, "SV_T")
-            mean = float(np.dot(temperature, volumes) / volumes.sum()) - KELVIN
+            mean = volume_mean(_cell_data(solver, fluid, "SV_T")) - KELVIN
             history.append(ChunkRecord(iteration, mean, _wall_heat(settings, report)))
             say(f"{stem}: iteration {iteration}, mean air {mean:.3f} C, wall heat "
-                f"{history[-1].wall_heat_w if history[-1].wall_heat_w is not None else 'n/a'}")
+                f"{_describe_heat(history[-1].wall_heat_w)}")
             converged, basis = judge_convergence(history, net_source_w, options)
             if converged:
                 break
 
-        temperature_c = _cell_data(solver, fluid, "SV_T") - KELVIN
-        speed = np.sqrt(sum(_cell_data(solver, fluid, name) ** 2
-                            for name in ("SV_U", "SV_V", "SV_W")))
+        steady_basis = basis
+        averaging_s: float | None = None
+        sample_count = 0
+        if converged or not options.transient_fallback:
+            temperature_c = _cell_data(solver, fluid, "SV_T") - KELVIN
+            speed = speed_now()
+        else:
+            say(f"{stem}: the steady solution did not settle ({basis}); running in time")
+            settings.setup.general.solver.time = "transient"
+            controls = settings.solution.run_calculation.transient_controls
+            controls.time_step_size = options.time_step_s
+            controls.max_iter_per_time_step = options.iterations_per_step
+            run = settings.solution.run_calculation
+            steps = math.ceil(options.spinup_s / options.time_step_s)
+            if steps:
+                run.dual_time_iterate(time_step_count=steps,
+                                      max_iter_per_step=options.iterations_per_step)
+            limit = math.floor(options.max_flow_time_s / options.time_step_s + 1e-9)
+            buffer: deque[tuple[np.ndarray, np.ndarray]] = deque(
+                maxlen=2 * options.average_window_samples)
+            samples: list[ChunkRecord] = []
+            while steps + options.sample_every_steps <= limit:
+                run.dual_time_iterate(time_step_count=options.sample_every_steps,
+                                      max_iter_per_step=options.iterations_per_step)
+                steps += options.sample_every_steps
+                kelvin = _cell_data(solver, fluid, "SV_T")
+                buffer.append((kelvin, speed_now()))
+                samples.append(ChunkRecord(steps, volume_mean(kelvin) - KELVIN,
+                                           _wall_heat(settings, report)))
+                say(f"{stem}: flow time {steps * options.time_step_s:.0f} s, mean air "
+                    f"{samples[-1].mean_air_c:.3f} C, wall heat "
+                    f"{_describe_heat(samples[-1].wall_heat_w)}")
+                converged, basis = judge_average(samples, net_source_w, options)
+                if converged:
+                    break
+            if not buffer:
+                raise SimulationFailed(
+                    "the transient run produced no samples; raise max_flow_time_s",
+                    run_dir=str(target))
+            sample_count = len(buffer)
+            temperature_c = np.mean([item[0] for item in buffer], axis=0) - KELVIN
+            speed = np.mean([item[1] for item in buffer], axis=0)
+            averaging_s = sample_count * options.sample_every_steps * options.time_step_s
         parsed = parse_residuals(_transcript(target, started_at))
         iterations, residuals = parsed if parsed else (iteration, {})
         version = _version(solver)
@@ -754,10 +868,22 @@ def run_fluent(export: CFDExport, workdir: str | Path,
         buoyancy_model="full buoyancy, incompressible ideal gas at the site pressure",
         radiation_model="none, surfaces held at the EnergyPlus inside face temperatures",
         operating_pressure_pa=float(export.air_pressure_pa), cell_count=mesh.cell_count,
-        iterations=int(iterations), converged=converged, residuals=residuals)
-    notes = (
+        iterations=int(iterations), converged=converged, residuals=residuals,
+        time_step_s=options.time_step_s if averaging_s is not None else None,
+        averaging_s=averaging_s)
+    method = ()
+    if averaging_s is not None:
+        method = (
+            f"The steady solution did not settle ({steady_basis}), so the room was run in "
+            f"time with {options.time_step_s:g} s steps and {options.iterations_per_step} "
+            f"iterations per step after {options.spinup_s:g} s of spin up. This field is the "
+            f"average of {sample_count} samples taken every "
+            f"{options.sample_every_steps * options.time_step_s:g} s over the final "
+            f"{averaging_s:g} s, and the speeds are time averaged speed magnitudes.",)
+    notes = method + (
         "Convergence was judged on the solution rather than on scaled residuals, which "
         f"plateau for air moved only by surface temperature differences: {basis}.",
+        f"The solve started from {initialisation}.",
         f"Volume average air temperature {mean_air_c:.2f} C against the "
         f"{export.zone_air_temperature_c:.2f} C EnergyPlus reported for the room as one "
         "well mixed volume.",
