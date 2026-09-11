@@ -5,7 +5,7 @@ import { Failure, Loading, Panel, Stat, Tabs, Warnings } from "../components/Kit
 import { Scene3D } from "../components/Scene3D";
 import { PlanView, SectionView } from "../components/PlanView";
 import { ConstructionView } from "../components/Construction";
-import { activeDesign, useStore } from "../lib/store";
+import { activeDesign, useStore, type Preview } from "../lib/store";
 import { num } from "../lib/format";
 
 const VIEWS = ["3d view", "plan view", "sections", "construction"] as const;
@@ -17,8 +17,10 @@ export function Simulation({
   simulating,
   error,
   viewportOnly = false,
+  preview = null,
 }: {
   viewportOnly?: boolean;
+  preview?: Preview | null;
   geometry: GeometryPayload | undefined;
   simulation: SimulationResult | undefined;
   simulating: boolean;
@@ -96,11 +98,13 @@ export function Simulation({
           <Scene3D
             immersiveChrome
             geometry={geometry}
-            surfaces={surfaces}
+            surfaces={preview ? null : surfaces}
             sunPath={sunPath.data}
             terrain={terrain.data}
-            airflow={simulation?.airflow}
-            mode={store.displayMode}
+            airflow={preview ? null : simulation?.airflow}
+            designOverride={preview?.design ?? null}
+            badge={preview?.label ?? null}
+            mode={preview ? "construction" : store.displayMode}
             onModeChange={store.setDisplayMode}
             hourIndex={index}
             onHourChange={store.setHourIndex}

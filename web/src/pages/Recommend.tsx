@@ -62,6 +62,9 @@ export function Recommend({ meta }: { meta: MetaResponse | undefined }) {
   const [result, setResult] = useState<ParetoResult | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const timer = useRef<number | null>(null);
+  const pushedRef = useRef<{ hash: string; label: string; design: DesignSpec } | null>(
+    null,
+  );
 
   const uses = useQuery({
     queryKey: ["shelter-uses"],
@@ -112,6 +115,8 @@ export function Recommend({ meta }: { meta: MetaResponse | undefined }) {
       if (!design) throw new Error("no design loaded");
       setResult(null);
       setFailure(null);
+      pushedRef.current = null;
+      store.setPreview(null);
       return api.optimise({
         base_design: design,
         variables: LEVERS,
@@ -158,6 +163,23 @@ export function Recommend({ meta }: { meta: MetaResponse | undefined }) {
       pool.find((point) => point.design_hash === result.knee_hash) ?? pool[0] ?? null
     );
   }, [result]);
+
+  const { setPreview } = store;
+  useEffect(() => {
+    if (!best || !result) return;
+    const minimum = best.metrics?.minimum_overnight_operative_c;
+    const reading =
+      typeof minimum === "number" ? ` · ${num(minimum, 1)} °C overnight` : "";
+    const label = result.complete
+      ? `Recommended · ${describe(best.design)}${reading} · ${result.evaluated} designs simulated`
+      : `Best so far · ${describe(best.design)}${reading} · generation ${result.generation} of ${result.generations_planned}`;
+    const previous = pushedRef.current;
+    if (previous && previous.hash === best.design_hash && previous.label === label) return;
+    const shown =
+      previous && previous.hash === best.design_hash ? previous.design : best.design;
+    pushedRef.current = { hash: best.design_hash, label, design: shown };
+    setPreview({ design: shown, label, hash: best.design_hash });
+  }, [best, result, setPreview]);
 
   const points = (result?.front ?? []).map((point) => ({
     degreeHours: point.objectives.degree_hours_total_kh ?? 0,
@@ -393,7 +415,8 @@ export function Recommend({ meta }: { meta: MetaResponse | undefined }) {
               </div>
               <p className="text-sm text-[var(--color-ink-dim)]">
                 The first generation is running. Results appear here as soon as the
-                first designs finish, and improve while the search continues.
+                first designs finish, and improve while the search continues. The 3D view
+                switches to the best design found so far each time it improves.
               </p>
             </div>
           )}

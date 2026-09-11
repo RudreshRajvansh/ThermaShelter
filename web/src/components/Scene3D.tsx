@@ -149,6 +149,8 @@ export function Scene3D({
   terrain,
   airflow,
   immersiveChrome = false,
+  designOverride = null,
+  badge = null,
   mode,
   onModeChange,
   hourIndex,
@@ -160,15 +162,23 @@ export function Scene3D({
   terrain: TerrainMesh | null | undefined;
   airflow?: AirflowSummary | null;
   immersiveChrome?: boolean;
+  designOverride?: DesignSpec | null;
+  badge?: string | null;
   mode: DisplayMode;
   onModeChange: (mode: DisplayMode) => void;
   hourIndex: number;
   onHourChange: (index: number) => void;
 }) {
   const store = useStore();
-  const design = activeDesign(store);
+  const design = designOverride ?? activeDesign(store);
   const mountRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
+  const cameraRef = useRef<{
+    theta: number;
+    phi: number;
+    distance: number;
+    radius: number;
+  } | null>(null);
   const meshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
   const sunRef = useRef<{
     light: THREE.DirectionalLight;
@@ -584,15 +594,19 @@ export function Scene3D({
       setSky: sky.setSun, fill,
     };
 
-    let theta = Math.PI * 0.78;
-    let phi = Math.PI * 0.435;
-    let distance = buildingRadius * 2.5;
+    const remembered = cameraRef.current;
+    let theta = remembered ? remembered.theta : Math.PI * 0.78;
+    let phi = remembered ? remembered.phi : Math.PI * 0.435;
+    let distance = remembered
+      ? remembered.distance * (buildingRadius / remembered.radius)
+      : buildingRadius * 2.5;
     let dragging = false;
     let engaged = false;
     let lastX = 0;
     let lastY = 0;
 
     const place = () => {
+      cameraRef.current = { theta, phi, distance, radius: buildingRadius };
       camera.position.set(
         distance * Math.sin(phi) * Math.sin(theta),
         distance * Math.sin(phi) * Math.cos(theta),
@@ -834,6 +848,7 @@ export function Scene3D({
         gizmoRef.current = null;
       }
       disposeObject(scene);
+      renderer.forceContextLoss();
       renderer.dispose();
       if (renderer.domElement.parentNode === mount) {
         mount.removeChild(renderer.domElement);
@@ -1332,6 +1347,17 @@ export function Scene3D({
                 : "h-[clamp(420px,62vh,760px)]"
           }`}
         />
+
+        {badge && (
+          <div
+            key={badge}
+            role="status"
+            aria-live="polite"
+            className="badge-flash pointer-events-none absolute bottom-4 left-4 z-10 max-w-[70%] rounded-lg border border-white/50 bg-white/85 px-3 py-2 text-xs font-medium text-[var(--color-ink)] shadow-lg backdrop-blur-md"
+          >
+            {badge}
+          </div>
+        )}
 
         <div className="pointer-events-none absolute inset-0 rounded-lg">
           <span className="absolute left-2 top-2 h-4 w-4 border-l border-t border-[#2f4a63]" />

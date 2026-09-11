@@ -82,6 +82,14 @@ export default function App() {
     staleTime: Infinity,
   });
 
+  const previewGeometry = useQuery({
+    queryKey: ["geometry", store.preview?.design, siteId],
+    queryFn: () => api.geometry(store.preview!.design, siteId),
+    enabled: Boolean(store.preview && siteId),
+    staleTime: Infinity,
+    placeholderData: (previous) => previous,
+  });
+
   const simulation = useQuery({
     queryKey: [
       "simulate",
@@ -185,7 +193,8 @@ export default function App() {
                 <div className="hidden xl:block">
                   <Simulation
                     viewportOnly
-                    geometry={geometry.data}
+                    preview={store.preview}
+                    geometry={store.preview ? previewGeometry.data : geometry.data}
                     simulation={simulation.data}
                     simulating={simulation.isPending}
                     error={simulation.error ?? geometry.error}

@@ -24,6 +24,8 @@ export const SURFACE_SUMMER: Window = { start: "2019-06-12", end: "2019-06-14" }
 
 export type DisplayMode = "construction" | "surface_temperature" | "incident_solar" | "interior_temperature";
 
+export type Preview = { design: DesignSpec; label: string; hash: string };
+
 type State = {
   step: Step;
   setStep: (step: Step) => void;
@@ -53,6 +55,8 @@ type State = {
   comfortModelId: string | null;
   setComfortModelId: (value: string | null) => void;
   setLiveMode: (value: boolean) => void;
+  preview: Preview | null;
+  setPreview: (value: Preview | null) => void;
 };
 
 const Context = createContext<State | null>(null);
@@ -63,6 +67,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [designName, setDesignName] = useState("single_room");
   const [design, setDesign] = useState<DesignSpec | null>(null);
   const [overrides, setOverrides] = useState<DesignSpec | null>(null);
+  const [preview, setPreview] = useState<Preview | null>(null);
   const [designTab, setDesignTab] = useState<DesignTab>("recommend");
   const [evidenceTab, setEvidenceTab] = useState<EvidenceTab>("climate");
   const [displayMode, setDisplayMode] = useState<DisplayMode>("construction");
@@ -77,12 +82,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (next === "Design") setDesignTab(tab as DesignTab);
     if (next === "Evidence") setEvidenceTab(tab as EvidenceTab);
   }, []);
-  const applyOverride = useCallback((next: DesignSpec) => setOverrides(next), []);
+  const applyOverride = useCallback((next: DesignSpec) => {
+    setOverrides(next);
+    setPreview(null);
+  }, []);
   const selectDesign = useCallback((name: string) => {
     setDesignName(name);
     setOverrides(null);
+    setPreview(null);
   }, []);
-  const clearOverride = useCallback(() => setOverrides(null), []);
+  const clearOverride = useCallback(() => {
+    setOverrides(null);
+    setPreview(null);
+  }, []);
 
   const value = useMemo<State>(
     () => ({
@@ -114,6 +126,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       comfortModelId,
       setComfortModelId,
       setLiveMode,
+      preview,
+      setPreview,
     }),
     [
       step,
@@ -132,6 +146,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       cooling,
       liveMode,
       comfortModelId,
+      preview,
     ],
   );
 
