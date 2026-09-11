@@ -2,8 +2,8 @@
 
 ```
 Design the input page of "Entropy Zero", a passive shelter design tool for DRDO.
-Clean, light, professional. Left: input panel (400 px). Right: large 3D preview of the
-shelter that updates as inputs change.
+Clean, light, professional. A single centred form, about 720 px wide. No 3D, no
+results; the output is a separate page.
 
 BASIC (always visible)
 - Location: Leh, Ladakh · 3,256 m
@@ -27,18 +27,9 @@ ADVANCED (collapsed)
 
 SEARCH
 - Search size: 100 designs (≈ 6 min), 300 (≈ 18 min), 500 (≈ 31 min)
-- Button: "Find the best shelter"
-
-LIVE INFO (small card, updates instantly)
-- 14.1 × 6.4 m · 300 m³ · 5 rooms
-- Rooms: Sleeping bay east, Sleeping bay west, Kit store, Ablution, Entry lobby
-- Coldest day −29.4 °C · 8.7 h of winter sun clear of the ridge
-
-3D PREVIEW
-Flat-roofed single-storey barrack with a glazed sunspace on the south, pale plastered
-walls, stone plinth and parapet, in a bare high-altitude valley. Material colours only.
+- Button: "Find the best shelter" (opens the output page)
 
 RULES
 - Do not ask for weather, altitude or material properties.
-- No temperatures, costs or scores on this page. Nothing is simulated yet.
+- No temperatures, costs, scores or 3D on this page.
 ```
