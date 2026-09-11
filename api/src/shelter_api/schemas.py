@@ -5,12 +5,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from shelter_engine.schema import (Assumption, ClimateObjective, DesignSpec,
-                                   DesignVariable, EngineWarning,
+from shelter_engine.schema import (Assumption, CFDExport, CFDField, ClimateObjective,
+                                   DesignSpec, DesignVariable, EngineWarning,
                                    OptimisationConstraints, ParetoResult,
                                    OccupancySpec, PlanSpec, RunOptions,
-                                   RunPeriod, ShelterUse, SourceRef,
-                                   ThermalFieldPayload)
+                                   RunPeriod, ShelterUse, SourceRef)
 
 DEFAULT_START = date(2019, 1, 1)
 DEFAULT_END = date(2019, 1, 31)
@@ -104,26 +103,6 @@ class SurfaceRequest(Body):
     design: DesignSpec
     site_id: str | None = None
     comfort_model_id: str | None = None
-    period: Window = Window()
-    surface_period: Window | None = None
-    timestep_per_hour: int = Field(default=6, ge=1, le=60)
-
-    def to_options(self) -> RunOptions:
-        return RunOptions(
-            period=self.period.to_period(),
-            surface_output_period=(self.surface_period.to_period("surface")
-                                   if self.surface_period else None),
-            timestep_per_hour=self.timestep_per_hour,
-            conditioned_run=False, surface_output=True)
-
-
-class ThermalFieldRequest(Body):
-    design: DesignSpec
-    site_id: str | None = None
-    comfort_model_id: str | None = None
-    hour_index: int = Field(default=0, ge=0)
-    zone: str = "ROOM"
-    resolution: tuple[int, int, int] = (32, 32, 16)
     period: Window = Window()
     surface_period: Window | None = None
     timestep_per_hour: int = Field(default=6, ge=1, le=60)
@@ -233,6 +212,22 @@ class CFDAbsent(Body):
     available: Literal[False] = False
     design_hash: str
     reason: str
+    boundary_labels: list[str] = Field(default_factory=list)
+    rejected: list[str] = Field(default_factory=list)
+
+
+class CFDFieldSet(Body):
+    available: Literal[True] = True
+    design_hash: str
+    fields: list[CFDField] = Field(min_length=1)
+    boundary_labels: list[str] = Field(default_factory=list)
+    rejected: list[str] = Field(default_factory=list)
+
+
+class CFDBoundarySet(Body):
+    design_hash: str
+    exports: list[CFDExport] = Field(min_length=1)
+    rejected: list[str] = Field(default_factory=list)
 
 
 class ValidationEvidence(Body):

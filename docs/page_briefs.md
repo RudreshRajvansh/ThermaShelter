@@ -14,8 +14,9 @@ HARD RULES — a DRDO jury will check these
 1. Nothing on screen may look computed if it was not. Every coloured surface, curve
    and number must come from EnergyPlus output or a cited Layer 0 file.
 2. If a metric was not computed, say so. Never blur it, fake it, or quietly drop it.
-3. "Interior estimate" is interpolated, not solved. It stays visually separate from
-   real solver output and always carries its caption.
+3. "Interior air (CFD)" draws only an ANSYS Fluent field solved for that exact design,
+   with the solver, hour and cell count on screen. With no solved field it says so and
+   draws nothing inside the room; the page never interpolates air temperature itself.
 4. Air exchange arrows are whole-zone flow, not a velocity field. Never draw
    streamlines or particles that imply air movement inside a room.
 5. No composite score out of 100. No PMV. Named metrics against a named baseline.
@@ -90,7 +91,7 @@ Inputs rail
 
 Viewport
 - Painted: Construction / Surface temperature / Incident solar
-- Interior estimate (separate, dashed)
+- Interior air (CFD), separate and dashed, ANSYS Fluent field or an explicit absence
 - Shell: Solid / Wireframe / X-ray · Section cut
 - Overlays: Built detail, Rooms, Air exchange, sun path, compass
 - Render quality: High / Balanced / Plain · colour ramp: Cold to hot / Spectral / Night to sun
@@ -142,9 +143,9 @@ The viewport: 3D / Plan / Section as a top-left segmented control; "what is pain
 (Construction, Surface temperature, Incident solar) as the primary control; shell
 style, overlays, render quality and colour scale in a compact overflow menu; time
 controls and the sun summary (daylight, clear of ridge, lost to valley) as a slim bar
-along the bottom edge; Full screen top-right. "Interior estimate" sits apart from the
-painted-results control, styled as an estimate, with its caption visible whenever it
-is active.
+along the bottom edge; Full screen top-right. "Interior air (CFD)" sits apart from the
+painted-results control, with the solver, solved hour and convergence visible whenever
+it is active, or the reason no field exists.
 
 Apply the HARD RULES.
 ```

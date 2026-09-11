@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import {
   api,
+  isCfdAbsent,
   type AirflowSummary,
+  type CFDAbsent,
+  type CFDField,
+  type CFDFieldSet,
   type GeometryPayload,
   type SunPath,
   type SurfaceResults,
@@ -70,7 +74,7 @@ const MODE_LABEL: Record<DisplayMode, string> = {
   construction: "Construction",
   surface_temperature: "Surface temperature",
   incident_solar: "Incident solar",
-  interior_temperature: "Interior estimate",
+  interior_temperature: "Interior air (CFD)",
 };
 
 const MODE_FIELD: Record<
@@ -236,7 +240,27 @@ export function Scene3D({
     setOpacity: (v: number) => void;
     setClipHeight: (h: number) => void;
   } | null>(null);
-  const [thermalFieldData, setThermalFieldData] = useState<ThermalFieldData | null>(null);
+  const [cfd, setCfd] = useState<CFDFieldSet | CFDAbsent | null>(null);
+  const [cfdError, setCfdError] = useState<string | null>(null);
+  const [cfdLabel, setCfdLabel] = useState<string | null>(null);
+  const activeField = useMemo<CFDField | null>(() => {
+    if (!cfd || isCfdAbsent(cfd)) return null;
+    return cfd.fields.find((item) => item.label === cfdLabel) ?? cfd.fields[0] ?? null;
+  }, [cfd, cfdLabel]);
+  const thermalFieldData = useMemo<ThermalFieldData | null>(
+    () =>
+      activeField
+        ? {
+            dims: activeField.dims as [number, number, number],
+            bounds_min: activeField.bounds_min as [number, number, number],
+            bounds_max: activeField.bounds_max as [number, number, number],
+            values: activeField.temperature_c,
+            min_c: activeField.min_c,
+            max_c: activeField.max_c,
+          }
+        : null,
+    [activeField],
+  );
   const pipelineRef = useRef<Pipeline | null>(null);
   const qualityRef = useRef<Quality>(detectQuality());
   const [quality, setQualityState] = useState<Quality>(qualityRef.current);
@@ -964,26 +988,23 @@ export function Scene3D({
   const painted = mode !== "construction";
   const unit = MODE_UNIT[mode];
 
-  // Fetch thermal field data
   useEffect(() => {
-    if (mode !== "interior_temperature" || !design || !store.period) return;
-    
+    if (mode !== "interior_temperature") return;
     let cancelled = false;
-    
-    api.thermalField({
-      design,
-      site_id: store.siteId,
-      hour_index: safeIndex,
-      period: store.period,
-    }).then((res: any) => {
-      if (!cancelled) setThermalFieldData(res as ThermalFieldData);
-    }).catch(err => {
-      console.warn("Failed to fetch thermal field:", err);
-      if (!cancelled) setThermalFieldData(null);
-    });
-    
-    return () => { cancelled = true; };
-  }, [mode, design, store.siteId, store.period, safeIndex]);
+    setCfd(null);
+    setCfdError(null);
+    api.cfd(geometry.design_hash).then(
+      (value) => {
+        if (!cancelled) setCfd(value);
+      },
+      (error: unknown) => {
+        if (!cancelled) setCfdError(error instanceof Error ? error.message : String(error));
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, geometry.design_hash]);
 
   // Create or update the thermal volume mesh
   useEffect(() => {
@@ -1171,9 +1192,8 @@ export function Scene3D({
         <button
           type="button"
           onClick={() => onModeChange("interior_temperature")}
-          disabled={!surfaces}
           aria-pressed={mode === "interior_temperature"}
-          title="Interpolated between the surface temperatures EnergyPlus reported. Not a solved field."
+          title="Air temperature solved by ANSYS Fluent for one hour, shown only when that run exists for this design."
           className={`rounded-md border border-dashed px-2.5 py-1 text-xs transition-colors ${
             mode === "interior_temperature"
               ? "border-[var(--color-earth)] bg-[var(--color-earth)]/12 font-medium text-[var(--color-earth)]"
@@ -1543,17 +1563,73 @@ export function Scene3D({
         </div>
       )}
 
-      {mode === "interior_temperature" && thermalFieldData && (
-        <p className="rounded-md border border-[var(--color-line)] bg-[var(--color-night-2)]/60 p-3 text-xs leading-relaxed text-[var(--color-ink-faint)]">
-          <span className="text-[var(--color-ink-dim)]">
-            This volume is interpolated, not solved.
-          </span>{" "}
-          EnergyPlus carries one well mixed air node per zone and does not resolve
-          temperature inside a room. The surfaces bounding this volume are solver
-          output; the air between them is inverse distance weighted between them with
-          an assumed stratification, so read it as a sketch of where the cold sits,
-          never as a fluid dynamics result.
-        </p>
+      {mode === "interior_temperature" && (
+        <div className="space-y-2 rounded-md border border-[var(--color-line)] bg-[var(--color-night-2)]/60 p-3 text-xs leading-relaxed text-[var(--color-ink-faint)]">
+          {cfdError ? (
+            <p>
+              <span className="font-medium text-[var(--color-ink)]">
+                The solved air field could not be loaded.
+              </span>{" "}
+              {cfdError}
+            </p>
+          ) : !cfd ? (
+            <p>Looking for a solved air field for this design…</p>
+          ) : isCfdAbsent(cfd) ? (
+            <p>
+              <span className="font-medium text-[var(--color-ink)]">
+                No solved air field for this design, so nothing is drawn inside the room.
+              </span>{" "}
+              {cfd.reason}
+            </p>
+          ) : activeField ? (
+            <>
+              {cfd.fields.length > 1 && (
+                <div role="group" aria-label="Solved hour" className="flex flex-wrap gap-1">
+                  {cfd.fields.map((item) => (
+                    <button
+                      key={item.label}
+                      type="button"
+                      onClick={() => setCfdLabel(item.label)}
+                      aria-pressed={item.label === activeField.label}
+                      className={`rounded-md border px-2 py-0.5 ${
+                        item.label === activeField.label
+                          ? "border-[var(--color-ink)] bg-[var(--color-ink)] text-white"
+                          : "border-[var(--color-line)] bg-white text-[var(--color-ink-faint)]"
+                      }`}
+                    >
+                      {item.label.replace(/_/g, " ")}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {!activeField.solver.converged && (
+                <p className="font-medium text-[var(--color-earth)]">
+                  The solver did not converge on this case. Do not quote numbers from it.
+                </p>
+              )}
+              <p>
+                <span className="font-medium text-[var(--color-ink)]">
+                  Solved by {activeField.solver.solver} {activeField.solver.version}
+                </span>{" "}
+                for {activeField.label.replace(/_/g, " ")} at{" "}
+                {activeField.timestamp.replace("T", " ")}: air {num(activeField.min_c)} to{" "}
+                {num(activeField.max_c)} °C, mean {num(activeField.mean_c)} °C, against the{" "}
+                {num(activeField.energyplus_zone_air_c)} °C EnergyPlus reported for the room as
+                one well mixed volume. {activeField.solver.turbulence_model},{" "}
+                {activeField.solver.cell_count.toLocaleString()} cells. Each voxel is the
+                nearest solver cell and empty voxels lie outside the air. This is one solved
+                hour, so the timeline does not move it.
+              </p>
+            </>
+          ) : null}
+          {cfd && (cfd.rejected ?? []).length > 0 && (
+            <ul className="space-y-0.5">
+              {(cfd.rejected ?? []).map((item) => (
+                <li key={item}>· {item}</li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
 
       {!immersive && showAirflow && airflow && (
@@ -1571,19 +1647,6 @@ export function Scene3D({
         </div>
       )}
 
-      {mode === "interior_temperature" && (
-        <p className="rounded-md border border-dashed border-[var(--color-earth)]/50 bg-[var(--color-earth)]/8 px-3 py-2 text-xs leading-relaxed text-[var(--color-ink-dim)]">
-          <span className="font-medium text-[var(--color-ink)]">
-            This one is an estimate, not a solved field.
-          </span>{" "}
-          EnergyPlus models the air in a zone as a single well mixed node, so it
-          reports no temperature distribution inside the room. What you see is
-          interpolated between the surface temperatures it did report, with an assumed
-          vertical stratification. Use it to read the shape of the problem, never as a
-          measured value. A solved field needs the fluid dynamics run.
-        </p>
-      )}
-
       {!immersive && dressed && elements.length > 0 && (
         <p className="text-xs leading-relaxed text-[var(--color-ink-faint)]">
           Drawn as it would be built: {elements.join(", ")}. These are construction
@@ -1592,7 +1655,18 @@ export function Scene3D({
         </p>
       )}
 
-      {!immersive && painted && extent && (
+      {!immersive && mode === "interior_temperature" && activeField && (
+        <div className="flex items-center gap-2 text-xs text-[var(--color-ink-faint)]">
+          <span className="tabular-nums">{num(activeField.min_c)} °C</span>
+          <span
+            className="h-2.5 flex-1 rounded"
+            style={{ background: rampCss(rampStops(mode, ramp)) }}
+          />
+          <span className="tabular-nums">{num(activeField.max_c)} °C</span>
+        </div>
+      )}
+
+      {!immersive && painted && mode !== "interior_temperature" && extent && (
         <div className="flex items-center gap-2 text-xs text-[var(--color-ink-faint)]">
           <span className="tabular-nums">
             {num(extent.min)} {unit}
@@ -1609,7 +1683,7 @@ export function Scene3D({
 
       <p className="text-xs leading-relaxed text-[var(--color-ink-faint)]">
         {mode === "interior_temperature"
-          ? "The volumetric field is an approximate interpolation of room air temperatures over the grid, meant for rapid visualization. It is not a computational fluid dynamics (CFD) result."
+          ? "The air volume is drawn only from an ANSYS Fluent run for this exact design; the page never interpolates or estimates air temperature on its own."
           : painted
             ? "Every painted face is one number EnergyPlus reported for that surface at that hour, and the face names come from the simulation, so the value sits on the surface it belongs to."
             : "Material colours come from the Layer 0 database. The geometry drawn here is the geometry that was simulated, built from one description."}{" "}

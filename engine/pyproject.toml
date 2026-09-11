@@ -13,6 +13,7 @@ dependencies = [
     "pydantic>=2.6,<3",
     "eppy>=0.5.63",
     "pymoo>=0.6.1,<0.7",
+    "scipy>=1.11",
 ]
 
 [project.optional-dependencies]

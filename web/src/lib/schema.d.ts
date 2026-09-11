@@ -310,23 +310,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/thermal-field": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Thermal Field */
-        post: operations["thermal_field_api_thermal_field_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/compare": {
         parameters: {
             query?: never;
@@ -472,6 +455,23 @@ export interface paths {
         };
         /** Cfd */
         get: operations["cfd_api_cfd__design_hash__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cfd/{design_hash}/boundary-conditions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Cfd Boundary Conditions */
+        get: operations["cfd_boundary_conditions_api_cfd__design_hash__boundary_conditions_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -677,6 +677,19 @@ export interface components {
             design_hash: string;
             /** Reason */
             reason: string;
+            /** Boundary Labels */
+            boundary_labels?: string[];
+            /** Rejected */
+            rejected?: string[];
+        };
+        /** CFDBoundarySet */
+        CFDBoundarySet: {
+            /** Design Hash */
+            design_hash: string;
+            /** Exports */
+            exports: components["schemas"]["CFDExport"][];
+            /** Rejected */
+            rejected?: string[];
         };
         /** CFDBoundarySurface */
         CFDBoundarySurface: {
@@ -720,6 +733,12 @@ export interface components {
             zone_volume_m3: number;
             /** Surfaces */
             surfaces: components["schemas"]["CFDBoundarySurface"][];
+            /** Internal Convective Gain W */
+            internal_convective_gain_w?: number | null;
+            /** Infiltration Sensible W */
+            infiltration_sensible_w?: number | null;
+            /** Mixing Sensible W */
+            mixing_sensible_w?: number | null;
             /**
              * Units
              * @default SI
@@ -732,6 +751,106 @@ export interface components {
             notes: string[];
             /** Source Run */
             source_run?: string | null;
+        };
+        /** CFDField */
+        CFDField: {
+            /** Design Hash */
+            design_hash: string;
+            /** Zone */
+            zone: string;
+            /** Label */
+            label: string;
+            /** Timestamp */
+            timestamp: string;
+            /** Boundary Hash */
+            boundary_hash: string;
+            /** Dims */
+            dims: [
+                number,
+                number,
+                number
+            ];
+            /** Bounds Min */
+            bounds_min: [
+                number,
+                number,
+                number
+            ];
+            /** Bounds Max */
+            bounds_max: [
+                number,
+                number,
+                number
+            ];
+            /** Temperature C */
+            temperature_c: (number | null)[];
+            /** Speed M S */
+            speed_m_s?: (number | null)[] | null;
+            /** Min C */
+            min_c: number;
+            /** Max C */
+            max_c: number;
+            /** Mean C */
+            mean_c: number;
+            /** Max Speed M S */
+            max_speed_m_s?: number | null;
+            /** Energyplus Zone Air C */
+            energyplus_zone_air_c: number;
+            solver: components["schemas"]["CFDSolverRecord"];
+            /**
+             * Notes
+             * @default []
+             */
+            notes: string[];
+            source: components["schemas"]["SourceRef"];
+            /**
+             * Provenance
+             * @default cfd
+             * @constant
+             */
+            provenance: "cfd";
+        };
+        /** CFDFieldSet */
+        CFDFieldSet: {
+            /**
+             * Available
+             * @default true
+             * @constant
+             */
+            available: true;
+            /** Design Hash */
+            design_hash: string;
+            /** Fields */
+            fields: components["schemas"]["CFDField"][];
+            /** Boundary Labels */
+            boundary_labels?: string[];
+            /** Rejected */
+            rejected?: string[];
+        };
+        /** CFDSolverRecord */
+        CFDSolverRecord: {
+            /** Solver */
+            solver: string;
+            /** Version */
+            version: string;
+            /** Turbulence Model */
+            turbulence_model: string;
+            /** Buoyancy Model */
+            buoyancy_model: string;
+            /** Radiation Model */
+            radiation_model: string;
+            /** Operating Pressure Pa */
+            operating_pressure_pa: number;
+            /** Cell Count */
+            cell_count: number;
+            /** Iterations */
+            iterations: number;
+            /** Converged */
+            converged: boolean;
+            /** Residuals */
+            residuals?: {
+                [key: string]: number;
+            };
         };
         /** ClimateMonth */
         ClimateMonth: {
@@ -2491,98 +2610,6 @@ export interface components {
              */
             vertex_count: number;
         };
-        /** ThermalFieldPayload */
-        ThermalFieldPayload: {
-            /** Design Hash */
-            design_hash: string;
-            /** Zone */
-            zone: string;
-            /** Hour Index */
-            hour_index: number;
-            /** Timestamp */
-            timestamp: string;
-            /** Dims */
-            dims: [
-                number,
-                number,
-                number
-            ];
-            /** Bounds Min */
-            bounds_min: [
-                number,
-                number,
-                number
-            ];
-            /** Bounds Max */
-            bounds_max: [
-                number,
-                number,
-                number
-            ];
-            /** Values */
-            values: number[];
-            /** Min C */
-            min_c: number;
-            /** Max C */
-            max_c: number;
-            /** Surface Count */
-            surface_count: number;
-            /**
-             * Stratification
-             * @default 0
-             */
-            stratification: number;
-            /** @default {
-             *       "citation": "Inverse distance weighted interpolation between the inside face temperatures EnergyPlus reported for this zone, with an assumed vertical stratification term applied on top",
-             *       "status": "derived",
-             *       "note": "EnergyPlus solves one well mixed air node per zone and does not resolve temperature inside a room. This volume is interpolated between real surface temperatures, so the surfaces are solver output but the air between them is an estimate. It is not a computational fluid dynamics result and must not be read as one."
-             *     } */
-            source: components["schemas"]["SourceRef"];
-            /** @default derived */
-            provenance: components["schemas"]["Provenance"];
-        };
-        /** ThermalFieldRequest */
-        ThermalFieldRequest: {
-            design: components["schemas"]["DesignSpec"];
-            /** Site Id */
-            site_id?: string | null;
-            /** Comfort Model Id */
-            comfort_model_id?: string | null;
-            /**
-             * Hour Index
-             * @default 0
-             */
-            hour_index: number;
-            /**
-             * Zone
-             * @default ROOM
-             */
-            zone: string;
-            /**
-             * Resolution
-             * @default [
-             *       32,
-             *       32,
-             *       16
-             *     ]
-             */
-            resolution: [
-                number,
-                number,
-                number
-            ];
-            /** @default {
-             *       "start": "2019-01-01",
-             *       "end": "2019-01-31"
-             *     } */
-            period: components["schemas"]["Window"];
-            surface_period?: components["schemas"]["Window"] | null;
-            /**
-             * Timestep Per Hour
-             * @default 6
-             */
-            timestep_per_hour: number;
-        };
         /** UncertainRange */
         UncertainRange: {
             /** Low */
@@ -3215,39 +3242,6 @@ export interface operations {
             };
         };
     };
-    thermal_field_api_thermal_field_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ThermalFieldRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ThermalFieldPayload"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     compare_api_compare_post: {
         parameters: {
             query?: never;
@@ -3496,7 +3490,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CFDExport"] | components["schemas"]["CFDAbsent"];
+                    "application/json": components["schemas"]["CFDFieldSet"] | components["schemas"]["CFDAbsent"];
                 };
             };
             /** @description Validation Error */
@@ -3527,7 +3521,38 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CFDExport"] | components["schemas"]["CFDAbsent"];
+                    "application/json": components["schemas"]["CFDFieldSet"] | components["schemas"]["CFDAbsent"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cfd_boundary_conditions_api_cfd__design_hash__boundary_conditions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                design_hash: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CFDBoundarySet"];
                 };
             };
             /** @description Validation Error */

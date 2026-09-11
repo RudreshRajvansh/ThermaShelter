@@ -280,11 +280,15 @@
       "emissivity": 0.9
     }
   ],
+  "internal_convective_gain_w": 106.95,
+  "infiltration_sensible_w": -106.691747707475,
+  "mixing_sensible_w": 495.818343865304,
   "units": "SI",
   "notes": [
     "Boundary conditions come from an EnergyPlus whole building run at the stated hour. Surface temperatures are inside face values; the zone air temperature is a single well mixed value and is provided as an initial condition, not as a target.",
+    "The internal convective gain, the infiltration sensible heat flow and the mixing sensible heat flow are the rates EnergyPlus reported for that hour. Applied as a volumetric source they close the same air heat balance EnergyPlus solved.",
     "EnergyPlus computes no air temperature field and no air velocity inside the room. Anything of that kind must come from this fluid dynamics run and must be labelled with the hour and the solver on screen.",
     "Coordinates are in metres in the same world frame as the display mesh, x east, y north, z up, with the building rotated to its real orientation."
   ],
-  "source_run": "C:\\Users\\rudre\\.shelter_engine\\runs\\barrack_sunspace_free_mbkk2jv2\\eplusout.sql"
+  "source_run": "C:\\Users\\rudre\\.shelter_engine\\runs\\barrack_sunspace_free_q13tyb_a\\eplusout.sql"
 }

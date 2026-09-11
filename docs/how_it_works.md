@@ -61,7 +61,7 @@ It prints all of this. Nothing is silent.
 | `data/layer0_manifest.json` | provenance record | ingest |
 | `data/designs/*.json` | the stored design library | hand written, served by the API |
 | `data/runs.db` | simulation history and cached results | the API at runtime |
-| `data/cfd/` | ANSYS exports, named by design fingerprint | `precompute.py` |
+| `data/cfd/` | `<fingerprint>_<hour>.boundary.json` inputs for ANSYS and `<fingerprint>_<hour>.field.json` solved fields | `precompute.py`, the ANSYS run |
 | `data/validation/` | Layer 1 evidence | Mahi, when it exists |
 
 ### Step 4. One command brings the whole thing up
@@ -138,7 +138,7 @@ Two identities travel with every result and they are **not** the same thing:
 | `uncertainty.py` | the 2^k corner runs that turn a decimal into a band |
 | `optimize.py` | NSGA-II, the Pareto front, the knee point, and the per-generation stage reporting |
 | `recommend.py` | advice generated from computed numbers |
-| `cfd.py` | boundary condition export for ANSYS |
+| `cfd.py` | boundary conditions for ANSYS, solved field import and grid sampling |
 | `results.py` | assembles `SimulationResult` |
 | `cli.py` | command line entry point |
 

@@ -130,6 +130,7 @@ not redefine them.
 | compare | `Engine.compare(designs, options, reference)` | `ComparisonTable` |
 | optimise | `Engine.optimise(spec, options)` | `ParetoResult` |
 | fluid dynamics export | `Engine.cfd_export(design, options)` | `tuple[CFDExport, ...]` |
+| solved fluid dynamics field | `build_cfd_field(export, centres, temperatures, solver)` | `CFDField` |
 | materials | `MaterialLibrary.materials` and friends | `Material`, `GlazingSystem`, `PhaseChangeMaterial` |
 | reference designs | `load_references()` | `ReferenceCatalogue` |
 | health | `Engine.self_check()` | `list[EngineWarning]` |
@@ -180,8 +181,18 @@ interzone surface; it never appears on a surface name.
 Two display modes are honest and both come straight from the simulation:
 `SurfaceSeries.inside_face_temperature_c` and `SurfaceSeries.incident_solar_w_m2`. There is
 no air temperature field and no velocity field in a `SimulationResult`, because EnergyPlus
-computes neither. Those come only from `CFDExport` and the ANSYS runs behind it, for the one
-recommended design, and every panel showing them must state the hour and the solver.
+computes neither. Those come only from a `CFDField` solved by ANSYS Fluent on the
+`CFDExport` boundary conditions, for the one recommended design, and every panel showing
+them must state the hour and the solver.
+
+`CFDExport` carries the inside face temperature of every surface plus the internal
+convective gain, infiltration and interzone mixing heat flows EnergyPlus reported for that
+hour, so the fluid dynamics run closes the same air heat balance. It is written as
+`<fingerprint>_<hour>.boundary.json`. `build_cfd_field` turns the solver's cell centres and
+values into a `CFDField` on a regular grid, each grid point taking the nearest cell and
+points outside the air left empty, and records `boundary_hash`. The API refuses a field
+whose boundary conditions have since changed, and a field is written as
+`<fingerprint>_<hour>.field.json`.
 
 ---
 

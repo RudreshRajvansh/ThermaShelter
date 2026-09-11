@@ -310,7 +310,7 @@ Verdicts:
 | --- | --- | --- |
 | 3D / Plan / Section | KEEP | Plan and sections exist; move them into the viewport |
 | Construction / Surface temperature / Incident solar | KEEP | — |
-| "Interior estimate 16.2 °C (min overnight)" | CANNOT as drawn | The estimate is an interpolated field, not a number. Show the solved minimum (5.6 °C) as the number; keep Interior estimate as a separate toggle with its caption |
+| "Interior estimate 16.2 °C (min overnight)" | CANNOT as drawn | The headline number is the solved minimum (5.6 °C). Air inside the room is shown only from an ANSYS Fluent field (`/api/cfd/{fingerprint}`), labelled with solver and hour; with no field the toggle states that none exists |
 | Shell Solid · Overlays Rooms · Render Balanced · Scale Spectral | KEEP | Overlays also has Built detail and Air exchange |
 | Full screen | KEEP | — |
 

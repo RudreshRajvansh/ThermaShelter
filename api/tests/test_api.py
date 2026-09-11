@@ -18,10 +18,20 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.fixture(scope="module")
-def client(tmp_path_factory) -> TestClient:
+def cfd_dir(tmp_path_factory) -> Path:
+    import shutil
+    target = tmp_path_factory.mktemp("cfd")
+    for path in (DATA / "cfd").glob("*.boundary.json"):
+        shutil.copy2(path, target / path.name)
+    return target
+
+
+@pytest.fixture(scope="module")
+def client(tmp_path_factory, cfd_dir) -> TestClient:
     import os
     os.environ["SHELTER_DATA_DIR"] = str(DATA)
     os.environ["SHELTER_DB"] = str(tmp_path_factory.mktemp("store") / "runs.db")
+    os.environ["SHELTER_CFD_DIR"] = str(cfd_dir)
     from shelter_api.config import get_settings
     from shelter_api.deps import get_context
     get_settings.cache_clear()
@@ -262,16 +272,71 @@ def test_cfd_absence_is_stated_not_errored(client):
     assert "has not been run" in body["reason"]
 
 
-def test_cfd_is_served_when_it_exists(client):
-    exports = sorted((DATA / "cfd").glob("*_coldest_night.json"))
+def test_cfd_refuses_a_malformed_design_hash(client):
+    assert client.get("/api/cfd/not-a-hash").status_code == 422
+    assert client.get("/api/cfd/ABCDEF0123456789ABCDEF0123456789").status_code == 422
+    assert client.get(
+        "/api/cfd/not-a-hash/boundary-conditions").status_code == 422
+
+
+def test_boundary_conditions_are_served_as_inputs_not_as_a_field(client, cfd_dir):
+    exports = sorted(cfd_dir.glob("*_coldest_night.boundary.json"))
     if not exports:
-        pytest.skip("no precomputed fluid dynamics export")
+        pytest.skip("no precomputed fluid dynamics boundary conditions")
     design_hash = exports[0].name.split("_")[0]
     body = client.get(f"/api/cfd/{design_hash}").json()
-    assert body["surfaces"]
-    assert body["zone_air_temperature_c"] is not None
-    assert any("no air temperature field" in note.lower() or
-               "computes no air temperature" in note for note in body["notes"])
+    assert body["available"] is False
+    assert "coldest_night" in body["boundary_labels"]
+    assert "ANSYS Fluent has not been run" in body["reason"]
+    inputs = client.get(f"/api/cfd/{design_hash}/boundary-conditions").json()
+    assert inputs["exports"][0]["surfaces"]
+    assert any("computes no air temperature" in note
+               for note in inputs["exports"][0]["notes"])
+    missing = client.get("/api/cfd/" + "e" * 32 + "/boundary-conditions")
+    assert missing.status_code == 404
+
+
+def test_a_solved_field_is_served_and_a_stale_or_broken_one_is_refused(client, cfd_dir):
+    from cfd_fixtures import box_export, cell_cloud, solver_record
+    from shelter_engine.cfd import build_cfd_field, write_cfd_export, write_cfd_field
+
+    design_hash = "fedcba9876543210fedcba9876543210"
+    export = box_export(design_hash=design_hash)
+    write_cfd_export(export, cfd_dir)
+    centres, temperature, speed = cell_cloud()
+    write_cfd_field(build_cfd_field(export, centres, temperature, solver_record(),
+                                    speed, dims=(6, 5, 4)), cfd_dir)
+
+    body = client.get(f"/api/cfd/{design_hash}").json()
+    assert body["available"] is True
+    assert body["rejected"] == []
+    field = body["fields"][0]
+    assert field["provenance"] == "cfd"
+    assert field["solver"]["solver"] == "ANSYS Fluent"
+    assert len(field["temperature_c"]) == 6 * 5 * 4
+
+    (cfd_dir / f"{design_hash}_peak_solar.field.json").write_text("{", encoding="utf-8")
+    body = client.get(f"/api/cfd/{design_hash}").json()
+    assert body["available"] is True
+    assert any("could not be read" in item for item in body["rejected"])
+
+    write_cfd_export(box_export(design_hash=design_hash, air_c=9.0), cfd_dir)
+    body = client.get(f"/api/cfd/{design_hash}").json()
+    assert body["available"] is False
+    assert any("have since changed" in item for item in body["rejected"])
+
+    orphan = "abcdefabcdefabcdefabcdefabcdef12"
+    export = box_export(design_hash=orphan)
+    write_cfd_field(build_cfd_field(export, centres, temperature, solver_record(),
+                                    dims=(4, 4, 4)), cfd_dir)
+    body = client.get(f"/api/cfd/{orphan}").json()
+    assert body["available"] is False
+    assert any("no matching boundary conditions" in item for item in body["rejected"])
+
+
+def test_the_interpolated_thermal_field_endpoint_is_gone(client, design):
+    response = client.post("/api/thermal-field", json={"design": design})
+    assert response.status_code in (404, 405)
 
 
 def test_validation_reports_absence_honestly(client):

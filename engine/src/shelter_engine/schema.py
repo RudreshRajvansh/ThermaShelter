@@ -895,32 +895,6 @@ class GeometryPayload(Frozen):
         return tuple(surface.name for surface in self.surfaces)
 
 
-class ThermalFieldPayload(Frozen):
-    design_hash: str
-    zone: str
-    hour_index: int
-    timestamp: str
-    dims: tuple[int, int, int]
-    bounds_min: tuple[float, float, float]
-    bounds_max: tuple[float, float, float]
-    values: tuple[float, ...]
-    min_c: float
-    max_c: float
-    surface_count: int
-    stratification: float = 0.0
-    source: SourceRef = SourceRef(
-        citation="Inverse distance weighted interpolation between the inside face "
-                 "temperatures EnergyPlus reported for this zone, with an assumed "
-                 "vertical stratification term applied on top",
-        status=SourceStatus.DERIVED,
-        note="EnergyPlus solves one well mixed air node per zone and does not resolve "
-             "temperature inside a room. This volume is interpolated between real "
-             "surface temperatures, so the surfaces are solver output but the air "
-             "between them is an estimate. It is not a computational fluid dynamics "
-             "result and must not be read as one.")
-    provenance: Provenance = Provenance.DERIVED
-
-
 class HourlySeries(Frozen):
     name: str
     unit: str
@@ -1306,6 +1280,87 @@ class CFDExport(Frozen):
     air_pressure_pa: float | None = None
     zone_volume_m3: float
     surfaces: tuple[CFDBoundarySurface, ...]
+    internal_convective_gain_w: float | None = None
+    infiltration_sensible_w: float | None = None
+    mixing_sensible_w: float | None = None
     units: str = "SI"
     notes: tuple[str, ...] = ()
     source_run: str | None = None
+
+    @property
+    def net_air_heat_source_w(self) -> float | None:
+        parts = [self.internal_convective_gain_w, self.infiltration_sensible_w,
+                 self.mixing_sensible_w]
+        if all(part is None for part in parts):
+            return None
+        return float(sum(part for part in parts if part is not None))
+
+
+class CFDSolverRecord(Frozen):
+    solver: str = Field(min_length=1)
+    version: str = Field(min_length=1)
+    turbulence_model: str = Field(min_length=1)
+    buoyancy_model: str = Field(min_length=1)
+    radiation_model: str = Field(min_length=1)
+    operating_pressure_pa: float = Field(gt=0.0)
+    cell_count: int = Field(gt=0)
+    iterations: int = Field(ge=0)
+    converged: bool
+    residuals: dict[str, float] = Field(default_factory=dict)
+
+
+class CFDField(Frozen):
+    design_hash: str = Field(min_length=1)
+    zone: str
+    label: str = Field(min_length=1)
+    timestamp: str
+    boundary_hash: str = Field(min_length=1)
+    dims: tuple[int, int, int]
+    bounds_min: tuple[float, float, float]
+    bounds_max: tuple[float, float, float]
+    temperature_c: tuple[float | None, ...]
+    speed_m_s: tuple[float | None, ...] | None = None
+    min_c: float
+    max_c: float
+    mean_c: float
+    max_speed_m_s: float | None = None
+    energyplus_zone_air_c: float
+    solver: CFDSolverRecord
+    notes: tuple[str, ...] = ()
+    source: SourceRef
+    provenance: Literal[Provenance.CFD] = Provenance.CFD
+
+    @model_validator(mode="after")
+    def _consistent(self) -> "CFDField":
+        if min(self.dims) < 2:
+            raise ValueError("a field grid needs at least two points along every axis")
+        if any(high <= low for low, high in zip(self.bounds_min, self.bounds_max)):
+            raise ValueError("field bounds must have a positive extent on every axis")
+        count = self.dims[0] * self.dims[1] * self.dims[2]
+        if len(self.temperature_c) != count:
+            raise ValueError(f"temperature_c holds {len(self.temperature_c)} values for "
+                             f"a {self.dims} grid of {count} points")
+        if self.speed_m_s is not None and len(self.speed_m_s) != count:
+            raise ValueError(f"speed_m_s holds {len(self.speed_m_s)} values for a grid "
+                             f"of {count} points")
+        finite = [value for value in self.temperature_c if value is not None]
+        if not finite:
+            raise ValueError("a field with no temperature inside the air volume is not "
+                             "a result")
+        if not all(math.isfinite(value) for value in finite):
+            raise ValueError("temperature_c holds a non finite value")
+        if abs(min(finite) - self.min_c) > 1e-6 or abs(max(finite) - self.max_c) > 1e-6:
+            raise ValueError("min_c and max_c must match the sampled temperatures")
+        if not self.min_c - 1e-6 <= self.mean_c <= self.max_c + 1e-6:
+            raise ValueError("mean_c must lie between min_c and max_c")
+        if self.speed_m_s is not None:
+            speeds = [value for value in self.speed_m_s if value is not None]
+            if any(not math.isfinite(value) or value < 0.0 for value in speeds):
+                raise ValueError("speed_m_s must be finite and non negative")
+            peak = max(speeds) if speeds else None
+            if (peak is None) != (self.max_speed_m_s is None) or (
+                    peak is not None and abs(peak - self.max_speed_m_s) > 1e-6):
+                raise ValueError("max_speed_m_s must match the sampled speeds")
+        elif self.max_speed_m_s is not None:
+            raise ValueError("max_speed_m_s needs sampled speeds")
+        return self

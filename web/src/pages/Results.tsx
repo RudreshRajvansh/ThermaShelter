@@ -116,6 +116,16 @@ export function Results({
     enabled: Boolean(simulation?.design_fingerprint) && tab === "detailed analysis",
     staleTime: Infinity,
   });
+  const boundaries = useQuery({
+    queryKey: ["cfd-boundary", simulation?.design_fingerprint],
+    queryFn: () => api.cfdBoundaryConditions(simulation!.design_fingerprint),
+    enabled:
+      Boolean(simulation?.design_fingerprint) &&
+      tab === "detailed analysis" &&
+      (cfd.data?.boundary_labels?.length ?? 0) > 0,
+    staleTime: Infinity,
+    retry: false,
+  });
 
   if (error) return <Failure error={error} />;
   if (!simulation) return <Loading label={simulating ? "running EnergyPlus…" : "waiting…"} />;
@@ -422,23 +432,79 @@ export function Results({
 
           {tab === "detailed analysis" && (
             <div className="space-y-3">
-              {!cfd.data ? (
-                <Loading label="checking for a stored field…" />
+              {cfd.error ? (
+                <Failure error={cfd.error} />
+              ) : !cfd.data ? (
+                <Loading label="checking for a solved field…" />
               ) : isCfdAbsent(cfd.data) ? (
-                <Empty
-                  title="Detailed analysis has not been run for this design"
-                  detail={cfd.data.reason}
-                />
+                <Empty title="No solved air field for this design" detail={cfd.data.reason} />
               ) : (
-                <>
+                cfd.data.fields.map((field) => (
+                  <div
+                    key={field.label}
+                    className="space-y-1 rounded-md border border-[var(--color-line)] bg-[var(--color-night)] p-3 text-xs leading-relaxed"
+                  >
+                    <div className="font-medium">
+                      {field.solver.solver} {field.solver.version} ·{" "}
+                      {field.label.replace(/_/g, " ")} at {field.timestamp.replace("T", " ")}
+                    </div>
+                    {!field.solver.converged && (
+                      <div className="font-medium text-[var(--color-earth)]">
+                        Not converged. Do not quote numbers from this case.
+                      </div>
+                    )}
+                    <div>
+                      Air {num(field.min_c)} to {num(field.max_c)} °C, mean {num(field.mean_c)} °C.
+                      EnergyPlus reported {num(field.energyplus_zone_air_c)} °C for the room as one
+                      well mixed volume.
+                      {field.max_speed_m_s != null
+                        ? ` Fastest air ${num(field.max_speed_m_s, 2)} m/s.`
+                        : " Air speed was not exported from this run."}
+                    </div>
+                    <div className="text-[var(--color-ink-faint)]">
+                      {field.solver.turbulence_model} · {field.solver.buoyancy_model} · radiation{" "}
+                      {field.solver.radiation_model} · {field.solver.cell_count.toLocaleString()}{" "}
+                      cells · {field.solver.iterations} iterations · operating pressure{" "}
+                      {num(field.solver.operating_pressure_pa, 0)} Pa
+                    </div>
+                    <ul className="space-y-0.5 text-[11px] text-[var(--color-ink-faint)]">
+                      {field.notes.map((note, index) => (
+                        <li key={index}>· {note}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))
+              )}
+              {cfd.data && (cfd.data.rejected ?? []).length > 0 && (
+                <ul className="space-y-0.5 text-[11px] text-[var(--color-earth)]">
+                  {(cfd.data.rejected ?? []).map((item) => (
+                    <li key={item}>· {item}</li>
+                  ))}
+                </ul>
+              )}
+              {boundaries.data?.exports.map((item) => (
+                <div key={item.label} className="space-y-2">
                   <div className="rounded-md border border-[var(--color-line)] bg-[var(--color-night)] p-3 text-xs leading-relaxed">
                     <span className="font-medium">
-                      Boundary conditions for {cfd.data.label.replace(/_/g, " ")}
+                      Inputs sent to ANSYS · {item.label.replace(/_/g, " ")}
                     </span>{" "}
-                    at {cfd.data.timestamp.replace("T", " ")}. Zone air{" "}
-                    {num(cfd.data.zone_air_temperature_c)} °C, outdoor{" "}
-                    {num(cfd.data.outdoor_air_temperature_c)} °C, volume{" "}
-                    {num(cfd.data.zone_volume_m3)} m³.
+                    at {item.timestamp.replace("T", " ")}. These are EnergyPlus results used as
+                    boundary conditions, not a solved field. Zone air{" "}
+                    {num(item.zone_air_temperature_c)} °C, outdoor{" "}
+                    {num(item.outdoor_air_temperature_c)} °C, volume {num(item.zone_volume_m3)} m³.
+                    Heat into the air: internal convective{" "}
+                    {item.internal_convective_gain_w != null
+                      ? `${num(item.internal_convective_gain_w, 0)} W`
+                      : "not reported"}
+                    , infiltration{" "}
+                    {item.infiltration_sensible_w != null
+                      ? `${num(item.infiltration_sensible_w, 0)} W`
+                      : "not reported"}
+                    , from the adjoining zone{" "}
+                    {item.mixing_sensible_w != null
+                      ? `${num(item.mixing_sensible_w, 0)} W`
+                      : "not reported"}
+                    .
                   </div>
                   <table className="w-full text-left text-xs">
                     <thead className="text-[var(--color-ink-faint)]">
@@ -450,32 +516,20 @@ export function Results({
                       </tr>
                     </thead>
                     <tbody>
-                      {cfd.data.surfaces.map((surface) => (
-                        <tr
-                          key={surface.name}
-                          className="border-t border-[var(--color-line-soft)]"
-                        >
+                      {item.surfaces.map((surface) => (
+                        <tr key={surface.name} className="border-t border-[var(--color-line-soft)]">
                           <td className="py-1.5 pr-3 font-mono">{surface.name}</td>
                           <td className="tnum py-1.5 pr-3 text-right">
                             {num(surface.inside_face_temperature_c)}
                           </td>
-                          <td className="tnum py-1.5 pr-3 text-right">
-                            {num(surface.area_m2, 2)}
-                          </td>
-                          <td className="tnum py-1.5 text-right">
-                            {num(surface.emissivity, 2)}
-                          </td>
+                          <td className="tnum py-1.5 pr-3 text-right">{num(surface.area_m2, 2)}</td>
+                          <td className="tnum py-1.5 text-right">{num(surface.emissivity, 2)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  <ul className="space-y-1 text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
-                    {cfd.data.notes.map((note, index) => (
-                      <li key={index}>· {note}</li>
-                    ))}
-                  </ul>
-                </>
-              )}
+                </div>
+              ))}
             </div>
           )}
         </div>
