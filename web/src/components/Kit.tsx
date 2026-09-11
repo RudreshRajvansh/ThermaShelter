@@ -18,12 +18,7 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: "easeOut" }}
-      className={`panel p-6 sm:p-8 ${className}`}
-    >
+    <section className={`panel p-6 sm:p-8 ${className}`}>
       {(title || right) && (
         <header className="mb-6 flex items-end justify-between gap-4 border-b border-gray-100 pb-4">
           <div>
@@ -38,7 +33,7 @@ export function Panel({
         </header>
       )}
       {children}
-    </motion.section>
+    </section>
   );
 }
 
@@ -132,11 +127,10 @@ export function Tabs<T extends string>({
           key={tab}
           type="button"
           onClick={() => onChange(tab)}
-          className={`relative z-10 px-4 py-1.5 text-xs capitalize rounded-lg transition-all duration-300 focus-visible:ring-2 focus-visible:ring-[var(--color-solar)] focus:outline-none ${
-            active === tab
+          className={`relative z-10 px-4 py-1.5 text-xs capitalize rounded-lg transition-all duration-300 focus-visible:ring-2 focus-visible:ring-[var(--color-solar)] focus:outline-none ${active === tab
               ? "text-[var(--color-solar)] font-semibold"
               : "text-[var(--color-ink-dim)] hover:text-[var(--color-ink)] hover:bg-slate-200/50"
-          }`}
+            }`}
         >
           {active === tab && (
             <motion.div
@@ -187,9 +181,8 @@ export function Stat({
       </div>
       <div className="mt-2 flex items-baseline gap-1.5">
         <span
-          className={`tnum font-bold tracking-tight ${large ? "text-4xl" : "text-2xl"} ${
-            tone === "solar" ? "text-[var(--color-solar)]" : "text-slate-900"
-          }`}
+          className={`tnum font-bold tracking-tight ${large ? "text-4xl" : "text-2xl"} ${tone === "solar" ? "text-[var(--color-solar)]" : "text-slate-900"
+            }`}
         >
           {value}
         </span>
@@ -237,9 +230,8 @@ export function Warnings({
       {shown.map((item, index) => (
         <div
           key={`${item.code}-${index}`}
-          className={`rounded-md border px-3 py-2 text-sm leading-relaxed transition-all duration-300 ${
-            SEVERITY_STYLE[item.severity] ?? SEVERITY_STYLE.info
-          }`}
+          className={`rounded-md border px-3 py-2 text-sm leading-relaxed transition-all duration-300 ${SEVERITY_STYLE[item.severity] ?? SEVERITY_STYLE.info
+            }`}
         >
           <span className="font-mono text-xs uppercase tracking-wide opacity-80 font-medium">
             {item.severity} · {item.code}
@@ -288,11 +280,10 @@ export function AssumptionTable({ assumptions }: { assumptions: Assumption[] }) 
                 </td>
                 <td className="py-2 pr-3">
                   <span
-                    className={`rounded px-2 py-1 text-xs font-medium ${
-                      item.source.status === "verified"
+                    className={`rounded px-2 py-1 text-xs font-medium ${item.source.status === "verified"
                         ? "bg-[var(--color-good)]/20 text-[var(--color-good)]"
                         : "bg-amber-100 text-amber-800"
-                    }`}
+                      }`}
                   >
                     {item.source.status}
                   </span>

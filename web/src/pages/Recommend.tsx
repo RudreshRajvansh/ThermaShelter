@@ -381,7 +381,7 @@ export function Recommend({ meta }: { meta: MetaResponse | undefined }) {
           </button>
           <button
             type="button"
-            onClick={() => store.go("Design", "all inputs")}
+            onClick={() => store.setStep("Site Input")}
             className="text-sm text-[var(--color-ink-faint)] underline underline-offset-4 transition-colors hover:text-[var(--color-ink)]"
           >
             Full analysis
@@ -483,7 +483,7 @@ export function Recommend({ meta }: { meta: MetaResponse | undefined }) {
                   type="button"
                   onClick={() => {
                     store.applyOverride(best.design);
-                    store.go("Design", "model");
+                    store.setStep("Site Input");
                   }}
                   className="text-sm text-[var(--color-solar)] underline underline-offset-4"
                 >
@@ -493,7 +493,7 @@ export function Recommend({ meta }: { meta: MetaResponse | undefined }) {
                   type="button"
                   onClick={() => {
                     store.applyOverride(best.design);
-                    store.go("Evidence", "results");
+                    store.setStep("Site Input");
                   }}
                   className="text-sm text-[var(--color-solar)] underline underline-offset-4"
                 >

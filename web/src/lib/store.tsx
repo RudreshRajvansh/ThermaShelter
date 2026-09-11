@@ -8,13 +8,16 @@ import {
 } from "react";
 import type { DesignSpec, Window } from "./api";
 
-export const STEPS = ["Design", "Evidence", "Report"] as const;
+export const STEPS = [
+  "Site Input",
+  "Climate Data",
+  "Design Parameters",
+  "Simulation",
+  "Results",
+  "Compare Designs",
+  "Reports"
+] as const;
 
-export const DESIGN_TABS = ["recommend", "model", "all inputs"] as const;
-export const EVIDENCE_TABS = ["climate", "construction", "results", "compare"] as const;
-
-export type DesignTab = (typeof DESIGN_TABS)[number];
-export type EvidenceTab = (typeof EVIDENCE_TABS)[number];
 export type Step = (typeof STEPS)[number];
 
 export const WINTER: Window = { start: "2019-01-10", end: "2019-01-16" };
@@ -29,11 +32,7 @@ export type Preview = { design: DesignSpec; label: string; hash: string };
 type State = {
   step: Step;
   setStep: (step: Step) => void;
-  designTab: DesignTab;
-  setDesignTab: (tab: DesignTab) => void;
-  evidenceTab: EvidenceTab;
-  setEvidenceTab: (tab: EvidenceTab) => void;
-  go: (step: Step, tab?: DesignTab | EvidenceTab) => void;
+  go: (step: Step) => void;
   siteId: string | null;
   setSiteId: (id: string) => void;
   designName: string;
@@ -62,25 +61,20 @@ type State = {
 const Context = createContext<State | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [step, setStep] = useState<Step>("Design");
+  const [step, setStep] = useState<Step>("Site Input");
   const [siteId, setSiteId] = useState<string | null>(null);
   const [designName, setDesignName] = useState("single_room");
   const [design, setDesign] = useState<DesignSpec | null>(null);
   const [overrides, setOverrides] = useState<DesignSpec | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
-  const [designTab, setDesignTab] = useState<DesignTab>("recommend");
-  const [evidenceTab, setEvidenceTab] = useState<EvidenceTab>("climate");
   const [displayMode, setDisplayMode] = useState<DisplayMode>("construction");
   const [hourIndex, setHourIndex] = useState(0);
   const [cooling, setCooling] = useState(false);
   const [liveMode, setLiveMode] = useState(false);
   const [comfortModelId, setComfortModelId] = useState<string | null>(null);
 
-  const go = useCallback((next: Step, tab?: DesignTab | EvidenceTab) => {
+  const go = useCallback((next: Step) => {
     setStep(next);
-    if (!tab) return;
-    if (next === "Design") setDesignTab(tab as DesignTab);
-    if (next === "Evidence") setEvidenceTab(tab as EvidenceTab);
   }, []);
   const applyOverride = useCallback((next: DesignSpec) => {
     setOverrides(next);
@@ -100,10 +94,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     () => ({
       step,
       setStep,
-      designTab,
-      setDesignTab,
-      evidenceTab,
-      setEvidenceTab,
       go,
       siteId,
       setSiteId,
@@ -131,8 +121,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }),
     [
       step,
-      designTab,
-      evidenceTab,
       go,
       siteId,
       designName,

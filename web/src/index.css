@@ -1,20 +1,34 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
 
 @theme {
-  --color-ink: #0f172a; /* Slate 900 */
-  --color-ink-dim: #475569; /* Slate 600 */
-  --color-ink-faint: #94a3b8; /* Slate 400 */
+  --color-ink: #09090b;
+  /* Zinc 950 */
+  --color-ink-dim: #52525b;
+  /* Zinc 600 */
+  --color-ink-faint: #a1a1aa;
+  /* Zinc 400 */
   --color-night: #ffffff;
-  --color-night-2: #f8fafc; /* Slate 50 */
-  --color-solar: #0d9488; /* Teal 600 - Professional accent */
-  --color-cold: #0284c7; /* Sky 600 */
-  --color-good: #10b981; /* Emerald 500 */
-  --color-diesel: #ef4444; /* Red 500 */
-  --color-line: #e2e8f0; /* Slate 200 */
-  --color-line-soft: #f1f5f9; /* Slate 100 */
+  /* Pure White */
+  --color-night-2: #fafafa;
+  /* Zinc 50 - Background */
+  --color-night-3: #f4f4f5;
+  /* Zinc 100 */
+  --color-solar: #4338ca;
+  /* Indigo 700 - Professional Accent */
+  --color-cold: #0ea5e9;
+  /* Sky 500 */
+  --color-good: #059669;
+  /* Emerald 600 */
+  --color-diesel: #dc2626;
+  /* Red 600 */
+  --color-line: #e4e4e7;
+  /* Zinc 200 */
+  --color-line-soft: #f4f4f5;
+  /* Zinc 100 */
 
   --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-display: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Outfit", "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 html,
@@ -34,19 +48,19 @@ body {
 
 .display {
   font-family: var(--font-display);
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
 }
 
 .panel {
   background: var(--color-night);
-  border: 1px solid var(--color-line-soft);
+  border: 1px solid var(--color-line);
   border-radius: 16px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-  transition: box-shadow 0.3s ease, transform 0.3s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .panel:hover {
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.03);
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05);
 }
 
 .panel-flat {
@@ -55,6 +69,7 @@ body {
   border-radius: 12px;
   transition: all 0.2s ease;
 }
+
 .panel-flat:hover {
   border-color: var(--color-ink-faint);
 }
@@ -75,12 +90,12 @@ input[type="range"] {
 select,
 input[type="text"],
 input[type="number"] {
-  background: var(--color-night-2);
+  background: var(--color-night);
   border: 1px solid var(--color-line);
   border-radius: 8px;
   color: var(--color-ink);
   transition: all 0.2s ease;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.01);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
 }
 
 select:focus,
@@ -88,20 +103,23 @@ input:focus {
   background: var(--color-night);
   outline: none;
   border-color: var(--color-solar);
-  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15); /* Teal focus ring */
+  box-shadow: 0 0 0 3px rgba(67, 56, 202, 0.15);
 }
 
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
   background: var(--color-line);
   border-radius: 4px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-ink-faint);
 }
@@ -111,9 +129,11 @@ input:focus {
     background: #fff;
     color: #000;
   }
+
   .no-print {
     display: none !important;
   }
+
   .panel,
   .panel-flat {
     background: #fff;
@@ -126,15 +146,17 @@ input:focus {
   0% {
     opacity: 0.55;
     transform: translateY(6px);
-    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5);
+    box-shadow: 0 0 0 0 rgba(67, 56, 202, 0.3);
   }
+
   60% {
     opacity: 1;
     transform: translateY(0);
-    box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+    box-shadow: 0 0 0 10px rgba(67, 56, 202, 0);
   }
+
   100% {
-    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+    box-shadow: 0 0 0 0 rgba(67, 56, 202, 0);
   }
 }
 

@@ -56,7 +56,7 @@ export function Simulation({
   const index = Math.min(store.hourIndex, Math.max(0, hours.length - 1));
 
   return (
-    <div className="space-y-4">
+    <div className={`space-y-4 ${viewportOnly ? "h-full" : ""}`}>
       {!viewportOnly && (
       <Panel
         title="Simulation setup"
@@ -90,7 +90,7 @@ export function Simulation({
 
       {viewportOnly ? (
         !geometry ? (
-          <div className="flex h-[70vh] items-center justify-center rounded-xl border border-[var(--color-line)] bg-[var(--color-night-2)]">
+          <div className="flex h-full items-center justify-center bg-[var(--color-night-2)]">
             <Loading label="building geometry…" />
           </div>
         ) : (
@@ -225,7 +225,7 @@ export function Simulation({
       <div className="flex justify-end">
         <button
           type="button"
-          onClick={() => store.go("Evidence", "results")}
+          onClick={() => store.setStep("Results")}
           disabled={!simulation}
           className="rounded-full bg-gradient-to-r from-[var(--color-solar)] to-indigo-500 px-8 py-3 text-[15px] font-semibold text-white transition-all hover:brightness-110 active:scale-95 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--color-solar)] focus:outline-none shadow-md hover:shadow-lg shadow-indigo-500/25 disabled:opacity-40 disabled:pointer-events-none disabled:shadow-none flex items-center gap-2"
         >

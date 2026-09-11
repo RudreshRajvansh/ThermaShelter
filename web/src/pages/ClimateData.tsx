@@ -404,7 +404,7 @@ export function ClimateData() {
       <div className="flex justify-end">
         <button
           type="button"
-          onClick={() => store.go("Evidence", "construction")}
+          onClick={() => store.setStep("Design Parameters")}
           className="rounded-md bg-[var(--color-solar)] px-4 py-2 text-sm font-medium text-[#0b1220]"
         >
           Set design parameters →

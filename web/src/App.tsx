@@ -1,24 +1,20 @@
 import { useEffect, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { api, type DesignSpec } from "./lib/api";
-import {
-  DESIGN_TABS,
-  EVIDENCE_TABS,
-  activeDesign,
-  useStore,
-} from "./lib/store";
-import { Tabs, Warnings } from "./components/Kit";
-import { Navbar } from "./components/Navbar";
+import { activeDesign, useStore } from "./lib/store";
+
+import { Sidebar } from "./components/Sidebar";
+import { Header } from "./components/Header";
+import { Warnings } from "./components/Kit";
 import { SiteInput } from "./pages/SiteInput";
 import { ClimateData } from "./pages/ClimateData";
 import { DesignParameters } from "./pages/DesignParameters";
 import { Simulation } from "./pages/Simulation";
 import { Results } from "./pages/Results";
 import { Compare } from "./pages/Compare";
-import { Recommend } from "./pages/Recommend";
 import { Reports } from "./pages/Reports";
 import { num } from "./lib/format";
+
 
 export default function App() {
   const store = useStore();
@@ -139,65 +135,58 @@ export default function App() {
     (item) => item.severity === "severe" || item.severity === "fatal",
   );
 
+  const siteInfoCard = site ? (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-[var(--color-solar)]/20 bg-indigo-50/50 px-4 py-3 text-[11px] font-medium text-[var(--color-ink-dim)] shadow-sm">
+      <span>
+        <span className="text-[var(--color-ink)] font-bold">{site.name}</span> ·{" "}
+        {num(site.elevation_m, 0)} m · {site.climate_objective.replace(/_/g, " ")}
+      </span>
+      <span>
+        leading with{" "}
+        <span className="text-[var(--color-solar)] font-bold drop-shadow-sm">
+          {site.headline_metric.replace(/_/g, " ")}
+        </span>
+      </span>
+      <span>
+        simulated {store.period.start} → {store.period.end}
+      </span>
+      {store.overrides && (
+        <span className="rounded-md bg-[var(--color-solar)] px-2 py-0.5 text-white font-semibold shadow-sm">
+          edited design
+        </span>
+      )}
+    </div>
+  ) : null;
+
   return (
-    <div className="min-h-full">
-      <Navbar
-        meta={meta.data}
-        siteId={siteId}
-        candidateOptions={candidateOptions}
-        referenceOptions={referenceOptions}
-      />
+    <div className="flex h-screen w-screen overflow-hidden bg-[var(--color-night-2)] font-sans text-[var(--color-ink)]">
+      <Sidebar />
+      
+      <div className="flex-1 flex flex-col h-full overflow-hidden relative z-0">
+        <Header
+          meta={meta.data}
+          siteId={siteId}
+          candidateOptions={candidateOptions}
+          referenceOptions={referenceOptions}
+        />
 
-      <main className="mx-auto max-w-[1360px] space-y-4 px-4 py-4 pb-16">
-        {blocking.length > 0 && <Warnings warnings={blocking} />}
+        <main className="flex-1 overflow-hidden">
+          {store.step === "Site Input" && (
+            <div className="flex h-full w-full">
+              {/* Left Pane: Configuration */}
+              <div className="w-[420px] lg:w-[480px] flex-shrink-0 h-full overflow-y-auto border-r border-[var(--color-line)] bg-[var(--color-night-2)] shadow-[4px_0_24px_rgba(0,0,0,0.02)] z-10 custom-scrollbar relative">
+                <div className="p-6 space-y-6">
+                  {blocking.length > 0 && <Warnings warnings={blocking} />}
+                  {siteInfoCard}
+                  <SiteInput meta={meta.data} />
+                </div>
+              </div>
 
-        {site && (
-          <motion.div 
-            initial={{ opacity: 0, y: -5 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-[var(--color-line)] bg-white/60 px-4 py-2.5 text-[11px] font-medium text-[var(--color-ink-dim)] shadow-sm backdrop-blur-sm"
-          >
-            <span>
-              <span className="text-[var(--color-ink)] font-semibold">{site.name}</span> ·{" "}
-              {num(site.elevation_m, 0)} m · {site.climate_objective.replace(/_/g, " ")}
-            </span>
-            <span>
-              leading with{" "}
-              <span className="text-[var(--color-solar)] font-semibold">
-                {site.headline_metric.replace(/_/g, " ")}
-              </span>
-            </span>
-            <span>
-              simulated {store.period.start} → {store.period.end}
-            </span>
-            {store.overrides && (
-              <span className="rounded-md bg-[var(--color-solar)]/10 px-2 py-0.5 text-[var(--color-solar)] font-semibold border border-[var(--color-solar)]/20">
-                edited design
-              </span>
-            )}
-            {meta.data && (
-              <span className="ml-auto text-[var(--color-ink-faint)]">
-                engine {meta.data.engine_version} · EnergyPlus{" "}
-                {meta.data.energyplus_version ?? "not found"} · {meta.data.stored_runs}{" "}
-                stored runs
-              </span>
-            )}
-          </motion.div>
-        )}
-
-        {store.step === "Design" && (
-          <div className="space-y-4">
-            <Tabs
-              tabs={DESIGN_TABS}
-              active={store.designTab}
-              onChange={store.setDesignTab}
-            />
-            {store.designTab === "recommend" && (
-              <div className="grid items-start gap-5 xl:grid-cols-[minmax(340px,400px)_1fr]">
-                <Recommend meta={meta.data} />
-                <div className="hidden xl:block">
+              {/* Right Pane: 3D Simulation Canvas */}
+              <div className="flex-1 h-full relative bg-white overflow-hidden">
+                <div className="h-full w-full">
                   <Simulation
-                    viewportOnly
+                    viewportOnly={true}
                     preview={store.preview}
                     geometry={store.preview ? previewGeometry.data : geometry.data}
                     simulation={simulation.data}
@@ -206,43 +195,50 @@ export default function App() {
                   />
                 </div>
               </div>
-            )}
-            {store.designTab === "model" && (
-              <Simulation
-                geometry={geometry.data}
-                simulation={simulation.data}
-                simulating={simulation.isPending}
-                error={simulation.error ?? geometry.error}
-              />
-            )}
-            {store.designTab === "all inputs" && <SiteInput meta={meta.data} />}
-          </div>
-        )}
+            </div>
+          )}
 
-        {store.step === "Evidence" && (
-          <div className="space-y-4">
-            <Tabs
-              tabs={EVIDENCE_TABS}
-              active={store.evidenceTab}
-              onChange={store.setEvidenceTab}
-            />
-            {store.evidenceTab === "climate" && <ClimateData />}
-            {store.evidenceTab === "construction" && <DesignParameters />}
-            {store.evidenceTab === "results" && (
-              <Results
-                simulation={simulation.data}
-                simulating={simulation.isPending}
-                error={simulation.error}
-              />
-            )}
-            {store.evidenceTab === "compare" && <Compare />}
-          </div>
-        )}
+          {store.step === "Simulation" && (
+             <div className="h-full w-full overflow-y-auto bg-[var(--color-night-3)] custom-scrollbar">
+                <div className="max-w-[1000px] mx-auto p-6 space-y-6">
+                   {blocking.length > 0 && <Warnings warnings={blocking} />}
+                   {siteInfoCard}
+                   <Simulation
+                     viewportOnly={false}
+                     preview={store.preview}
+                     geometry={store.preview ? previewGeometry.data : geometry.data}
+                     simulation={simulation.data}
+                     simulating={simulation.isPending}
+                     error={simulation.error ?? geometry.error}
+                   />
+                </div>
+             </div>
+          )}
 
-        {store.step === "Report" && (
-          <Reports simulation={simulation.data} meta={meta.data} />
-        )}
-      </main>
+          {["Climate Data", "Design Parameters", "Results", "Compare Designs", "Reports"].includes(store.step) && (
+            <div className="h-full w-full overflow-y-auto bg-[var(--color-night-2)] custom-scrollbar">
+              <div className="max-w-[1200px] mx-auto p-6 sm:p-8 space-y-6">
+                {blocking.length > 0 && <Warnings warnings={blocking} />}
+                {siteInfoCard}
+                
+                <div className="mt-2">
+                  {store.step === "Climate Data" && <ClimateData />}
+                  {store.step === "Design Parameters" && <DesignParameters />}
+                  {store.step === "Results" && (
+                    <Results
+                      simulation={simulation.data}
+                      simulating={simulation.isPending}
+                      error={simulation.error}
+                    />
+                  )}
+                  {store.step === "Compare Designs" && <Compare />}
+                  {store.step === "Reports" && <Reports simulation={simulation.data} meta={meta.data} />}
+                </div>
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
     </div>
   );
 }

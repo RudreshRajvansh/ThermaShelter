@@ -1135,11 +1135,11 @@ export function Scene3D({
       <div
         className={
           immersive
-            ? `absolute inset-x-4 top-4 z-20 flex items-start justify-between gap-3 rounded-xl border border-white/40 bg-white/80 p-2 shadow-2xl backdrop-blur-md transition-opacity duration-300 ${
+            ? `absolute inset-x-4 top-4 z-20 flex items-start justify-between gap-3 rounded-xl border border-[var(--color-line)] bg-[var(--color-night-3)]/80 p-2 shadow-2xl backdrop-blur-md transition-opacity duration-300 ${
                 idle ? "pointer-events-none opacity-0" : "opacity-100"
               }`
             : immersiveChrome
-              ? "absolute inset-x-3 top-3 z-10 flex items-start justify-between gap-3 rounded-xl border border-white/50 bg-white/75 p-2 shadow-lg backdrop-blur-md"
+              ? "absolute inset-x-3 top-3 z-10 flex items-start justify-between gap-3 rounded-xl border border-[var(--color-line)] bg-[var(--color-night-3)]/75 p-2 shadow-lg backdrop-blur-md"
               : "flex items-start justify-between gap-3"
         }
       >
@@ -1147,7 +1147,7 @@ export function Scene3D({
         <div
           role="group"
           aria-label="What is painted on the surfaces"
-          className="flex items-center rounded-lg border border-[var(--color-line)] bg-white p-0.5"
+          className="flex items-center rounded-lg border border-[var(--color-line)] bg-[var(--color-night)] p-0.5"
         >
           {(Object.keys(MODE_LABEL) as DisplayMode[])
             .filter((item) => item !== "interior_temperature")
@@ -1177,7 +1177,7 @@ export function Scene3D({
           className={`rounded-md border border-dashed px-2.5 py-1 text-xs transition-colors ${
             mode === "interior_temperature"
               ? "border-[var(--color-earth)] bg-[var(--color-earth)]/12 font-medium text-[var(--color-earth)]"
-              : "border-[var(--color-line)] bg-white text-[var(--color-ink-faint)] hover:text-[var(--color-ink)] disabled:opacity-40"
+              : "border-[var(--color-line)] bg-[var(--color-night)] text-[var(--color-ink-faint)] hover:text-[var(--color-ink)] disabled:opacity-40"
           }`}
         >
           {MODE_LABEL.interior_temperature}
@@ -1188,7 +1188,7 @@ export function Scene3D({
           className={`rounded-md border px-2.5 py-1 text-xs ${
             cut
               ? "border-[var(--color-ink)] bg-[var(--color-ink)] text-white"
-              : "border-[var(--color-line)] bg-white text-[var(--color-ink-faint)]"
+              : "border-[var(--color-line)] bg-[var(--color-night)] text-[var(--color-ink-faint)]"
           }`}
         >
           Section
@@ -1196,7 +1196,7 @@ export function Scene3D({
         <div
           role="group"
           aria-label="How the shell is drawn"
-          className="flex items-center rounded-lg border border-[var(--color-line)] bg-white p-0.5"
+          className="flex items-center rounded-lg border border-[var(--color-line)] bg-[var(--color-night)] p-0.5"
         >
           {(Object.keys(SHELL_LABEL) as Shell[]).map((item) => (
             <button
@@ -1222,7 +1222,7 @@ export function Scene3D({
             className={`rounded-md border px-2.5 py-1 text-xs ${
               showAirflow
                 ? "border-[var(--color-cold)] bg-[var(--color-cold)] text-white"
-                : "border-[var(--color-line)] bg-white text-[var(--color-ink-faint)]"
+                : "border-[var(--color-line)] bg-[var(--color-night)] text-[var(--color-ink-faint)]"
             }`}
           >
             Air exchange
@@ -1234,7 +1234,7 @@ export function Scene3D({
           className={`rounded-md border px-2.5 py-1 text-xs ${
             dressed
               ? "border-[var(--color-ink)] bg-[var(--color-ink)] text-white"
-              : "border-[var(--color-line)] bg-white text-[var(--color-ink-faint)]"
+              : "border-[var(--color-line)] bg-[var(--color-night)] text-[var(--color-ink-faint)]"
           }`}
           title="Plinth, parapet, door and steps. Construction detail drawn from the design; it carries no result and is never painted with one."
         >
@@ -1247,7 +1247,7 @@ export function Scene3D({
             className={`rounded-md border px-2.5 py-1 text-xs ${
               showRooms
                 ? "border-[var(--color-ink)] bg-[var(--color-ink)] text-white"
-                : "border-[var(--color-line)] bg-white text-[var(--color-ink-faint)]"
+                : "border-[var(--color-line)] bg-[var(--color-night)] text-[var(--color-ink-faint)]"
             }`}
           >
             Rooms
@@ -1256,7 +1256,7 @@ export function Scene3D({
         <select
           value={quality}
           onChange={(event) => changeQuality(event.target.value as Quality)}
-          className="rounded-md border border-[var(--color-line)] bg-white px-2 py-1 text-xs text-[var(--color-ink-faint)]"
+          className="rounded-md border border-[var(--color-line)] bg-[var(--color-night)] px-2 py-1 text-xs text-[var(--color-ink-faint)]"
           aria-label="Render quality"
           title="Ambient occlusion, bloom and antialiasing cost frame rate. Drop this if the view stutters."
         >
@@ -1268,7 +1268,7 @@ export function Scene3D({
           <select
             value={ramp}
             onChange={(event) => setRamp(event.target.value as RampName)}
-            className="rounded-md border border-[var(--color-line)] bg-white px-2 py-1 text-xs text-[var(--color-ink-faint)]"
+            className="rounded-md border border-[var(--color-line)] bg-[var(--color-night)] px-2 py-1 text-xs text-[var(--color-ink-faint)]"
             aria-label="Colour scale"
           >
             {(Object.keys(RAMP_LABEL) as RampName[]).map((item) => (
@@ -1298,7 +1298,7 @@ export function Scene3D({
               className={`rounded-md border px-2.5 py-1 text-xs ${
                 playing
                   ? "border-[var(--color-solar)] bg-[var(--color-solar)] text-white"
-                  : "border-[var(--color-line)] bg-white text-[var(--color-ink-faint)]"
+                  : "border-[var(--color-line)] bg-[var(--color-night)] text-[var(--color-ink-faint)]"
               }`}
             >
               {playing ? "Pause" : "Play 24 h"}
@@ -1306,7 +1306,7 @@ export function Scene3D({
             <button
               type="button"
               onClick={jumpToNoon}
-              className="rounded-md border border-[var(--color-line)] bg-white px-2.5 py-1 text-xs text-[var(--color-ink-faint)]"
+              className="rounded-md border border-[var(--color-line)] bg-[var(--color-night)] px-2.5 py-1 text-xs text-[var(--color-ink-faint)]"
             >
               Solar noon
             </button>
@@ -1317,7 +1317,7 @@ export function Scene3D({
         <button
           type="button"
           onClick={toggleImmersive}
-          className="shrink-0 rounded-md border border-[var(--color-line)] bg-white px-2.5 py-1 text-xs whitespace-nowrap text-[var(--color-ink-faint)] transition-colors hover:border-[var(--color-ink-faint)] hover:text-[var(--color-ink)]"
+          className="shrink-0 rounded-md border border-[var(--color-line)] bg-[var(--color-night)] px-2.5 py-1 text-xs whitespace-nowrap text-[var(--color-ink-faint)] transition-colors hover:border-[var(--color-ink-faint)] hover:text-[var(--color-ink)]"
           title="Fill the screen. Press F to toggle."
         >
           {immersive ? "Exit full screen" : "Full screen"}
@@ -1353,7 +1353,7 @@ export function Scene3D({
             key={badge}
             role="status"
             aria-live="polite"
-            className="badge-flash pointer-events-none absolute bottom-4 left-4 z-10 max-w-[70%] rounded-lg border border-white/50 bg-white/85 px-3 py-2 text-xs font-medium text-[var(--color-ink)] shadow-lg backdrop-blur-md"
+            className="badge-flash pointer-events-none absolute bottom-4 left-4 z-10 max-w-[70%] rounded-lg border border-[var(--color-line)] bg-[var(--color-night-3)]/85 px-3 py-2 text-xs font-medium text-[var(--color-ink)] shadow-lg backdrop-blur-md"
           >
             {badge}
           </div>
@@ -1389,7 +1389,7 @@ export function Scene3D({
 
         {hover && (
           <div
-            className="pointer-events-none absolute z-10 rounded-md border border-[var(--color-line)] bg-white/95 px-2 py-1 text-[11px] shadow-sm"
+            className="pointer-events-none absolute z-10 rounded-md border border-[var(--color-line)] bg-[var(--color-night-3)]/95 px-2 py-1 text-[11px] shadow-sm"
             style={{
               left: Math.min(hover.x + 12, 620),
               top: Math.max(hover.y - 10, 4),
@@ -1411,7 +1411,7 @@ export function Scene3D({
         )}
 
         {sun && (
-          <div className="pointer-events-none absolute left-3 top-3 rounded-md border border-[var(--color-line)] bg-white/90 px-2.5 py-1.5 text-[11px] leading-relaxed">
+          <div className="pointer-events-none absolute left-3 top-3 rounded-md border border-[var(--color-line)] bg-[var(--color-night-3)]/90 px-2.5 py-1.5 text-[11px] leading-relaxed">
             <div className="font-medium">
               {currentStamp ? currentStamp.replace("T", " ") : "—"}
             </div>
@@ -1436,7 +1436,7 @@ export function Scene3D({
       </div>
 
       {sunPath && (
-        <div className="grid gap-2 rounded-lg border border-[var(--color-line)] bg-slate-50 p-3 text-xs sm:grid-cols-3">
+        <div className="grid gap-2 rounded-lg border border-[var(--color-line)] bg-[var(--color-night-2)] p-3 text-xs sm:grid-cols-3">
           <div>
             <div className="text-[10px] uppercase tracking-wide text-[var(--color-ink-faint)]">
               Astronomical daylight
