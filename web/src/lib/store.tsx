@@ -117,6 +117,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }),
     [
       step,
+      designTab,
+      evidenceTab,
+      go,
       siteId,
       designName,
       selectDesign,
