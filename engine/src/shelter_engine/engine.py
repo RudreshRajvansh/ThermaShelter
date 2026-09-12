@@ -176,7 +176,7 @@ class Engine:
     def metrics_for(self, design: DesignSpec,
                     options: RunOptions) -> Metrics:
         key = stable_hash("metrics", design, self.site, options, self.comfort_model.id,
-                          __version__)
+                          self.library.fingerprint, __version__)
         cached = self._metric_cache.get(key)
         if cached is not None:
             return cached
@@ -219,8 +219,9 @@ class Engine:
                  with_reference: bool = True) -> SimulationResult:
         key = self.design_hash(design, options, conditioned=options.conditioned_run)
         reference_key = reference.name if isinstance(reference, DesignSpec)             else (reference or self.references.default_name)
-        cache_key = stable_hash("simulate", key, with_uncertainty,
-                                with_reference, reference_key if with_reference else "")
+        cache_key = stable_hash("simulate", key, with_uncertainty, with_reference,
+                                self.library.fingerprint,
+                                reference_key if with_reference else "")
         cached = self._cache.get(cache_key)
         if cached is not None:
             return cached.model_copy(update={"cached": True})
