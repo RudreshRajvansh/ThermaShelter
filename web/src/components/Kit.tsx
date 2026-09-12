@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
-import type { Assumption, EngineWarning } from "../lib/api";
+import { ApiError, type Assumption, type EngineWarning } from "../lib/api";
 import { bySeverity, num } from "../lib/format";
 
 export function Panel({
@@ -297,9 +297,14 @@ export function Loading({ label }: { label: string }) {
 
 export function Failure({ error }: { error: unknown }) {
   const message = error instanceof Error ? error.message : String(error);
+  const detail =
+    error instanceof ApiError && error.path
+      ? `${error.status} from ${error.path.split("?")[0]}`
+      : null;
   return (
     <div className="rounded-md border border-[var(--color-diesel)] bg-[var(--color-diesel)]/10 p-3 text-sm text-[var(--color-danger-ink)]">
-      {message}
+      <p>{message}</p>
+      {detail && <p className="tnum mt-1 text-[11px] opacity-80">{detail}</p>}
     </div>
   );
 }

@@ -49,7 +49,12 @@ export type ParetoPoint = S["ParetoPoint"];
 export type OptimisationJob = S["OptimisationJob"];
 export type DesignVariable = S["DesignVariable"];
 export class ApiError extends Error {
-  constructor(readonly status: number, message: string, readonly body?: unknown) {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly path?: string,
+    readonly body?: unknown,
+  ) {
     super(message);
     this.name = "ApiError";
   }
@@ -76,7 +81,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       typeof body === "object" && body !== null && "detail" in body
         ? String((body as { detail: unknown }).detail)
         : `${response.status} ${response.statusText}`;
-    throw new ApiError(response.status, detail, body);
+    const unrouted = response.status === 404 && detail.trim() === "Not Found";
+    throw new ApiError(
+      response.status,
+      unrouted
+        ? `The server has no ${path.split("?")[0]} endpoint. The interface is talking to `
+          + "an API that is older than it is, so restart the API and reload this page."
+        : detail,
+      path,
+      body,
+    );
   }
   return body as T;
 }
