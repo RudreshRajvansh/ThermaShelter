@@ -246,7 +246,7 @@ export function LocationPicker({
             type="text"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search a place: Leh, Kargil, Nyoma, Dras…"
+            placeholder="Search a place: Leh, Kargil, Diskit, Tangtse…"
             aria-label="Search for a place"
             className="min-w-0 flex-1 px-3 py-2 text-sm"
           />
@@ -262,7 +262,10 @@ export function LocationPicker({
         {places.data &&
           (places.data.length === 0 ? (
             <p className="text-[12px] text-[var(--color-ink-faint)]">
-              No place matched. Try another spelling, or click the spot on the map.
+              The place index knows settlement names, not valleys, passes or postal
+              addresses, and it is thin over Ladakh. Try the nearest village by name, or
+              click the exact spot on the map, which always works and is more precise
+              anyway.
             </p>
           ) : (
             <ul className="flex flex-wrap gap-1.5">

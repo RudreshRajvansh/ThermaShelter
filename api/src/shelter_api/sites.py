@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import math
+import unicodedata
 import threading
 import time
 import urllib.error
@@ -41,6 +42,7 @@ FAR_ZOOM = 9
 MAX_TILES = 16
 LOWEST_SITE_M = -100.0
 MAX_MISSING_FRACTION = 0.01
+MAX_SEARCH_TERMS = 3
 BASE_C = 18.0
 HOURLY = ("temperature_2m", "dew_point_2m", "relative_humidity_2m", "surface_pressure",
           "wind_speed_10m", "wind_direction_10m", "shortwave_radiation",
@@ -120,30 +122,83 @@ def coordinate_label(latitude_deg: float, longitude_deg: float) -> str:
             f"{abs(longitude_deg):.5f}° {'E' if longitude_deg >= 0 else 'W'}")
 
 
+def _folded(text: str) -> str:
+    stripped = "".join(character for character
+                       in unicodedata.normalize("NFKD", str(text))
+                       if not unicodedata.combining(character))
+    return " ".join(stripped.casefold().replace(",", " ").split())
+
+
+def search_terms(query: str) -> list[str]:
+    typed = " ".join(str(query).split())
+    words = _folded(query).split()
+    if not words:
+        return []
+    terms = [typed]
+    for cut in range(len(words), 0, -1):
+        candidate = " ".join(words[:cut])
+        if candidate.casefold() not in {term.casefold() for term in terms}:
+            terms.append(candidate)
+    return terms[:MAX_SEARCH_TERMS]
+
+
+def _score(place: dict[str, Any], words: list[str]) -> tuple[int, int, float]:
+    name = _folded(place["name"])
+    whole = " ".join(words)
+    exact = 2 if name == whole else 1 if name.startswith(words[0]) else 0
+    context = _folded(" ".join(str(part) for part
+                               in (place["region"], place["country"],
+                                   place["country_code"] or "")))
+    matched = sum(1 for word in words[1:] if word in context)
+    return (exact, matched, float(place.get("population") or 0.0))
+
+
 def search_places(query: str, count: int = 8, fetch: Fetcher | None = None
                   ) -> list[dict[str, Any]]:
-    payload = _fetcher(fetch)(GEOCODING_URL, {"name": query, "count": count,
-                                              "language": "en", "format": "json"})
-    results = payload.get("results") if isinstance(payload, dict) else None
+    terms = search_terms(query)
+    if not terms:
+        return []
+    words = _folded(query).split()
+    fetcher = _fetcher(fetch)
     places: list[dict[str, Any]] = []
-    for item in results or []:
-        try:
-            latitude = float(item["latitude"])
-            longitude = float(item["longitude"])
-        except (KeyError, TypeError, ValueError):
-            continue
-        elevation = item.get("elevation")
-        places.append({
-            "name": str(item.get("name") or coordinate_label(latitude, longitude)),
-            "region": ", ".join(str(part) for part in (item.get("admin2"), item.get("admin1"))
-                                if part),
-            "country": str(item.get("country") or ""),
-            "country_code": str(item["country_code"]).upper()
-            if item.get("country_code") else None,
-            "latitude_deg": latitude, "longitude_deg": longitude,
-            "elevation_m": float(elevation) if isinstance(elevation, (int, float)) else None,
-        })
-    return places
+    seen: set[tuple[float, float]] = set()
+
+    for term in terms:
+        payload = fetcher(GEOCODING_URL, {"name": term, "count": count,
+                                          "language": "en", "format": "json"})
+        results = payload.get("results") if isinstance(payload, dict) else None
+        for item in results or []:
+            try:
+                latitude = float(item["latitude"])
+                longitude = float(item["longitude"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            key = (round(latitude, 4), round(longitude, 4))
+            if key in seen:
+                continue
+            seen.add(key)
+            elevation = item.get("elevation")
+            population = item.get("population")
+            places.append({
+                "name": str(item.get("name") or coordinate_label(latitude, longitude)),
+                "region": ", ".join(str(part) for part
+                                    in (item.get("admin2"), item.get("admin1")) if part),
+                "country": str(item.get("country") or ""),
+                "country_code": str(item["country_code"]).upper()
+                if item.get("country_code") else None,
+                "latitude_deg": latitude, "longitude_deg": longitude,
+                "elevation_m": float(elevation) if isinstance(elevation, (int, float))
+                else None,
+                "population": float(population) if isinstance(population, (int, float))
+                else None,
+            })
+        if len(places) >= count:
+            break
+
+    places.sort(key=lambda place: _score(place, words), reverse=True)
+    for place in places:
+        place.pop("population", None)
+    return places[:count]
 
 
 def decode_terrarium(data: bytes) -> np.ndarray:

@@ -28,6 +28,23 @@ def _pressure_hpa(elevation_m: float) -> float:
     return standard_pressure_pa(elevation_m) / 100.0
 
 
+GEOCODED = {
+    "kargil": [{"name": "Kargil", "latitude": 34.55765, "longitude": 76.12622,
+                "elevation": 2686.0, "admin1": "Ladakh", "country": "India",
+                "country_code": "IN", "population": 16000},
+               {"name": "Kargil", "latitude": 24.2, "longitude": 81.9,
+                "admin1": "Madhya Pradesh", "country": "India", "country_code": "IN",
+                "population": 900},
+               {"name": "broken"}],
+    "leh": [{"name": "Le Havre", "latitude": 49.49346, "longitude": 0.10785,
+             "admin1": "Normandy", "country": "France", "country_code": "FR",
+             "population": 170000},
+            {"name": "Leh", "latitude": 34.16504, "longitude": 77.58402,
+             "elevation": 3502.0, "admin1": "Ladakh", "country": "India",
+             "country_code": "IN", "population": 30000}],
+}
+
+
 def fake_fetch(url: str, params: dict) -> dict:
     if "archive-api" in url:
         start = datetime.fromisoformat(params["start_date"])
@@ -63,9 +80,7 @@ def fake_fetch(url: str, params: dict) -> dict:
     if "nominatim" in url:
         return {"name": "Test Valley", "address": {"state": "Ladakh", "country_code": "in"}}
     if "geocoding-api" in url:
-        return {"results": [{"name": "Kargil", "latitude": 34.55765, "longitude": 76.12622,
-                             "elevation": 2686.0, "admin1": "Ladakh", "country": "India",
-                             "country_code": "IN"}, {"name": "broken"}]}
+        return {"results": GEOCODED.get(params["name"].casefold(), [])}
     raise AssertionError(f"unexpected request to {url}")
 
 
@@ -235,9 +250,29 @@ def test_out_of_range_coordinates_are_refused(world):
 def test_place_search_returns_usable_places_only(world):
     client, _, _ = world
     places = client.get("/api/places", params={"query": "Kargil"}).json()
-    assert [place["name"] for place in places] == ["Kargil"]
+    assert [place["name"] for place in places] == ["Kargil", "Kargil"]
     assert places[0]["region"] == "Ladakh"
     assert client.get("/api/places", params={"query": "K"}).status_code == 422
+
+
+def test_place_search_falls_back_to_the_leading_words(world):
+    client, _, _ = world
+    places = client.get("/api/places", params={"query": "Leh Ladakh"}).json()
+    assert places, "a place name followed by its region must still find the place"
+    assert places[0]["name"] == "Leh"
+    assert places[0]["country_code"] == "IN"
+
+
+def test_place_search_puts_the_named_place_before_a_bigger_lookalike(world):
+    client, _, _ = world
+    places = client.get("/api/places", params={"query": "Leh"}).json()
+    assert [place["name"] for place in places] == ["Leh", "Le Havre"]
+
+
+def test_place_search_prefers_the_region_the_user_typed(world):
+    client, _, _ = world
+    places = client.get("/api/places", params={"query": "Kargil Ladakh"}).json()
+    assert [place["region"] for place in places] == ["Ladakh", "Madhya Pradesh"]
 
 
 def test_a_new_site_draws_its_own_terrain_not_the_leh_mesh(world):
