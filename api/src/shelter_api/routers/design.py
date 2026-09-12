@@ -166,13 +166,9 @@ def terrain(site_id: str | None = None,
     site = context.site(site_id)
     if not skyline_only:
         directory = Path(context.settings.data_dir) / "terrain"
-        candidates = [directory / f"{site.id}.obj"]
-        if site.id == context.settings.default_site:
-            candidates.append(directory / "terrain_mesh.obj")
-        for path in candidates:
-            measured = load_terrain_obj(path, site)
-            if measured is not None:
-                return measured
+        measured = load_terrain_obj(directory / f"{site.id}.obj", site)
+        if measured is not None:
+            return measured
     return terrain_mesh(site, inner_radius_m, outer_radius_m)
 
 

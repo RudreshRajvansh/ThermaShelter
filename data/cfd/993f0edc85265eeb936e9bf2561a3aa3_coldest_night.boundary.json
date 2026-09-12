@@ -3,8 +3,8 @@
   "zone": "ROOM",
   "label": "coldest_night",
   "timestamp": "2019-01-28T07:00:00",
-  "zone_air_temperature_c": 2.5242853436001838,
-  "zone_relative_humidity_percent": 73.18038284525566,
+  "zone_air_temperature_c": 2.589334567519918,
+  "zone_relative_humidity_percent": 73.28969135714424,
   "outdoor_air_temperature_c": -12.833333333333334,
   "air_pressure_pa": 67183.58333333333,
   "zone_volume_m3": 234.0,
@@ -36,7 +36,7 @@
         3
       ],
       "area_m2": 90.00000000000001,
-      "inside_face_temperature_c": 3.1246526354821618,
+      "inside_face_temperature_c": 3.2086836193283474,
       "emissivity": 0.9
     },
     {
@@ -66,7 +66,7 @@
         3
       ],
       "area_m2": 90.00000000000001,
-      "inside_face_temperature_c": 2.39784286695473,
+      "inside_face_temperature_c": 2.489048562884701,
       "emissivity": 0.9
     },
     {
@@ -96,7 +96,7 @@
         3
       ],
       "area_m2": 36.585242926622755,
-      "inside_face_temperature_c": 3.5654383509604597,
+      "inside_face_temperature_c": 3.6743639427818557,
       "emissivity": 0.9
     },
     {
@@ -126,7 +126,7 @@
         3
       ],
       "area_m2": 16.629655875737615,
-      "inside_face_temperature_c": 3.7439073725787533,
+      "inside_face_temperature_c": 3.8450513829652717,
       "emissivity": 0.9
     },
     {
@@ -156,7 +156,7 @@
         3
       ],
       "area_m2": 0.831482793786881,
-      "inside_face_temperature_c": -2.7912600042802844,
+      "inside_face_temperature_c": -1.6437793870268251,
       "emissivity": 0.9
     },
     {
@@ -186,7 +186,7 @@
         3
       ],
       "area_m2": 16.629655875737615,
-      "inside_face_temperature_c": 3.7712769973322646,
+      "inside_face_temperature_c": 3.854525416538971,
       "emissivity": 0.9
     },
     {
@@ -216,7 +216,7 @@
         3
       ],
       "area_m2": 0.831482793786881,
-      "inside_face_temperature_c": -3.083402868380375,
+      "inside_face_temperature_c": -2.9304726975817155,
       "emissivity": 0.9
     },
     {
@@ -246,7 +246,7 @@
         3
       ],
       "area_m2": 36.585242926622755,
-      "inside_face_temperature_c": 3.787970625762515,
+      "inside_face_temperature_c": 3.854802577349364,
       "emissivity": 0.9
     },
     {
@@ -276,12 +276,12 @@
         3
       ],
       "area_m2": 11.70727773651928,
-      "inside_face_temperature_c": 1.4664656035796877,
+      "inside_face_temperature_c": 1.6228784061475494,
       "emissivity": 0.9
     }
   ],
   "internal_convective_gain_w": 106.95,
-  "infiltration_sensible_w": -451.1512009130031,
+  "infiltration_sensible_w": -453.06203330371034,
   "mixing_sensible_w": 0.0,
   "units": "SI",
   "notes": [
@@ -290,5 +290,5 @@
     "EnergyPlus computes no air temperature field and no air velocity inside the room. Anything of that kind must come from this fluid dynamics run and must be labelled with the hour and the solver on screen.",
     "Coordinates are in metres in the same world frame as the display mesh, x east, y north, z up, with the building rotated to its real orientation."
   ],
-  "source_run": "C:\\Users\\rudre\\.shelter_engine\\runs\\barrack_sunspace_free_q13tyb_a\\eplusout.sql"
+  "source_run": "C:\\Users\\rudre\\.shelter_engine\\runs\\barrack_sunspace_free_xxezi6j7\\eplusout.sql"
 }
