@@ -60,7 +60,6 @@ import {
   dimensionLines,
   type LabelLayer,
 } from "../lib/labels";
-import { createSectionCaps, type SectionCaps } from "../lib/section";
 import { FIGURE_HEIGHT_M, createScaleFigure, type ScaleFigure } from "../lib/figure";
 import type { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { createGizmos, computeNewDesign, type HandleType } from "../lib/manipulate";
@@ -325,7 +324,6 @@ export function Scene3D({
   const rigRef = useRef<CameraRig | null>(null);
   const invalidateRef = useRef<(() => void) | null>(null);
   const labelsRef = useRef<LabelLayer | null>(null);
-  const capsRef = useRef<SectionCaps | null>(null);
   const figureRef = useRef<ScaleFigure | null>(null);
   const annotationsRef = useRef<THREE.Group | null>(null);
   const environmentRef = useRef<SkyEnvironment | null>(null);
@@ -648,19 +646,6 @@ export function Scene3D({
     } else {
       edgeRef.current = null;
     }
-
-    const cappable = solid
-      ? [...solid.parts.entries()].flatMap(([name, list]) =>
-          list.map((mesh) => ({ name, mesh })))
-      : [...meshes.entries()].map(([name, mesh]) => ({ name, mesh }));
-    const caps = createSectionCaps(
-      cappable, clipRef.current, buildingRadius * 3,
-      (name) => (meshes.get(name)?.userData.baseColour as string) ?? "#b9b2a4",
-    );
-    caps.group.position.copy(group.position);
-    caps.group.visible = false;
-    capsRef.current = caps;
-    scene.add(caps.group);
 
     const annotations = new THREE.Group();
     annotations.position.copy(group.position);
@@ -1045,8 +1030,6 @@ export function Scene3D({
       }
       edgeRef.current?.dispose();
       edgeRef.current = null;
-      capsRef.current?.dispose();
-      capsRef.current = null;
       figureRef.current?.dispose();
       figureRef.current = null;
       annotationsRef.current = null;
@@ -1160,11 +1143,24 @@ export function Scene3D({
 
   useEffect(() => {
     clipRef.current.constant = cut ? 0.01 : 9999;
-    if (capsRef.current) {
-      capsRef.current.update();
-      capsRef.current.setVisible(cut && shell === "solid");
+    const face = (material: THREE.Material) => {
+      if (material.userData.side === undefined) material.userData.side = material.side;
+      material.side = cut ? THREE.DoubleSide : (material.userData.side as THREE.Side);
+      material.needsUpdate = true;
+    };
+    const solid = solidRef.current;
+    if (solid) {
+      for (const list of solid.parts.values()) {
+        for (const mesh of list) face(mesh.material as THREE.Material);
+      }
+    } else {
+      meshesRef.current.forEach((mesh) => face(mesh.material as THREE.Material));
     }
-  }, [cut, shell, geometry]);
+    architectureRef.current?.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (mesh.material && !Array.isArray(mesh.material)) face(mesh.material);
+    });
+  }, [cut, geometry]);
 
   useEffect(() => {
     if (!annotationsRef.current) return;
@@ -1177,14 +1173,6 @@ export function Scene3D({
   useEffect(() => {
     if (figureRef.current) figureRef.current.group.visible = showFigure;
   }, [showFigure, geometry]);
-
-  useEffect(() => {
-    if (capsRef.current && mode === "construction") {
-      capsRef.current.setColours(
-        (name) => (meshesRef.current.get(name)?.userData.baseColour as string) ?? "#b9b2a4",
-      );
-    }
-  }, [mode, geometry]);
 
   useEffect(() => {
     invalidateRef.current?.();
@@ -1440,7 +1428,7 @@ export function Scene3D({
           <Chip
             active={cut}
             onClick={() => setCut((value) => !value)}
-            title="Cut the model on the north to south centre line. Cut faces are filled with the material colour of whatever the cut passes through."
+            title="Cut the south half away on the north to south centre line and look straight into the room. What you see at the cut is the inside face of the construction, not a filled solid."
           >
             Section
           </Chip>

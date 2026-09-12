@@ -2514,6 +2514,12 @@ export interface components {
              * @default false
              */
             created: boolean;
+            /** Requested Latitude Deg */
+            requested_latitude_deg?: number | null;
+            /** Requested Longitude Deg */
+            requested_longitude_deg?: number | null;
+            /** Substituted Km */
+            substituted_km?: number | null;
         };
         /** SiteProvenance */
         SiteProvenance: {

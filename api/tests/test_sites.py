@@ -222,6 +222,7 @@ def test_an_unreachable_service_is_reported_and_nothing_is_written(world):
         sites.fetch_tile_png = fake_tile
     assert response.status_code == 503
     assert "could not be reached" in response.json()["detail"]
+    assert "too far to stand in" in response.json()["detail"]
     assert not (root / "sites" / "s12.34567_w45.67891.json").exists()
     assert not list((root / "weather").glob("s12.34567_w45.67891*"))
     assert not (root / "terrain" / "s12.34567_w45.67891.obj").exists()
@@ -234,11 +235,22 @@ def test_weather_failure_after_the_terrain_leaves_no_partial_site(world):
         response = resolve(client, latitude=LATITUDE + 0.2, longitude=LONGITUDE)
     finally:
         sites.fetch_json = fake_fetch
-    assert response.status_code == 503
+    assert response.status_code == 200
     stem = "n34.40000_e77.60000"
     assert not (root / "sites" / f"{stem}.json").exists()
     assert not (root / "terrain" / f"{stem}.obj").exists()
     assert not list((root / "weather").glob(f"{stem}*"))
+
+    body = response.json()
+    assert body["site"]["id"] != stem, "a nearby built site stands in for the point"
+    assert body["created"] is False
+    assert body["requested_latitude_deg"] == 34.4
+    assert body["requested_longitude_deg"] == 77.6
+    assert 0 < body["substituted_km"] < 50
+    substitution = body["warnings"][0]
+    assert substitution["code"] == "site_substituted"
+    assert substitution["severity"] == "severe"
+    assert "not to the point you clicked" in substitution["message"]
 
 
 def test_out_of_range_coordinates_are_refused(world):

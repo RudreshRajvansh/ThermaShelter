@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from shelter_engine.errors import WeatherError
-from shelter_engine.schema import SiteSpec
+from shelter_engine.schema import EngineWarning, Severity, SiteSpec
 from shelter_engine.weather import load_epw_cached
 
 from .. import sites as site_builder
@@ -14,6 +14,8 @@ from ..schemas import PlaceResult, ResolveSiteRequest, SiteDetail, SiteProvenanc
 from .catalog import summarise_site
 
 router = APIRouter()
+
+MAX_SUBSTITUTE_KM = 250.0
 
 
 def _absolute(context: Context, site: SiteSpec) -> SiteSpec:
@@ -55,12 +57,58 @@ def resolve_site(request: ResolveSiteRequest,
         built = site_builder.build_site(request.latitude_deg, request.longitude_deg,
                                         request.name, Path(context.settings.data_dir))
     except site_builder.SiteUnavailable as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
+        return _nearest_built(context, request, str(error))
     except (ValueError, WeatherError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     site = _absolute(context, built.site)
     context.add_site(site)
     return _detail(site, built.provenance, built.notes, built.created)
+
+
+def _nearest_built(context: Context, request: ResolveSiteRequest,
+                   reason: str) -> SiteDetail:
+    from shelter_engine.site_data import great_circle_km
+
+    candidates = list(context.sites.values())
+    if not candidates:
+        raise HTTPException(
+            status_code=503,
+            detail=(f"{reason} No site has been built here before either, so there is "
+                    "nothing to fall back on."))
+
+    def distance(site: SiteSpec) -> float:
+        return great_circle_km(request.latitude_deg, request.longitude_deg,
+                               site.latitude_deg, site.longitude_deg)
+
+    nearest = min(candidates, key=distance)
+    away = distance(nearest)
+    if away > MAX_SUBSTITUTE_KM:
+        raise HTTPException(
+            status_code=503,
+            detail=(f"{reason} The nearest site already built on this machine is "
+                    f"{nearest.name}, {away:.0f} km away, too far to stand in for this "
+                    "point."))
+    site = _absolute(context, nearest)
+    provenance, notes = site_builder.load_provenance(Path(context.settings.data_dir),
+                                                     nearest.id)
+    detail = _detail(site, provenance, notes, False)
+    return detail.model_copy(update={
+        "requested_latitude_deg": round(request.latitude_deg, 5),
+        "requested_longitude_deg": round(request.longitude_deg, 5),
+        "substituted_km": round(away, 1),
+        "warnings": [EngineWarning(
+            code="site_substituted",
+            severity=Severity.SEVERE,
+            origin="weather",
+            message=(
+                f"The point you clicked could not be built: {reason} "
+                f"Everything below describes {nearest.name} instead, "
+                f"{away:.0f} km away at {nearest.elevation_m:.0f} m, because that site "
+                f"is already on this machine. Its weather, terrain horizon and ground "
+                f"belong to that place, not to the point you clicked, so no result on "
+                f"this site is a result for your point."),
+        ), *detail.warnings],
+    })
 
 
 @router.get("/sites/{site_id}", response_model=SiteDetail, tags=["site"])

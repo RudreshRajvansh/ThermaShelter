@@ -57,6 +57,25 @@ function ClickToPick({
   return null;
 }
 
+function Crosshair() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={15}
+      height={15}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <circle cx={12} cy={12} r={6.5} />
+      <circle cx={12} cy={12} r={1.6} fill="currentColor" stroke="none" />
+      <path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3" />
+    </svg>
+  );
+}
+
 function FlyTo({ flight }: { flight: Flight | null }) {
   const map = useMap();
   useEffect(() => {
@@ -78,11 +97,29 @@ function SiteCard({
   if (loading || !detail) return <Loading label="loading the selected site…" />;
   const { site, summary, provenance } = detail;
   const ground = site.ground?.monthly_c ?? null;
+  const standIn =
+    detail.substituted_km != null &&
+    detail.requested_latitude_deg != null &&
+    detail.requested_longitude_deg != null;
   return (
     <div className="panel space-y-4 p-4 text-sm">
+      {standIn && (
+        <div className="rounded-lg border border-[var(--color-diesel)] bg-[var(--color-diesel)]/10 p-3">
+          <p className="text-[12px] font-semibold text-[var(--color-danger-ink)]">
+            This is not the point you clicked
+          </p>
+          <p className="tnum mt-1 text-[12px] leading-relaxed text-[var(--color-ink-dim)]">
+            You clicked{" "}
+            {formatCoordinate(detail.requested_latitude_deg!, detail.requested_longitude_deg!)}
+            . That point could not be built, so everything below describes {site.name},{" "}
+            {num(detail.substituted_km, 0)} km away. Its weather, skyline and ground belong
+            to that place, so no result here is a result for your point.
+          </p>
+        </div>
+      )}
       <div>
         <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--color-ink-faint)]">
-          Selected site
+          {standIn ? "Standing in for your point" : "Selected site"}
         </p>
         <p className="mt-0.5 text-base font-semibold leading-snug text-[var(--color-ink)]">
           {site.name}
@@ -178,6 +215,8 @@ export function LocationPicker({
 }) {
   const client = useQueryClient();
   const [pending, setPending] = useState<Pending | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [latitudeText, setLatitudeText] = useState("");
   const [longitudeText, setLongitudeText] = useState("");
@@ -207,6 +246,49 @@ export function LocationPicker({
       setPending(null);
     },
   });
+
+  const locate = () => {
+    setLocationError(null);
+    if (!("geolocation" in navigator)) {
+      setLocationError("This browser does not offer a location.");
+      return;
+    }
+    if (!window.isSecureContext) {
+      setLocationError(
+        "Browsers only share a location over https or on localhost. Click the spot on "
+        + "the map instead.",
+      );
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocating(false);
+        const { latitude, longitude, accuracy } = position.coords;
+        setLocationError(
+          accuracy > 2000
+            ? `The device placed you to within about ${(accuracy / 1000).toFixed(1)} km, `
+              + "which is coarse for a site. Drag the map and click the exact spot if it "
+              + "matters."
+            : null,
+        );
+        pick({ latitude, longitude, name: null }, 13);
+      },
+      (failure) => {
+        setLocating(false);
+        setLocationError(
+          failure.code === failure.PERMISSION_DENIED
+            ? "This browser refused to share a location. Allow it in the site settings, "
+              + "or click the spot on the map."
+            : failure.code === failure.POSITION_UNAVAILABLE
+              ? "The device could not work out where it is. Click the spot on the map "
+                + "instead."
+              : "Finding you took too long. Click the spot on the map instead.",
+        );
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
+    );
+  };
 
   const pick = (point: Pending, zoom?: number) => {
     setPending(point);
@@ -418,7 +500,21 @@ export function LocationPicker({
           >
             Show on map
           </button>
+          <button
+            type="button"
+            disabled={locating}
+            onClick={locate}
+            title="Ask this browser where you are and drop the pin there. The reading comes from the device, not from the map."
+            className="flex items-center gap-2 rounded-lg border border-[var(--color-line)] bg-[var(--color-night-2)] px-4 py-2 text-sm text-[var(--color-ink)] transition hover:border-[var(--color-solar)] disabled:opacity-40"
+          >
+            <Crosshair />
+            {locating ? "Finding you…" : "Where I am"}
+          </button>
         </div>
+
+        {locationError && (
+          <p className="text-[12px] text-[var(--color-danger-ink)]">{locationError}</p>
+        )}
 
         {pending && (
           <div className="space-y-2 rounded-xl border border-[var(--color-pick-line)] bg-[var(--color-pick-bg)] p-4 text-sm">

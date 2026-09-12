@@ -275,6 +275,9 @@ class SiteDetail(Body):
     notes: list[str] = Field(default_factory=list)
     warnings: list[EngineWarning] = Field(default_factory=list)
     created: bool = False
+    requested_latitude_deg: float | None = None
+    requested_longitude_deg: float | None = None
+    substituted_km: float | None = None
 
 
 class ValidationEvidence(Body):
