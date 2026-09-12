@@ -116,6 +116,19 @@ function roofOuterIsMetal(design: DesignSpec | null | undefined): boolean {
     /gi_sheet|steel|metal/.test(outer.material_id);
 }
 
+export function applyClipping(group: THREE.Group, planes: THREE.Plane[]): void {
+  group.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.material) return;
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const material of materials) {
+      material.clippingPlanes = planes;
+      material.clipShadows = true;
+      material.needsUpdate = true;
+    }
+  });
+}
+
 export function buildArchitecture(
   geometry: GeometryPayload,
   design: DesignSpec | null | undefined,

@@ -78,6 +78,8 @@ type State = {
   setDisplayMode: (mode: DisplayMode) => void;
   hourIndex: number;
   setHourIndex: (index: number) => void;
+  hourSeeded: boolean;
+  seedHour: (index: number) => void;
   cooling: boolean;
   setCooling: (value: boolean) => void;
   period: Window;
@@ -133,6 +135,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [displayMode, setDisplayMode] = useState<DisplayMode>("construction");
   const [hourIndex, setHourIndex] = useState(0);
+  const [hourSeeded, setHourSeeded] = useState(false);
   const [cooling, setCooling] = useState(false);
   const [liveMode, setLiveMode] = useState(false);
   const [comfortModelId, setComfortModelId] = useState<string | null>(null);
@@ -238,6 +241,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setDisplayMode,
       hourIndex,
       setHourIndex,
+      hourSeeded,
+      seedHour: (index: number) => {
+        setHourSeeded(true);
+        setHourIndex(index);
+      },
       cooling,
       setCooling,
       period: cooling ? SUMMER : WINTER,
@@ -270,6 +278,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       clearOverride,
       displayMode,
       hourIndex,
+      hourSeeded,
       cooling,
       liveMode,
       comfortModelId,

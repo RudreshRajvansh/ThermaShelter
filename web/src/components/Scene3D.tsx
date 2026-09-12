@@ -13,7 +13,7 @@ import {
   type TerrainMesh,
 } from "../lib/api";
 import { buildSolid } from "../lib/solid";
-import { buildArchitecture } from "../lib/architecture";
+import { applyClipping, buildArchitecture } from "../lib/architecture";
 import { createThermalVolume, probeTemperature, type ThermalFieldData } from "../lib/thermal_volume";
 import { activeDesign, useStore } from "../lib/store";
 import {
@@ -38,11 +38,31 @@ import { createParticleAirflow } from "../lib/flow_paths";
 import {
   createPipeline,
   createSkyDome,
+  createSkyEnvironment,
   detailMaps,
   detectQuality,
   type Pipeline,
   type Quality,
+  type SkyEnvironment,
 } from "../lib/render_pipeline";
+import {
+  VIEW_HINT,
+  VIEW_LABEL,
+  createCameraRig,
+  orbitFor,
+  type CameraRig,
+  type ViewName,
+} from "../lib/viewer_camera";
+import { createEdgeLines, type EdgeLines } from "../lib/edges";
+import {
+  cardinalPoints,
+  createLabelLayer,
+  dimensionLines,
+  type LabelLayer,
+} from "../lib/labels";
+import { createSectionCaps, type SectionCaps } from "../lib/section";
+import { FIGURE_HEIGHT_M, createScaleFigure, type ScaleFigure } from "../lib/figure";
+import type { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { createGizmos, computeNewDesign, type HandleType } from "../lib/manipulate";
 import type { DesignSpec } from "../lib/api";
 
@@ -93,6 +113,85 @@ const MODE_UNIT: Record<DisplayMode, string> = {
 };
 
 type Hover = { name: string; value: number | null; area: number; x: number; y: number; point?: THREE.Vector3 };
+
+const VIEWS: ViewName[] = ["iso", "plan", "south", "east", "sun"];
+
+const TONE_ACTIVE: Record<string, string> = {
+  neutral: "border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-day)]",
+  cold: "border-[var(--color-cold)] bg-[var(--color-cold)]/14 text-[var(--color-cold)]",
+  earth: "border-[var(--color-earth)] bg-[var(--color-earth)]/14 text-[var(--color-earth)]",
+};
+
+function Chip({
+  children,
+  onClick,
+  active = false,
+  disabled = false,
+  tone = "neutral",
+  dashed = false,
+  title,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  active?: boolean;
+  disabled?: boolean;
+  tone?: "neutral" | "cold" | "earth";
+  dashed?: boolean;
+  title?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      aria-pressed={active}
+      className={`rounded-md border px-2.5 py-1 text-xs whitespace-nowrap transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 ${
+        dashed ? "border-dashed" : ""
+      } ${
+        active
+          ? TONE_ACTIVE[tone]
+          : "border-[var(--color-line)] bg-[var(--color-night-2)] text-[var(--color-ink-dim)] hover:border-[var(--color-ink-faint)] hover:text-[var(--color-ink)]"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Segment({
+  children,
+  onClick,
+  active,
+  disabled = false,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  active: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={active}
+      className={`rounded-md px-2.5 py-1 text-xs whitespace-nowrap transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 ${
+        active
+          ? "bg-[var(--color-ink)] font-medium text-[var(--color-day)]"
+          : "text-[var(--color-ink-faint)] hover:text-[var(--color-ink)]"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Divider() {
+  return <span aria-hidden="true" className="h-5 w-px bg-[var(--color-line)]" />;
+}
+
+const SCENE_INK = "#26303d";
 
 function extentOf(
   surfaces: SurfaceResults | null,
@@ -191,7 +290,7 @@ export function Scene3D({
     setSky: (direction: THREE.Vector3, altitude: number) => void;
     fill: THREE.HemisphereLight;
   } | null>(null);
-  const clipRef = useRef<THREE.Plane>(new THREE.Plane(new THREE.Vector3(0, -1, 0), 999));
+  const clipRef = useRef<THREE.Plane>(new THREE.Plane(new THREE.Vector3(0, 1, 0), 999));
   const raycastRef = useRef<{
     raycaster: THREE.Raycaster;
     camera: THREE.PerspectiveCamera;
@@ -212,6 +311,8 @@ export function Scene3D({
   const [elements, setElements] = useState<string[]>([]);
   const architectureRef = useRef<THREE.Group | null>(null);
   const [showAirflow, setShowAirflow] = useState(false);
+  const [showDimensions, setShowDimensions] = useState(false);
+  const [showFigure, setShowFigure] = useState(false);
   const [airflowLegend, setAirflowLegend] = useState<
     { label: string; detail: string }[]
   >([]);
@@ -220,7 +321,15 @@ export function Scene3D({
     tick: (delta: number) => void;
     dispose: () => void;
   } | null>(null);
-  const edgesRef = useRef<THREE.Group | null>(null);
+  const edgeRef = useRef<EdgeLines | null>(null);
+  const rigRef = useRef<CameraRig | null>(null);
+  const invalidateRef = useRef<(() => void) | null>(null);
+  const labelsRef = useRef<LabelLayer | null>(null);
+  const capsRef = useRef<SectionCaps | null>(null);
+  const figureRef = useRef<ScaleFigure | null>(null);
+  const annotationsRef = useRef<THREE.Group | null>(null);
+  const environmentRef = useRef<SkyEnvironment | null>(null);
+  const captureRef = useRef<(() => string) | null>(null);
   const solidRef = useRef<{
     group: THREE.Group;
     parts: Map<string, THREE.Mesh[]>;
@@ -237,8 +346,8 @@ export function Scene3D({
     mesh: THREE.Mesh;
     update: (data: ThermalFieldData) => void;
     dispose: () => void;
-    setOpacity: (v: number) => void;
-    setClipHeight: (h: number) => void;
+    setOpacity: (value: number) => void;
+    setSectionY: (worldY: number | null) => void;
   } | null>(null);
   const [cfd, setCfd] = useState<CFDFieldSet | CFDAbsent | null>(null);
   const [cfdError, setCfdError] = useState<string | null>(null);
@@ -326,7 +435,11 @@ export function Scene3D({
     const width = mount.clientWidth || 800;
     const height = mount.clientHeight || 420;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      stencil: true,
+      preserveDrawingBuffer: true,
+    });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(width, height);
     renderer.shadowMap.enabled = true;
@@ -334,10 +447,25 @@ export function Scene3D({
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.localClippingEnabled = true;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.92;
+    renderer.toneMappingExposure = 0.78;
     mount.appendChild(renderer.domElement);
+    renderer.domElement.tabIndex = 0;
+    renderer.domElement.setAttribute("role", "application");
+    renderer.domElement.setAttribute(
+      "aria-label",
+      "Three dimensional view of the shelter. Drag or use the arrow keys to orbit, "
+      + "hold shift to pan, plus and minus to zoom.",
+    );
+    renderer.domElement.style.touchAction = "none";
 
     const camera = new THREE.PerspectiveCamera(42, width / height, 0.5, 4000);
+    camera.up.set(0, 0, 1);
+
+    const labels = createLabelLayer();
+    labels.resize(width, height);
+    mount.appendChild(labels.element);
+    labelsRef.current = labels;
+    scene.add(labels.group);
 
     const group = new THREE.Group();
     const meshes = new Map<string, THREE.Mesh>();
@@ -368,7 +496,6 @@ export function Scene3D({
       });
 
     const solid = buildSolid(geometry, design ?? null, makeOpaque, makeGlass);
-
 
     for (const surface of geometry.surfaces) {
       const buffer = new THREE.BufferGeometry();
@@ -423,18 +550,6 @@ export function Scene3D({
       mesh.visible = solid === null;
       group.add(mesh);
       meshes.set(surface.name, mesh);
-
-      const edges = new THREE.LineSegments(
-        new THREE.EdgesGeometry(buffer, 20),
-        new THREE.LineBasicMaterial({
-          color: 0x1c2530,
-          transparent: true,
-          opacity: 0.4,
-          clippingPlanes: [clipRef.current],
-        }),
-      );
-      edges.visible = solid === null;
-      group.add(edges);
     }
     if (solid) {
       for (const [name, list] of solid.parts) {
@@ -454,12 +569,10 @@ export function Scene3D({
     const size = box.getSize(new THREE.Vector3());
     group.position.set(-centre.x, -centre.y, 0);
     scene.add(group);
-    const architecture = buildArchitecture(
-      geometry,
-      design ?? null,
-      geometry.layout,
-    );
+
+    const architecture = buildArchitecture(geometry, design ?? null, geometry.layout);
     if (architecture) {
+      applyClipping(architecture.group, [clipRef.current]);
       architecture.group.position.set(-centre.x, -centre.y, 0);
       architecture.group.visible = dressed;
       architectureRef.current = architecture.group;
@@ -479,10 +592,15 @@ export function Scene3D({
     const measured = Boolean(
       terrain && terrain.positions.length > 0 && !terrain.derived_from_horizon,
     );
-    const sky = createSkyDome(sceneRadius * 3.2);
+    const sky = createSkyDome(sceneRadius * 3.2, 0.42);
     scene.add(sky.mesh);
-    scene.add(createGround(measured ? buildingRadius * 1.9 : sceneRadius * 1.4));
-    scene.add(createCompass(buildingRadius * 2.1));
+    if (!measured) scene.add(createGround(sceneRadius * 1.4));
+    const compassRadius = buildingRadius * 2.1;
+    scene.add(createCompass(compassRadius));
+    for (const mark of cardinalPoints(compassRadius * 1.07)) {
+      labels.add(mark.text, mark.position, "cardinal",
+                 "True north, the bearing the simulation places the sun against.");
+    }
 
     if (terrain && terrain.positions.length > 0) {
       const mesh = createTerrain(
@@ -491,7 +609,10 @@ export function Scene3D({
         terrainScale,
         measured,
       );
-      if (mesh) scene.add(mesh);
+      if (mesh) {
+        mesh.castShadow = false;
+        scene.add(mesh);
+      }
     }
 
     if (geometry.layout) {
@@ -510,21 +631,69 @@ export function Scene3D({
       setRooms([]);
     }
 
-    const edges = new THREE.Group();
-    for (const mesh of meshes.values()) {
-      const line = new THREE.LineSegments(
-        new THREE.EdgesGeometry(mesh.geometry, 25),
-        new THREE.LineBasicMaterial({ color: 0x1e293b, transparent: true,
-                                      opacity: 0.75 }),
-      );
-      line.position.copy(mesh.position);
-      line.rotation.copy(mesh.rotation);
-      edges.add(line);
+    const outlineSource = solid ? [...solid.parts.values()].flat() : [...meshes.values()];
+    const lines = createEdgeLines(outlineSource, {
+      colour: SCENE_INK,
+      widthPx: 1.4,
+      threshold: 24,
+      opacity: 0.62,
+      clippingPlanes: [clipRef.current],
+    });
+    if (lines) {
+      lines.object.position.copy(group.position);
+      lines.setResolution(width * renderer.getPixelRatio(),
+                          height * renderer.getPixelRatio());
+      edgeRef.current = lines;
+      scene.add(lines.object);
+    } else {
+      edgeRef.current = null;
     }
-    edges.position.copy(group.position);
-    edges.visible = false;
-    edgesRef.current = edges;
-    scene.add(edges);
+
+    const cappable = solid
+      ? [...solid.parts.entries()].flatMap(([name, list]) =>
+          list.map((mesh) => ({ name, mesh })))
+      : [...meshes.entries()].map(([name, mesh]) => ({ name, mesh }));
+    const caps = createSectionCaps(
+      cappable, clipRef.current, buildingRadius * 3,
+      (name) => (meshes.get(name)?.userData.baseColour as string) ?? "#b9b2a4",
+    );
+    caps.group.position.copy(group.position);
+    caps.group.visible = false;
+    capsRef.current = caps;
+    scene.add(caps.group);
+
+    const annotations = new THREE.Group();
+    annotations.position.copy(group.position);
+    annotations.visible = false;
+    const dimensionLabels: CSS2DObject[] = [];
+    if (design) {
+      const planWidth = Math.sqrt(design.plan.floor_area_m2 * design.plan.aspect_ratio);
+      const planDepth = Math.sqrt(design.plan.floor_area_m2 / design.plan.aspect_ratio);
+      const dimensions = dimensionLines(planWidth, planDepth,
+                                        design.plan.ceiling_height_m,
+                                        SCENE_INK);
+      dimensions.object.position.set(centre.x, centre.y, 0);
+      annotations.add(dimensions.object);
+      const shift = new THREE.Vector3(centre.x, centre.y, 0);
+      for (const label of dimensions.labels) {
+        const object = labels.add(label.text, label.position.clone().add(shift),
+                                  "dimension", label.title);
+        object.position.add(annotations.position);
+        object.visible = false;
+        dimensionLabels.push(object);
+      }
+    }
+    annotations.userData.labels = dimensionLabels;
+    annotationsRef.current = annotations;
+    scene.add(annotations);
+
+    const figure = createScaleFigure(
+      new THREE.Vector3(size.x / 2 + 1.2, -size.y / 2 - 1.0, 0),
+      SCENE_INK,
+    );
+    figure.group.visible = false;
+    figureRef.current = figure;
+    scene.add(figure.group);
 
     if (airflow && ((airflow.zones?.length ?? 0) > 0
                     || (airflow.couplings?.length ?? 0) > 0)) {
@@ -553,10 +722,9 @@ export function Scene3D({
     }
 
     if (design) {
-      const width = Math.sqrt(design.plan.floor_area_m2 * design.plan.aspect_ratio);
-      const depth = Math.sqrt(design.plan.floor_area_m2 / design.plan.aspect_ratio);
-      const height = design.plan.ceiling_height_m;
-      const gizmos = createGizmos(width, depth, height);
+      const handleWidth = Math.sqrt(design.plan.floor_area_m2 * design.plan.aspect_ratio);
+      const handleDepth = Math.sqrt(design.plan.floor_area_m2 / design.plan.aspect_ratio);
+      const gizmos = createGizmos(handleWidth, handleDepth, design.plan.ceiling_height_m);
       gizmos.group.position.set(-centre.x, -centre.y, 0);
       gizmos.group.visible = modeRef.current === "construction";
       gizmoRef.current = gizmos;
@@ -568,78 +736,61 @@ export function Scene3D({
     const sunDisc = createSunDisc(buildingRadius * 0.2);
     scene.add(sunDisc.group);
 
-    const light = new THREE.DirectionalLight(0xfff2dd, 2.1);
+    const shadowPixels = qualityRef.current === "high" ? 4096 : 2048;
+    const light = new THREE.DirectionalLight(0xfff2dd, 1.85);
     light.castShadow = true;
-    light.shadow.mapSize.set(2048, 2048);
-    const shadowSpan = buildingRadius * 2.4;
+    light.shadow.mapSize.set(shadowPixels, shadowPixels);
+    const shadowSpan = buildingRadius * 1.5;
     light.shadow.camera.left = -shadowSpan;
     light.shadow.camera.right = shadowSpan;
     light.shadow.camera.top = shadowSpan;
     light.shadow.camera.bottom = -shadowSpan;
     light.shadow.camera.near = 1;
     light.shadow.camera.far = sceneRadius * 3;
-    light.shadow.bias = -0.0006;
+    light.shadow.bias = -0.0004;
+    light.shadow.normalBias = 0.02;
     light.userData.radius = sceneRadius * 0.85;
     scene.add(light);
     scene.add(light.target);
 
-    const fill = new THREE.HemisphereLight(0xdfe9f5, 0x6b6350, 0.9);
+    const fill = new THREE.HemisphereLight(0xdfe9f5, 0x6b6350, 0.55);
     scene.add(fill);
 
-    const bounce = new THREE.DirectionalLight(0xcfe0f2, 0.35);
+    const bounce = new THREE.DirectionalLight(0xcfe0f2, 0.22);
     bounce.position.set(-1, -0.6, 0.5);
     scene.add(bounce);
 
-    const environment = new THREE.PMREMGenerator(renderer);
-    environment.compileEquirectangularShader();
-    const envScene = new THREE.Scene();
-    const envSky = new THREE.Mesh(
-      new THREE.SphereGeometry(10, 24, 16),
-      new THREE.MeshBasicMaterial({
-        color: new THREE.Color("#b9cfe4"),
-        side: THREE.BackSide,
-      }),
-    );
-    envScene.add(envSky);
-    const envGround = new THREE.Mesh(
-      new THREE.CircleGeometry(10, 32),
-      new THREE.MeshBasicMaterial({ color: new THREE.Color("#a9976f") }),
-    );
-    envGround.rotation.x = -Math.PI / 2;
-    envGround.position.y = -1.5;
-    envScene.add(envGround);
-    const envTarget = environment.fromScene(envScene, 0.04);
-    scene.environment = envTarget.texture;
-    envSky.geometry.dispose();
-    envGround.geometry.dispose();
-    environment.dispose();
+    const environment = createSkyEnvironment(renderer);
+    environmentRef.current = environment;
+    scene.environmentIntensity = 0.42;
+    scene.environment = environment.refresh(new THREE.Vector3(0.3, -0.6, 0.7), 35);
+
     sunRef.current = {
       light, disc: sunDisc.group, setDisc: sunDisc.setState,
       setSky: sky.setSun, fill,
     };
 
-    const remembered = cameraRef.current;
-    let theta = remembered ? remembered.theta : Math.PI * 0.78;
-    let phi = remembered ? remembered.phi : Math.PI * 0.435;
-    let distance = remembered
-      ? remembered.distance * (buildingRadius / remembered.radius)
-      : buildingRadius * 2.5;
-    let dragging = false;
-    let engaged = false;
-    let lastX = 0;
-    let lastY = 0;
-
-    const place = () => {
-      cameraRef.current = { theta, phi, distance, radius: buildingRadius };
-      camera.position.set(
-        distance * Math.sin(phi) * Math.sin(theta),
-        distance * Math.sin(phi) * Math.cos(theta),
-        Math.max(distance * Math.cos(phi), 1.2),
-      );
-      camera.up.set(0, 0, 1);
-      camera.lookAt(0, 0, size.z * 0.35);
+    let needsRender = true;
+    const invalidate = () => {
+      needsRender = true;
     };
-    place();
+    invalidateRef.current = invalidate;
+
+    const target = new THREE.Vector3(0, 0, size.z * 0.35);
+    const remembered = cameraRef.current;
+    const rig = createCameraRig(camera, renderer.domElement, target,
+                                { min: buildingRadius * 0.55, max: sceneRadius * 1.6 },
+                                invalidate);
+    rigRef.current = rig;
+    rig.restore(
+      remembered
+        ? {
+            theta: remembered.theta,
+            phi: remembered.phi,
+            distance: remembered.distance * (buildingRadius / remembered.radius),
+          }
+        : { ...orbitFor("iso", null), distance: buildingRadius * 1.85 },
+    );
     raycastRef.current = { raycaster: new THREE.Raycaster(), camera };
 
     let activeGizmo: {
@@ -649,64 +800,65 @@ export function Scene3D({
       startDesign: DesignSpec;
       plane: THREE.Plane;
     } | null = null;
+    let orbiting = false;
 
     const pointer = new THREE.Vector2();
-    const onMove = (event: PointerEvent) => {
+    const readPointer = (event: PointerEvent): DOMRect => {
       const rect = renderer.domElement.getBoundingClientRect();
       pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      return rect;
+    };
+    const dragDelta = (point: THREE.Vector3): number => {
+      if (!activeGizmo) return 0;
+      if (activeGizmo.handle === "east") return point.x - activeGizmo.startPoint.x;
+      if (activeGizmo.handle === "west") return -(point.x - activeGizmo.startPoint.x);
+      if (activeGizmo.handle === "north") return point.y - activeGizmo.startPoint.y;
+      if (activeGizmo.handle === "south") return -(point.y - activeGizmo.startPoint.y);
+      if (activeGizmo.handle === "top") return point.z - activeGizmo.startPoint.z;
+      return 0;
+    };
+
+    const onMove = (event: PointerEvent) => {
+      const rect = readPointer(event);
+      const kit = raycastRef.current;
+      if (!kit) return;
 
       if (activeGizmo && gizmoRef.current) {
-        const kit = raycastRef.current;
-        if (kit) {
-          kit.raycaster.setFromCamera(pointer, kit.camera);
-          const currentPoint = new THREE.Vector3();
-          kit.raycaster.ray.intersectPlane(activeGizmo.plane, currentPoint);
-          if (currentPoint) {
-            let delta = 0;
-            if (activeGizmo.handle === "east") delta = currentPoint.x - activeGizmo.startPoint.x;
-            else if (activeGizmo.handle === "west") delta = -(currentPoint.x - activeGizmo.startPoint.x);
-            else if (activeGizmo.handle === "north") delta = currentPoint.y - activeGizmo.startPoint.y;
-            else if (activeGizmo.handle === "south") delta = -(currentPoint.y - activeGizmo.startPoint.y);
-            else if (activeGizmo.handle === "top") delta = currentPoint.z - activeGizmo.startPoint.z;
-
-            const newDesign = computeNewDesign(activeGizmo.startDesign, activeGizmo.handle, delta);
-            const w = Math.sqrt(newDesign.plan.floor_area_m2 * newDesign.plan.aspect_ratio);
-            const d = Math.sqrt(newDesign.plan.floor_area_m2 / newDesign.plan.aspect_ratio);
-            const h = newDesign.plan.ceiling_height_m;
-            gizmoRef.current.updateGhost(w, d, h);
-          }
+        kit.raycaster.setFromCamera(pointer, kit.camera);
+        const current = new THREE.Vector3();
+        if (kit.raycaster.ray.intersectPlane(activeGizmo.plane, current)) {
+          const next = computeNewDesign(activeGizmo.startDesign, activeGizmo.handle,
+                                        dragDelta(current));
+          gizmoRef.current.updateGhost(
+            Math.sqrt(next.plan.floor_area_m2 * next.plan.aspect_ratio),
+            Math.sqrt(next.plan.floor_area_m2 / next.plan.aspect_ratio),
+            next.plan.ceiling_height_m,
+          );
+          invalidate();
         }
         return;
       }
 
-      if (modeRef.current === "construction" && gizmoRef.current && !dragging) {
-        const kit = raycastRef.current;
-        if (kit) {
-          kit.raycaster.setFromCamera(pointer, kit.camera);
-          const hits = kit.raycaster.intersectObjects(gizmoRef.current.handles, false);
-          gizmoRef.current.handles.forEach(h => {
-             (h.material as THREE.MeshBasicMaterial).color.setHex(0xffffff);
-          });
-          if (hits.length > 0) {
-            const mat = (hits[0].object as THREE.Mesh).material as THREE.MeshBasicMaterial;
-            mat.color.setHex(0xffa500);
-          }
-        }
-      }
-
-      if (dragging) {
-        theta -= (event.clientX - lastX) * 0.007;
-        phi = THREE.MathUtils.clamp(phi - (event.clientY - lastY) * 0.007, 0.08, 1.52);
-        lastX = event.clientX;
-        lastY = event.clientY;
-        place();
+      if (orbiting) {
         setHover(null);
         return;
       }
-      const kit = raycastRef.current;
-      if (!kit) return;
+
       kit.raycaster.setFromCamera(pointer, kit.camera);
+
+      if (modeRef.current === "construction" && gizmoRef.current) {
+        const handles = kit.raycaster.intersectObjects(gizmoRef.current.handles, false);
+        gizmoRef.current.handles.forEach((handle) => {
+          (handle.material as THREE.MeshBasicMaterial).color.setHex(0xffffff);
+        });
+        if (handles.length > 0) {
+          ((handles[0].object as THREE.Mesh).material as THREE.MeshBasicMaterial)
+            .color.setHex(0xffa500);
+        }
+        invalidate();
+      }
+
       const pickable: THREE.Object3D[] = solid
         ? [...solid.parts.values()].flat()
         : [...meshes.values()];
@@ -716,115 +868,122 @@ export function Scene3D({
         return;
       }
       const hit = hits[0];
-      const name = hit.object.name;
       setHover({
-        name,
+        name: hit.object.name,
         value: null,
-        area: areaBySurface.get(name) ?? 0,
+        area: areaBySurface.get(hit.object.name) ?? 0,
         x: event.clientX - rect.left,
         y: event.clientY - rect.top,
         point: hit.point,
       });
     };
-    const onDown = (event: PointerEvent) => {
-      const rect = renderer.domElement.getBoundingClientRect();
-      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
-      if (modeRef.current === "construction" && gizmoRef.current && design) {
-        const kit = raycastRef.current;
-        if (kit) {
-          kit.raycaster.setFromCamera(pointer, kit.camera);
-          const hits = kit.raycaster.intersectObjects(gizmoRef.current.handles, false);
-          if (hits.length > 0) {
-            const hit = hits[0];
-            const mesh = hit.object as THREE.Mesh;
-            const type = mesh.userData.type as HandleType;
-            const normal = type === "top" ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1);
-            
-            activeGizmo = {
-              handle: type,
-              mesh,
-              startPoint: hit.point,
-              startDesign: design,
-              plane: new THREE.Plane().setFromNormalAndCoplanarPoint(normal, hit.point)
-            };
-            
-            gizmoRef.current.ghost.visible = true;
-            (mesh.material as THREE.MeshBasicMaterial).color.setHex(0xffa500);
-            dragging = true;
-            engaged = true;
-            setEngagedHint(true);
-            renderer.domElement.setPointerCapture(event.pointerId);
-            return;
-          }
+    const onDown = (event: PointerEvent) => {
+      readPointer(event);
+      rig.setZoomEnabled(true);
+      setEngagedHint(true);
+      const kit = raycastRef.current;
+      if (modeRef.current === "construction" && gizmoRef.current && design && kit) {
+        kit.raycaster.setFromCamera(pointer, kit.camera);
+        const hits = kit.raycaster.intersectObjects(gizmoRef.current.handles, false);
+        if (hits.length > 0) {
+          const hit = hits[0];
+          const mesh = hit.object as THREE.Mesh;
+          const type = mesh.userData.type as HandleType;
+          const normal = type === "top"
+            ? new THREE.Vector3(0, 1, 0)
+            : new THREE.Vector3(0, 0, 1);
+          activeGizmo = {
+            handle: type,
+            mesh,
+            startPoint: hit.point,
+            startDesign: design,
+            plane: new THREE.Plane().setFromNormalAndCoplanarPoint(normal, hit.point),
+          };
+          rig.controls.enabled = false;
+          gizmoRef.current.ghost.visible = true;
+          (mesh.material as THREE.MeshBasicMaterial).color.setHex(0xffa500);
+          renderer.domElement.setPointerCapture(event.pointerId);
+          invalidate();
+          return;
         }
       }
-
-      dragging = true;
-      engaged = true;
-      setEngagedHint(true);
-      lastX = event.clientX;
-      lastY = event.clientY;
-      renderer.domElement.setPointerCapture(event.pointerId);
+      orbiting = true;
     };
+
     const onUp = (event: PointerEvent) => {
-      dragging = false;
+      orbiting = false;
+      if (!activeGizmo || !gizmoRef.current) return;
+      const kit = raycastRef.current;
+      if (kit) {
+        readPointer(event);
+        kit.raycaster.setFromCamera(pointer, kit.camera);
+        const current = new THREE.Vector3();
+        if (kit.raycaster.ray.intersectPlane(activeGizmo.plane, current)) {
+          store.applyOverride(computeNewDesign(activeGizmo.startDesign, activeGizmo.handle,
+                                               dragDelta(current)));
+        }
+      }
+      (activeGizmo.mesh.material as THREE.MeshBasicMaterial).color.setHex(0xffffff);
+      gizmoRef.current.ghost.visible = false;
+      activeGizmo = null;
+      rig.controls.enabled = true;
       try {
         renderer.domElement.releasePointerCapture(event.pointerId);
       } catch {
-        /* pointer already released */
+        /* the pointer was already released */
       }
-
-      if (activeGizmo && gizmoRef.current) {
-        const kit = raycastRef.current;
-        if (kit) {
-          const rect = renderer.domElement.getBoundingClientRect();
-          pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-          pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-          kit.raycaster.setFromCamera(pointer, kit.camera);
-          
-          const currentPoint = new THREE.Vector3();
-          kit.raycaster.ray.intersectPlane(activeGizmo.plane, currentPoint);
-          if (currentPoint) {
-            let delta = 0;
-            if (activeGizmo.handle === "east") delta = currentPoint.x - activeGizmo.startPoint.x;
-            else if (activeGizmo.handle === "west") delta = -(currentPoint.x - activeGizmo.startPoint.x);
-            else if (activeGizmo.handle === "north") delta = currentPoint.y - activeGizmo.startPoint.y;
-            else if (activeGizmo.handle === "south") delta = -(currentPoint.y - activeGizmo.startPoint.y);
-            else if (activeGizmo.handle === "top") delta = currentPoint.z - activeGizmo.startPoint.z;
-
-            const newDesign = computeNewDesign(activeGizmo.startDesign, activeGizmo.handle, delta);
-            store.applyOverride(newDesign);
-          }
-        }
-        
-        (activeGizmo.mesh.material as THREE.MeshBasicMaterial).color.setHex(0xffffff);
-        gizmoRef.current.ghost.visible = false;
-        activeGizmo = null;
-        return;
-      }
+      invalidate();
     };
+
     const onLeave = () => {
       setHover(null);
-      engaged = false;
+      orbiting = false;
+      rig.setZoomEnabled(false);
       setEngagedHint(false);
     };
-    const onWheel = (event: WheelEvent) => {
-      if (!engaged) return;
+    const onKey = (event: KeyboardEvent) => {
+      const step = event.shiftKey ? 0.02 : 0.08;
+      const current = rig.state();
+      if (event.key === "ArrowLeft") rig.goTo({ ...current, theta: current.theta + step });
+      else if (event.key === "ArrowRight") rig.goTo({ ...current, theta: current.theta - step });
+      else if (event.key === "ArrowUp") rig.goTo({ ...current, phi: current.phi - step });
+      else if (event.key === "ArrowDown") rig.goTo({ ...current, phi: current.phi + step });
+      else if (event.key === "+" || event.key === "=") {
+        rig.goTo({ ...current, distance: current.distance * 0.88 });
+      } else if (event.key === "-" || event.key === "_") {
+        rig.goTo({ ...current, distance: current.distance * 1.14 });
+      } else return;
       event.preventDefault();
-      distance = THREE.MathUtils.clamp(
-        distance * (1 + event.deltaY * 0.0012),
-        buildingRadius * 0.9,
-        sceneRadius * 1.6,
-      );
-      place();
+      invalidate();
     };
-    renderer.domElement.addEventListener("pointerdown", onDown);
+    const onFocus = () => rig.setZoomEnabled(true);
+    const onBlur = () => rig.setZoomEnabled(false);
+
+    renderer.domElement.addEventListener("pointerdown", onDown, true);
     renderer.domElement.addEventListener("pointermove", onMove);
     renderer.domElement.addEventListener("pointerup", onUp);
     renderer.domElement.addEventListener("pointerleave", onLeave);
-    renderer.domElement.addEventListener("wheel", onWheel, { passive: false });
+    renderer.domElement.addEventListener("keydown", onKey);
+    renderer.domElement.addEventListener("focus", onFocus);
+    renderer.domElement.addEventListener("blur", onBlur);
+
+    const pipeline = createPipeline(renderer, scene, camera, width, height,
+                                    qualityRef.current);
+    pipelineRef.current = pipeline;
+
+    captureRef.current = () => {
+      pipeline.render();
+      const source = renderer.domElement;
+      const flat = document.createElement("canvas");
+      flat.width = source.width;
+      flat.height = source.height;
+      const context = flat.getContext("2d");
+      if (!context) return source.toDataURL("image/png");
+      context.drawImage(source, 0, 0);
+      labels.paint(context, camera, flat.width, flat.height, renderer.getPixelRatio());
+      return flat.toDataURL("image/png");
+    };
 
     const resize = () => {
       const w = mount.clientWidth;
@@ -833,44 +992,68 @@ export function Scene3D({
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       pipeline.resize(w, h);
+      labels.resize(w, h);
+      edgeRef.current?.setResolution(w * renderer.getPixelRatio(),
+                                     h * renderer.getPixelRatio());
+      invalidate();
     };
     const observer = new ResizeObserver(resize);
     observer.observe(mount);
-
-    const pipeline = createPipeline(renderer, scene, camera, width, height,
-                                    qualityRef.current);
-    pipelineRef.current = pipeline;
 
     let lastTime = performance.now();
     let frame = 0;
     const animate = () => {
       const now = performance.now();
-      const delta = (now - lastTime) / 1000;
+      const delta = Math.min((now - lastTime) / 1000, 0.1);
       lastTime = now;
 
+      if (rig.tick(delta)) needsRender = true;
       if (airflowRef.current && airflowRef.current.group.visible) {
         airflowRef.current.tick(delta);
+        needsRender = true;
       }
-
-      pipeline.render();
+      if (figureRef.current?.group.visible) figureRef.current.faceCamera(camera);
+      if (needsRender) {
+        needsRender = false;
+        pipeline.render();
+        labels.render(scene, camera);
+      }
       frame = requestAnimationFrame(animate);
     };
     animate();
 
     return () => {
       cancelAnimationFrame(frame);
+      cameraRef.current = { ...rig.state(), radius: buildingRadius };
+      rig.dispose();
+      rigRef.current = null;
       pipeline.dispose();
       pipelineRef.current = null;
+      captureRef.current = null;
+      invalidateRef.current = null;
       observer.disconnect();
-      renderer.domElement.removeEventListener("pointerdown", onDown);
+      renderer.domElement.removeEventListener("pointerdown", onDown, true);
       renderer.domElement.removeEventListener("pointermove", onMove);
       renderer.domElement.removeEventListener("pointerup", onUp);
       renderer.domElement.removeEventListener("pointerleave", onLeave);
-      renderer.domElement.removeEventListener("wheel", onWheel);
+      renderer.domElement.removeEventListener("keydown", onKey);
+      renderer.domElement.removeEventListener("focus", onFocus);
+      renderer.domElement.removeEventListener("blur", onBlur);
       if (gizmoRef.current) {
         gizmoRef.current.dispose();
         gizmoRef.current = null;
       }
+      edgeRef.current?.dispose();
+      edgeRef.current = null;
+      capsRef.current?.dispose();
+      capsRef.current = null;
+      figureRef.current?.dispose();
+      figureRef.current = null;
+      annotationsRef.current = null;
+      environment.dispose();
+      environmentRef.current = null;
+      labels.dispose();
+      labelsRef.current = null;
       disposeObject(scene);
       renderer.forceContextLoss();
       renderer.dispose();
@@ -893,11 +1076,15 @@ export function Scene3D({
     kit.light.target.updateMatrixWorld();
     kit.disc.position.copy(position);
     const shining = sun.visible && sun.altitude > 0;
-    kit.light.intensity = shining ? 2.4 : 0.0;
-    kit.fill.intensity = sun.aboveHorizon ? 1.2 : 0.5;
+    kit.light.intensity = shining ? 2.0 : 0.0;
+    kit.fill.intensity = sun.aboveHorizon ? 0.7 : 0.35;
     kit.setDisc(shining);
     kit.disc.visible = sun.altitude > -3;
     kit.setSky(position, sun.altitude);
+    if (environmentRef.current && sceneRef.current) {
+      sceneRef.current.environment = environmentRef.current.refresh(position, sun.altitude);
+    }
+    invalidateRef.current?.();
   }, [sun, terrain]);
 
   useEffect(() => {
@@ -940,7 +1127,11 @@ export function Scene3D({
   }, [showAirflow, geometry, airflow]);
 
   useEffect(() => {
-    if (edgesRef.current) edgesRef.current.visible = shell !== "solid";
+    if (edgeRef.current) {
+      edgeRef.current.object.visible = true;
+      edgeRef.current.setWidth(shell === "wireframe" ? 1.9 : 1.1);
+      edgeRef.current.setOpacity(shell === "solid" ? 0.34 : 0.7);
+    }
     const targets: THREE.Mesh[] = [];
     const solid = solidRef.current;
     if (solid) {
@@ -968,21 +1159,36 @@ export function Scene3D({
   }, [shell, geometry, mode]);
 
   useEffect(() => {
-    const box = new THREE.Box3();
-    geometry.surfaces.forEach((surface) => {
-      for (let index = 0; index < surface.positions.length; index += 3) {
-        box.expandByPoint(
-          new THREE.Vector3(
-            surface.positions[index],
-            surface.positions[index + 1],
-            surface.positions[index + 2],
-          ),
-        );
-      }
-    });
-    const centre = box.getCenter(new THREE.Vector3());
-    clipRef.current.constant = cut ? -(0 - centre.y) + 0.01 : 9999;
-  }, [cut, geometry]);
+    clipRef.current.constant = cut ? 0.01 : 9999;
+    if (capsRef.current) {
+      capsRef.current.update();
+      capsRef.current.setVisible(cut && shell === "solid");
+    }
+  }, [cut, shell, geometry]);
+
+  useEffect(() => {
+    if (!annotationsRef.current) return;
+    annotationsRef.current.visible = showDimensions;
+    for (const label of (annotationsRef.current.userData.labels as CSS2DObject[]) ?? []) {
+      label.visible = showDimensions;
+    }
+  }, [showDimensions, geometry, design]);
+
+  useEffect(() => {
+    if (figureRef.current) figureRef.current.group.visible = showFigure;
+  }, [showFigure, geometry]);
+
+  useEffect(() => {
+    if (capsRef.current && mode === "construction") {
+      capsRef.current.setColours(
+        (name) => (meshesRef.current.get(name)?.userData.baseColour as string) ?? "#b9b2a4",
+      );
+    }
+  }, [mode, geometry]);
+
+  useEffect(() => {
+    invalidateRef.current?.();
+  });
 
   const hoverValue = hover ? valuesBySurface.get(hover.name)?.[safeIndex] : undefined;
   const painted = mode !== "construction";
@@ -1028,27 +1234,7 @@ export function Scene3D({
       thermalRef.current.setOpacity(thermalOpacity);
     }
     
-    // Handle clip height
-    if (thermalRef.current) {
-      let maxZ = 9999;
-      if (cut) {
-        const box = new THREE.Box3();
-        geometry.surfaces.forEach((surface) => {
-          for (let index = 0; index < surface.positions.length; index += 3) {
-            box.expandByPoint(
-              new THREE.Vector3(
-                surface.positions[index],
-                surface.positions[index + 1],
-                surface.positions[index + 2],
-              ),
-            );
-          }
-        });
-        const centre = box.getCenter(new THREE.Vector3());
-        maxZ = centre.z;
-      }
-      thermalRef.current.setClipHeight(maxZ);
-    }
+    thermalRef.current?.setSectionY(cut ? 0.01 : null);
   }, [mode, thermalFieldData, ramp, thermalOpacity, cut, geometry]);
 
   useEffect(() => {
@@ -1079,8 +1265,8 @@ export function Scene3D({
     }
   }, [hover, mode, thermalFieldData]);
 
-  const jumpToNoon = useCallback(() => {
-    if (!sunPath || hours.length === 0) return;
+  const noonIndex = useCallback((): number | null => {
+    if (!sunPath || hours.length === 0) return null;
     let best = 0;
     let bestGap = Infinity;
     hours.forEach((stamp, index) => {
@@ -1090,8 +1276,39 @@ export function Scene3D({
         best = index;
       }
     });
-    onHourChange(best);
-  }, [sunPath, hours, onHourChange]);
+    return best;
+  }, [sunPath, hours]);
+
+  const jumpToNoon = useCallback(() => {
+    const index = noonIndex();
+    if (index !== null) onHourChange(index);
+  }, [noonIndex, onHourChange]);
+
+  useEffect(() => {
+    if (store.hourSeeded) return;
+    const index = noonIndex();
+    if (index !== null) store.seedHour(index);
+  }, [noonIndex, store]);
+
+  const applyView = useCallback(
+    (view: ViewName) => {
+      const rig = rigRef.current;
+      if (!rig) return;
+      rig.goTo({ ...orbitFor(view, sun), distance: rig.state().distance });
+      invalidateRef.current?.();
+    },
+    [sun],
+  );
+
+  const saveImage = useCallback(() => {
+    const capture = captureRef.current;
+    if (!capture) return;
+    const link = document.createElement("a");
+    link.href = capture();
+    const stamp = (currentStamp ?? "").replace(/[:T]/g, "-") || "view";
+    link.download = `entropy-zero-${geometry.arrangement}-${mode}-${stamp}.png`;
+    link.click();
+  }, [currentStamp, geometry.arrangement, mode]);
 
   const toggleImmersive = useCallback(() => {
     const shell = shellRef.current;
@@ -1164,198 +1381,160 @@ export function Scene3D({
               : "flex items-start justify-between gap-3"
         }
       >
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2">
-        <div
-          role="group"
-          aria-label="What is painted on the surfaces"
-          className="flex items-center rounded-lg border border-[var(--color-line)] bg-[var(--color-night-2)] p-0.5"
-        >
-          {(Object.keys(MODE_LABEL) as DisplayMode[])
-            .filter((item) => item !== "interior_temperature")
-            .map((item) => (
-              <button
-                key={item}
-                type="button"
-                onClick={() => onModeChange(item)}
-                disabled={item !== "construction" && !surfaces}
-                aria-pressed={mode === item}
-                className={`rounded-md px-2.5 py-1 text-xs transition-colors ${
-                  mode === item
-                    ? "bg-[var(--color-ink)] font-medium text-white"
-                    : "text-[var(--color-ink-faint)] hover:text-[var(--color-ink)] disabled:opacity-40"
-                }`}
-              >
-                {MODE_LABEL[item]}
-              </button>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-2">
+          <div
+            role="group"
+            aria-label="What is painted on the surfaces"
+            className="flex items-center rounded-lg border border-[var(--color-line)] bg-[var(--color-night-2)] p-0.5"
+          >
+            {(Object.keys(MODE_LABEL) as DisplayMode[])
+              .filter((item) => item !== "interior_temperature")
+              .map((item) => (
+                <Segment
+                  key={item}
+                  active={mode === item}
+                  disabled={item !== "construction" && !surfaces}
+                  onClick={() => onModeChange(item)}
+                >
+                  {MODE_LABEL[item]}
+                </Segment>
+              ))}
+          </div>
+          <Chip
+            tone="earth"
+            dashed
+            active={mode === "interior_temperature"}
+            onClick={() => onModeChange("interior_temperature")}
+            title="Air temperature solved by ANSYS Fluent for one hour, shown only when that run exists for this design."
+          >
+            {MODE_LABEL.interior_temperature}
+          </Chip>
+          {mode !== "construction" && (
+            <select
+              value={ramp}
+              onChange={(event) => setRamp(event.target.value as RampName)}
+              className="rounded-md border border-[var(--color-line)] bg-[var(--color-night-2)] px-2 py-1 text-xs text-[var(--color-ink-dim)]"
+              aria-label="Colour scale"
+            >
+              {(Object.keys(RAMP_LABEL) as RampName[]).map((item) => (
+                <option key={item} value={item}>
+                  {RAMP_LABEL[item]}
+                </option>
+              ))}
+            </select>
+          )}
+
+          <Divider />
+
+          <div
+            role="group"
+            aria-label="How the shell is drawn"
+            className="flex items-center rounded-lg border border-[var(--color-line)] bg-[var(--color-night-2)] p-0.5"
+          >
+            {(Object.keys(SHELL_LABEL) as Shell[]).map((item) => (
+              <Segment key={item} active={shell === item} onClick={() => setShell(item)}>
+                {SHELL_LABEL[item]}
+              </Segment>
             ))}
-        </div>
-        <button
-          type="button"
-          onClick={() => onModeChange("interior_temperature")}
-          aria-pressed={mode === "interior_temperature"}
-          title="Air temperature solved by ANSYS Fluent for one hour, shown only when that run exists for this design."
-          className={`rounded-md border border-dashed px-2.5 py-1 text-xs transition-colors ${
-            mode === "interior_temperature"
-              ? "border-[var(--color-earth)] bg-[var(--color-earth)]/12 font-medium text-[var(--color-earth)]"
-              : "border-[var(--color-line)] bg-[var(--color-night-2)] text-[var(--color-ink-faint)] hover:text-[var(--color-ink)] disabled:opacity-40"
-          }`}
-        >
-          {MODE_LABEL.interior_temperature}
-        </button>
-        <button
-          type="button"
-          onClick={() => setCut((value) => !value)}
-          className={`rounded-md border px-2.5 py-1 text-xs ${
-            cut
-              ? "border-[var(--color-ink)] bg-[var(--color-ink)] text-white"
-              : "border-[var(--color-line)] bg-[var(--color-night-2)] text-[var(--color-ink-faint)]"
-          }`}
-        >
-          Section
-        </button>
-        <div
-          role="group"
-          aria-label="How the shell is drawn"
-          className="flex items-center rounded-lg border border-[var(--color-line)] bg-[var(--color-night-2)] p-0.5"
-        >
-          {(Object.keys(SHELL_LABEL) as Shell[]).map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => setShell(item)}
-              aria-pressed={shell === item}
-              className={`rounded-md px-2.5 py-1 text-xs transition-colors ${
-                shell === item
-                  ? "bg-[var(--color-ink)] font-medium text-white"
-                  : "text-[var(--color-ink-faint)] hover:text-[var(--color-ink)]"
-              }`}
-            >
-              {SHELL_LABEL[item]}
-            </button>
-          ))}
-        </div>
-        {airflow && ((airflow.zones?.length ?? 0) > 0
-                     || (airflow.couplings?.length ?? 0) > 0) && (
-          <button
-            type="button"
-            onClick={() => setShowAirflow((value) => !value)}
-            className={`rounded-md border px-2.5 py-1 text-xs ${
-              showAirflow
-                ? "border-[var(--color-cold)] bg-[var(--color-cold)] text-white"
-                : "border-[var(--color-line)] bg-[var(--color-night-2)] text-[var(--color-ink-faint)]"
-            }`}
+          </div>
+          <Chip
+            active={cut}
+            onClick={() => setCut((value) => !value)}
+            title="Cut the model on the north to south centre line. Cut faces are filled with the material colour of whatever the cut passes through."
           >
-            Air exchange
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={() => setDressed((value) => !value)}
-          className={`rounded-md border px-2.5 py-1 text-xs ${
-            dressed
-              ? "border-[var(--color-ink)] bg-[var(--color-ink)] text-white"
-              : "border-[var(--color-line)] bg-[var(--color-night-2)] text-[var(--color-ink-faint)]"
-          }`}
-          title="Plinth, parapet, door and steps. Construction detail drawn from the design; it carries no result and is never painted with one."
-        >
-          Built detail
-        </button>
-        {geometry.layout && (
-          <button
-            type="button"
-            onClick={() => setShowRooms((value) => !value)}
-            className={`rounded-md border px-2.5 py-1 text-xs ${
-              showRooms
-                ? "border-[var(--color-ink)] bg-[var(--color-ink)] text-white"
-                : "border-[var(--color-line)] bg-[var(--color-night-2)] text-[var(--color-ink-faint)]"
-            }`}
+            Section
+          </Chip>
+          <Chip
+            active={dressed}
+            onClick={() => setDressed((value) => !value)}
+            title="Plinth, parapet, door and steps. Construction detail drawn from the design; it carries no result and is never painted with one."
           >
-            Rooms
-          </button>
-        )}
-        <select
-          value={quality}
-          onChange={(event) => changeQuality(event.target.value as Quality)}
-          className="rounded-md border border-[var(--color-line)] bg-[var(--color-night-2)] px-2 py-1 text-xs text-[var(--color-ink-faint)]"
-          aria-label="Render quality"
-          title="Ambient occlusion, bloom and antialiasing cost frame rate. Drop this if the view stutters."
-        >
-          <option value="high">High render</option>
-          <option value="balanced">Balanced</option>
-          <option value="plain">Plain</option>
-        </select>
-        {mode !== "construction" && (
-          <select
-            value={ramp}
-            onChange={(event) => setRamp(event.target.value as RampName)}
-            className="rounded-md border border-[var(--color-line)] bg-[var(--color-night-2)] px-2 py-1 text-xs text-[var(--color-ink-faint)]"
-            aria-label="Colour scale"
+            Built detail
+          </Chip>
+          {geometry.layout && (
+            <Chip active={showRooms} onClick={() => setShowRooms((value) => !value)}>
+              Rooms
+            </Chip>
+          )}
+
+          <Divider />
+
+          {airflow && ((airflow.zones?.length ?? 0) > 0
+                       || (airflow.couplings?.length ?? 0) > 0) && (
+            <Chip
+              tone="cold"
+              active={showAirflow}
+              onClick={() => setShowAirflow((value) => !value)}
+            >
+              Air exchange
+            </Chip>
+          )}
+          {design && (
+            <Chip
+              active={showDimensions}
+              onClick={() => setShowDimensions((value) => !value)}
+              title="Outside width and depth and the floor to ceiling height, read straight off the design you entered."
+            >
+              Dimensions
+            </Chip>
+          )}
+          <Chip
+            active={showFigure}
+            onClick={() => setShowFigure((value) => !value)}
+            title={`A ${FIGURE_HEIGHT_M.toFixed(2)} m standing figure, drawn only to give the model a sense of scale. It is not an occupant in the simulation.`}
           >
-            {(Object.keys(RAMP_LABEL) as RampName[]).map((item) => (
-              <option key={item} value={item}>
-                {RAMP_LABEL[item]}
-              </option>
-            ))}
-          </select>
-        )}
-        {!immersive && mode === "interior_temperature" && (
-          <input
-            type="range"
-            min={0.1}
-            max={1.0}
-            step={0.05}
-            value={thermalOpacity}
-            onChange={(e) => setThermalOpacity(Number(e.target.value))}
-            className="w-24 accent-[var(--color-ink)]"
-            title="Volume Opacity"
-          />
-        )}
-        {hours.length > 0 && (
-          <>
-            <button
-              type="button"
-              onClick={() => setPlaying((value) => !value)}
-              className={`rounded-md border px-2.5 py-1 text-xs ${
-                playing
-                  ? "border-[var(--color-solar)] bg-[var(--color-solar)] text-white"
-                  : "border-[var(--color-line)] bg-[var(--color-night-2)] text-[var(--color-ink-faint)]"
-              }`}
-            >
-              {playing ? "Pause" : "Play 24 h"}
-            </button>
-            <button
-              type="button"
-              onClick={jumpToNoon}
-              className="rounded-md border border-[var(--color-line)] bg-[var(--color-night-2)] px-2.5 py-1 text-xs text-[var(--color-ink-faint)]"
-            >
-              Solar noon
-            </button>
-          </>
-        )}
+            Scale figure
+          </Chip>
+          {mode === "interior_temperature" && (
+            <label className="flex items-center gap-1.5 text-[11px] text-[var(--color-ink-faint)]">
+              Volume
+              <input
+                type="range"
+                min={0.1}
+                max={1.0}
+                step={0.05}
+                value={thermalOpacity}
+                onChange={(event) => setThermalOpacity(Number(event.target.value))}
+                className="w-20 accent-[var(--color-earth)]"
+                aria-label="How solid the air volume is drawn"
+              />
+            </label>
+          )}
         </div>
 
-        <button
-          type="button"
-          onClick={toggleImmersive}
-          className="shrink-0 rounded-md border border-[var(--color-line)] bg-[var(--color-night-2)] px-2.5 py-1 text-xs whitespace-nowrap text-[var(--color-ink-faint)] transition-colors hover:border-[var(--color-ink-faint)] hover:text-[var(--color-ink)]"
-          title="Fill the screen. Press F to toggle."
-        >
-          {immersive ? "Exit full screen" : "Full screen"}
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <select
+            value={quality}
+            onChange={(event) => changeQuality(event.target.value as Quality)}
+            className="rounded-md border border-[var(--color-line)] bg-[var(--color-night-2)] px-2 py-1 text-xs text-[var(--color-ink-dim)]"
+            aria-label="Render quality"
+            title="Ambient occlusion, bloom and antialiasing cost frame rate. Drop this if the view stutters."
+          >
+            <option value="high">High render</option>
+            <option value="balanced">Balanced</option>
+            <option value="plain">Plain</option>
+          </select>
+          <Chip onClick={saveImage} title="Save what is on screen as a PNG.">
+            Save image
+          </Chip>
+          <Chip onClick={toggleImmersive} title="Fill the screen. Press F to toggle.">
+            {immersive ? "Exit full screen" : "Full screen"}
+          </Chip>
+        </div>
       </div>
 
       {!immersive && !immersiveChrome && (
         <p className="text-xs text-[var(--color-ink-faint)]">
           {engagedHint
-            ? "drag to orbit, scroll to zoom, hover a face"
-            : "click the view to take control, then drag and scroll"}
+            ? "Drag to orbit, right drag to pan, scroll to zoom. Hover a face for its name and value."
+            : "Click or tab into the view to take control. Then drag to orbit, right drag to pan, scroll or the arrow keys to move."}
         </p>
       )}
 
       <div className={immersive ? "relative min-h-0 flex-1" : "relative"}>
         <div
           ref={mountRef}
-          className={`w-full overflow-hidden bg-[#070b11] ${
+          className={`relative w-full overflow-hidden bg-[#070b11] ${
             immersive
               ? "h-full"
               : "rounded-xl border border-[#1b2836] shadow-[inset_0_0_60px_rgba(0,0,0,0.55)]"
@@ -1378,6 +1557,25 @@ export function Scene3D({
             {badge}
           </div>
         )}
+
+        <div
+          role="group"
+          aria-label="Camera position"
+          className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-0.5 rounded-xl border border-[var(--color-line)]/50 bg-[var(--color-night-2)]/80 p-1 shadow-lg backdrop-blur-md"
+        >
+          {VIEWS.map((view) => (
+            <button
+              key={view}
+              type="button"
+              onClick={() => applyView(view)}
+              disabled={view === "sun" && !(sun && sun.altitude > 0)}
+              title={VIEW_HINT[view]}
+              className="rounded-lg px-2.5 py-1 text-[11px] whitespace-nowrap text-[var(--color-ink-dim)] transition-colors duration-150 hover:bg-[var(--color-night-3)] hover:text-[var(--color-ink)] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {VIEW_LABEL[view]}
+            </button>
+          ))}
+        </div>
 
         <div className="pointer-events-none absolute inset-0 rounded-lg">
           <span className="absolute left-2 top-2 h-4 w-4 border-l border-t border-[#2f4a63]" />
@@ -1515,6 +1713,16 @@ export function Scene3D({
 
       {hours.length > 0 && (
         <div className="flex items-center gap-3">
+          <Chip
+            active={playing}
+            onClick={() => setPlaying((value) => !value)}
+            title="Step through every simulated hour in the run period."
+          >
+            {playing ? "Pause" : "Play"}
+          </Chip>
+          <Chip onClick={jumpToNoon} title="Jump to the hour nearest solar noon.">
+            Solar noon
+          </Chip>
           <input
             type="range"
             min={0}
@@ -1524,6 +1732,7 @@ export function Scene3D({
               setPlaying(false);
               onHourChange(Number(event.target.value));
             }}
+            aria-label="Simulated hour"
             className="flex-1 accent-[var(--color-solar)]"
           />
           <span className="w-40 text-right text-xs tabular-nums text-[var(--color-ink-faint)]">

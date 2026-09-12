@@ -25,7 +25,7 @@ export function detectQuality(): Quality {
   return integrated && cores <= 8 ? "balanced" : "high";
 }
 
-export function createSkyDome(radius: number): {
+export function createSkyDome(radius: number, intensity = 1): {
   mesh: THREE.Mesh;
   setSun: (direction: THREE.Vector3, altitudeDeg: number) => void;
   uniforms: Record<string, THREE.IUniform>;
@@ -33,7 +33,14 @@ export function createSkyDome(radius: number): {
   const sky = new Sky();
   sky.scale.setScalar(Math.max(radius * 4, 4000));
   sky.frustumCulled = false;
+  const material = sky.material as THREE.ShaderMaterial;
+  material.uniforms.skyIntensity = { value: intensity };
+  material.fragmentShader = material.fragmentShader
+    .replace("uniform vec3 up;", "uniform vec3 up; uniform float skyIntensity;")
+    .replace("gl_FragColor = vec4( retColor, 1.0 );",
+             "gl_FragColor = vec4( retColor * skyIntensity, 1.0 );");
   const uniforms = sky.material.uniforms as Record<string, THREE.IUniform>;
+  uniforms.up.value.set(0, 0, 1);
   uniforms.turbidity.value = 2.2;
   uniforms.rayleigh.value = 1.4;
   uniforms.mieCoefficient.value = 0.004;
@@ -48,6 +55,39 @@ export function createSkyDome(radius: number): {
   };
 
   return { mesh: sky as unknown as THREE.Mesh, setSun, uniforms };
+}
+
+export type SkyEnvironment = {
+  refresh: (direction: THREE.Vector3, altitudeDeg: number) => THREE.Texture;
+  texture: () => THREE.Texture | null;
+  dispose: () => void;
+};
+
+export function createSkyEnvironment(renderer: THREE.WebGLRenderer): SkyEnvironment {
+  const generator = new THREE.PMREMGenerator(renderer);
+  generator.compileEquirectangularShader();
+  const scene = new THREE.Scene();
+  const sky = createSkyDome(1000);
+  scene.add(sky.mesh);
+  let target: THREE.WebGLRenderTarget | null = null;
+
+  return {
+    refresh: (direction: THREE.Vector3, altitudeDeg: number) => {
+      sky.setSun(direction, altitudeDeg);
+      const next = generator.fromScene(scene);
+      target?.dispose();
+      target = next;
+      return next.texture;
+    },
+    texture: () => target?.texture ?? null,
+    dispose: () => {
+      target?.dispose();
+      target = null;
+      sky.mesh.geometry.dispose();
+      (sky.mesh.material as THREE.Material).dispose();
+      generator.dispose();
+    },
+  };
 }
 
 export type Pipeline = {
@@ -88,7 +128,12 @@ export function createPipeline(
     teardown();
     if (quality === "plain") return;
 
-    const next = new EffectComposer(renderer);
+    const buffer = new THREE.WebGLRenderTarget(size.x, size.y, {
+      type: THREE.HalfFloatType,
+      depthBuffer: true,
+      stencilBuffer: true,
+    });
+    const next = new EffectComposer(renderer, buffer);
     next.setSize(size.x, size.y);
     next.addPass(new RenderPass(scene, camera));
 
@@ -99,7 +144,7 @@ export function createPipeline(
       distanceExponent: 1.2,
       thickness: 1.0,
       scale: 1.0,
-      samples: quality === "high" ? 16 : 8,
+      samples: quality === "high" ? 24 : 10,
       screenSpaceRadius: false,
     });
     ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 4, rings: 2,
@@ -107,7 +152,7 @@ export function createPipeline(
     next.addPass(ao);
     gtao = ao;
 
-    const glow = new UnrealBloomPass(size.clone(), 0.26, 0.72, 0.92);
+    const glow = new UnrealBloomPass(size.clone(), 0.22, 0.7, 0.94);
     next.addPass(glow);
     bloom = glow;
 

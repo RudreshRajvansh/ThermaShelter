@@ -183,6 +183,46 @@ input[type="range"] {
   accent-color: var(--color-solar);
 }
 
+.scene-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.scene-label {
+  font-family: var(--font-ui);
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.scene-label-cardinal {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #1f2733;
+  text-shadow:
+    0 0 3px rgba(255, 255, 255, 0.95),
+    0 0 6px rgba(255, 255, 255, 0.8);
+}
+
+.scene-label-dimension {
+  pointer-events: auto;
+  cursor: help;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+  background: color-mix(in oklab, var(--color-night-2) 88%, transparent);
+  border: 1px solid var(--color-line);
+  border-radius: 6px;
+  padding: 2px 6px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.18);
+}
+
+.scene-label-note {
+  font-size: 11px;
+  color: var(--color-ink-faint);
+}
+
 select,
 input[type="text"],
 input[type="number"] {

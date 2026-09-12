@@ -50,7 +50,7 @@ varying vec3 vDirection;
 uniform sampler3D uVolume;
 uniform sampler2D uTransfer;
 uniform float uOpacity;
-uniform float uClipZ;
+uniform float uClipY;
 
 vec2 intersectBox(vec3 orig, vec3 dir) {
   vec3 tmin = (vec3(0.0) - orig) / dir;
@@ -71,7 +71,7 @@ void main() {
 
   for (float t = bounds.x; t < bounds.y; t += stepSize) {
     vec3 pos = vOrigin + dir * t;
-    if (pos.z > uClipZ) continue;
+    if (pos.y < uClipY) continue;
     float value = texture(uVolume, clamp(pos, 0.0, 1.0)).r;
     if (value < 0.0) continue;
     vec4 color = texture(uTransfer, vec2(value, 0.5));
@@ -125,7 +125,7 @@ export function createThermalVolume(
       uVolume: { value: createData3DTexture(data) },
       uTransfer: { value: transfer },
       uOpacity: { value: 0.6 },
-      uClipZ: { value: 1000.0 },
+      uClipY: { value: -1000.0 },
       modelMatrixInverse: { value: new THREE.Matrix4() },
     },
     transparent: true,
@@ -172,14 +172,18 @@ export function createThermalVolume(
     material.uniforms.uOpacity.value = value;
   };
 
-  const setClipHeight = (worldZ: number) => {
+  const setSectionY = (worldY: number | null) => {
+    if (worldY === null) {
+      material.uniforms.uClipY.value = -1000.0;
+      return;
+    }
     const step = spacing(current);
-    const low = current.bounds_min[2] - step[2] / 2;
-    const size = current.bounds_max[2] - current.bounds_min[2] + step[2];
-    material.uniforms.uClipZ.value = size > 0 ? (worldZ - low) / size : 1000.0;
+    const low = current.bounds_min[1] - step[1] / 2;
+    const size = current.bounds_max[1] - current.bounds_min[1] + step[1];
+    material.uniforms.uClipY.value = size > 0 ? (worldY - low) / size : -1000.0;
   };
 
-  return { mesh, update, dispose, setOpacity, setClipHeight };
+  return { mesh, update, dispose, setOpacity, setSectionY };
 }
 
 export function probeTemperature(data: ThermalFieldData, point: THREE.Vector3): number | null {

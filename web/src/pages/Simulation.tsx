@@ -115,6 +115,7 @@ export function Simulation({
         title="The geometry that was simulated"
         subtitle="Parametric, not a render. It rebuilds from your inputs, and the face names are the simulator's surface identifiers, so a painted value sits on the surface it belongs to."
         right={
+          view === "3d view" ? undefined : (
           <div className="flex gap-1">
             {(["construction", "surface_temperature", "incident_solar"] as const).map(
               (mode) => (
@@ -138,6 +139,7 @@ export function Simulation({
               ),
             )}
           </div>
+          )
         }
       >
         <Tabs tabs={VIEWS} active={view} onChange={setView} />
