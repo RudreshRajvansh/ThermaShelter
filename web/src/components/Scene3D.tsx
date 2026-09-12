@@ -61,6 +61,7 @@ import {
   type LabelLayer,
 } from "../lib/labels";
 import { FIGURE_HEIGHT_M, createScaleFigure, type ScaleFigure } from "../lib/figure";
+import { barLabel, paintHud, scaleBar } from "../lib/hud";
 import type { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { createGizmos, computeNewDesign, type HandleType } from "../lib/manipulate";
 import type { DesignSpec } from "../lib/api";
@@ -191,6 +192,22 @@ function Divider() {
 }
 
 const SCENE_INK = "#26303d";
+
+function NorthDial({ screenDeg }: { screenDeg: number }) {
+  return (
+    <svg viewBox="0 0 40 40" width={34} height={34} aria-hidden="true">
+      <circle cx={20} cy={20} r={15} fill="rgba(255,255,255,0.82)" stroke="#5d6b7d" />
+      <g transform={`rotate(${screenDeg} 20 20)`}>
+        <path d="M20 6 L24 22 L20 19 L16 22 Z" fill="#b4402f" />
+        <path d="M20 34 L20 24" stroke="#5d6b7d" strokeWidth={1.4} strokeLinecap="round" />
+      </g>
+      <text x={20} y={12} textAnchor="middle" fontSize={7.5} fontWeight={700}
+            fill="#1f2733" transform={`rotate(${screenDeg} 20 20)`}>
+        N
+      </text>
+    </svg>
+  );
+}
 
 function extentOf(
   surfaces: SurfaceResults | null,
@@ -338,6 +355,10 @@ export function Scene3D({
   >([]);
   const layoutRef = useRef<THREE.Group | null>(null);
   const [hover, setHover] = useState<Hover | null>(null);
+  const [compass, setCompass] = useState<{ metresPerPixel: number; northDeg: number } | null>(
+    null,
+  );
+  const compassRef = useRef<{ metresPerPixel: number; northDeg: number } | null>(null);
   const [engagedHint, setEngagedHint] = useState(false);
 
   const thermalRef = useRef<{
@@ -967,6 +988,10 @@ export function Scene3D({
       if (!context) return source.toDataURL("image/png");
       context.drawImage(source, 0, 0);
       labels.paint(context, camera, flat.width, flat.height, renderer.getPixelRatio());
+      if (compassRef.current) {
+        paintHud(context, flat.width, flat.height, renderer.getPixelRatio(),
+                 compassRef.current);
+      }
       return flat.toDataURL("image/png");
     };
 
@@ -986,6 +1011,7 @@ export function Scene3D({
     observer.observe(mount);
 
     let lastTime = performance.now();
+    let lastCompass = 0;
     let frame = 0;
     const animate = () => {
       const now = performance.now();
@@ -1002,6 +1028,21 @@ export function Scene3D({
         needsRender = false;
         pipeline.render();
         labels.render(scene, camera);
+        if (now - lastCompass > 120) {
+          lastCompass = now;
+          const span = 2 * camera.position.distanceTo(rig.controls.target)
+            * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+          const centre = rig.controls.target.clone().project(camera);
+          const north = rig.controls.target.clone()
+            .add(new THREE.Vector3(0, size.y || 1, 0)).project(camera);
+          const reading = {
+            metresPerPixel: span / Math.max(mount.clientHeight, 1),
+            northDeg: THREE.MathUtils.radToDeg(
+              Math.atan2(north.x - centre.x, north.y - centre.y)),
+          };
+          compassRef.current = reading;
+          setCompass(reading);
+        }
       }
       frame = requestAnimationFrame(animate);
     };
@@ -1564,6 +1605,36 @@ export function Scene3D({
             </button>
           ))}
         </div>
+
+        {compass && (() => {
+          const bar = scaleBar(compass.metresPerPixel);
+          return (
+            <div className="pointer-events-none absolute bottom-4 right-4 z-10 flex items-end gap-3">
+              {bar && (
+                <div className="flex flex-col items-start gap-1">
+                  <span className="tnum rounded bg-white/80 px-1.5 py-0.5 text-[10px] font-semibold text-[#1f2733]">
+                    {barLabel(bar.metres)}
+                  </span>
+                  <svg
+                    width={Math.round(bar.pixels)}
+                    height={10}
+                    viewBox={`0 0 ${Math.round(bar.pixels)} 10`}
+                    aria-hidden="true"
+                  >
+                    <rect x={0} y={3} width={Math.round(bar.pixels) / 2} height={4}
+                          fill="#1f2733" />
+                    <rect x={Math.round(bar.pixels) / 2} y={3}
+                          width={Math.round(bar.pixels) / 2} height={4}
+                          fill="rgba(255,255,255,0.9)" stroke="#1f2733" strokeWidth={0.8} />
+                    <path d={`M0 0 V10 M${Math.round(bar.pixels)} 0 V10`} stroke="#1f2733"
+                          strokeWidth={1.2} />
+                  </svg>
+                </div>
+              )}
+              <NorthDial screenDeg={compass.northDeg} />
+            </div>
+          );
+        })()}
 
         <div className="pointer-events-none absolute inset-0 rounded-lg">
           <span className="absolute left-2 top-2 h-4 w-4 border-l border-t border-[#2f4a63]" />
