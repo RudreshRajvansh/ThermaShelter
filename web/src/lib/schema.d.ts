@@ -2257,8 +2257,12 @@ export interface components {
             citation?: components["schemas"]["SourceRef"] | null;
             /** Delta Minimum Overnight K */
             delta_minimum_overnight_k?: number | null;
+            /** Delta Maximum Daytime K */
+            delta_maximum_daytime_k?: number | null;
             /** Delta Degree Hours Kh */
             delta_degree_hours_kh?: number | null;
+            /** Delta Hours Below Band H */
+            delta_hours_below_band_h?: number | null;
             /** Delta Heating Demand Kwh */
             delta_heating_demand_kwh?: number | null;
             /** Fuel Saved Units */

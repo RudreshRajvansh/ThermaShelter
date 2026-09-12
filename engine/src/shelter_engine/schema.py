@@ -1079,7 +1079,9 @@ class ReferenceComparison(Frozen):
     reference_hash: str
     citation: SourceRef | None = None
     delta_minimum_overnight_k: float | None = None
+    delta_maximum_daytime_k: float | None = None
     delta_degree_hours_kh: float | None = None
+    delta_hours_below_band_h: float | None = None
     delta_heating_demand_kwh: float | None = None
     fuel_saved_units: float | None = None
     fuel_unit_name: str | None = None

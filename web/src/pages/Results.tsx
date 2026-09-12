@@ -139,6 +139,9 @@ export function Results({
   const showFuel = !cooling && fuelSaved !== null && Math.abs(fuelSaved) > 0.5;
   const rupeesSaved = reference?.rupees_saved_per_year ?? null;
   const shares = simulation.breakdown;
+  const headlineDelta = cooling
+    ? reference?.delta_maximum_daytime_k ?? null
+    : reference?.delta_minimum_overnight_k ?? null;
 
   const lossPaths: [string, number][] = (
     [
@@ -193,9 +196,14 @@ export function Results({
               : undefined
           }
           baseline={
-            reference?.delta_minimum_overnight_k != null
-              ? `${signed(reference.delta_minimum_overnight_k)} K against`
-              : undefined
+            headlineDelta != null ? `${signed(headlineDelta)} K against` : undefined
+          }
+          baselineGood={
+            headlineDelta == null || headlineDelta === 0
+              ? null
+              : cooling
+                ? headlineDelta < 0
+                : headlineDelta > 0
           }
         />
         <Stat
@@ -203,8 +211,20 @@ export function Results({
           value={num(comfort.hours_below_band, 0)}
           unit="h"
           baseline={
+            reference?.delta_hours_below_band_h != null
+              ? `${signed(reference.delta_hours_below_band_h, 0)} h against`
+              : undefined
+          }
+          baselineGood={
+            reference?.delta_hours_below_band_h == null
+            || reference.delta_hours_below_band_h === 0
+              ? null
+              : reference.delta_hours_below_band_h < 0
+          }
+          note={
             reference?.delta_degree_hours_kh != null
-              ? `${signed(reference.delta_degree_hours_kh, 0)} Kh against`
+              ? `${signed(reference.delta_degree_hours_kh, 0)} Kh of degree hours outside `
+                + "the band, which counts how far outside as well as how long"
               : undefined
           }
         />
@@ -221,6 +241,12 @@ export function Results({
             reference?.delta_heating_demand_kwh != null
               ? `${signed(reference.delta_heating_demand_kwh, 0)} kWh against`
               : undefined
+          }
+          baselineGood={
+            reference?.delta_heating_demand_kwh == null
+            || reference.delta_heating_demand_kwh === 0
+              ? null
+              : reference.delta_heating_demand_kwh < 0
           }
         />
       </div>
@@ -248,6 +274,11 @@ export function Results({
                   reference?.delta_cost_inr != null
                     ? `${signed(reference.delta_cost_inr, 0)} INR against`
                     : undefined
+                }
+                baselineGood={
+                  reference?.delta_cost_inr == null || reference.delta_cost_inr === 0
+                    ? null
+                    : reference.delta_cost_inr < 0
                 }
               />
               <Stat

@@ -127,6 +127,7 @@ export function Stat({
   unit,
   baseline,
   baselineLabel,
+  baselineGood = null,
   band,
   tone = "neutral",
   note,
@@ -137,6 +138,7 @@ export function Stat({
   unit?: string;
   baseline?: string;
   baselineLabel?: string;
+  baselineGood?: boolean | null;
   band?: string;
   tone?: "neutral" | "good" | "bad" | "solar";
   note?: string;
@@ -166,7 +168,17 @@ export function Stat({
       {band && <div className="mt-1 text-[11px] text-[var(--color-ink-faint)]">{band}</div>}
       {baseline && (
         <div className="mt-1.5 border-t border-[var(--color-line-soft)] pt-1.5 text-[11px]">
-          <span className="text-[var(--color-diesel)]">{baseline}</span>
+          <span
+            className={
+              baselineGood === true
+                ? "font-medium text-[var(--color-good)]"
+                : baselineGood === false
+                  ? "font-medium text-[var(--color-danger-ink)]"
+                  : "text-[var(--color-ink-dim)]"
+            }
+          >
+            {baseline}
+          </span>
           <span className="ml-1 text-[var(--color-ink-faint)]">
             {baselineLabel ?? "current construction"}
           </span>
