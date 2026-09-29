@@ -45,8 +45,6 @@ SUPPLEMENT: list[tuple] = [
      False, 2.5, "unskilled", 0.030, 0.038),
     ("rockwool", "Rockwool slab", 0.040, 100, 840, "#d8cfc0", "rough",
      False, 2.5, "unskilled", 0.035, 0.046),
-    ("gi_sheet", "Galvanised corrugated steel sheet", 50.0, 7800, 480, "#b9c2c8",
-     "smooth", False, 2.0, "semiskilled", None, None),
     ("gravel_bed", "Compacted gravel bed", 0.90, 1800, 840, "#8f8a7e", "rough",
      True, 1.0, "unskilled", None, None),
 ]
@@ -59,6 +57,90 @@ COSTS_INR_M3: dict[str, float] = {
     "eps_thermocol": 3200.0, "xps_board": 5200.0, "rockwool": 5200.0,
     "gi_sheet": 90000.0, "gravel_bed": 1200.0,
 }
+
+ORNL_METAL_ROOFS = (
+    "Miller, Desjarlais, Parker and Kriner, The thermal performance of painted and "
+    "unpainted structural standing seam metal roof systems, Thermal Performance of the "
+    "Exterior Envelopes of Buildings VIII, ORNL 2001: unpainted galvanised steel, "
+    "24 gauge, field exposed")
+ORNL_URL = ("https://web.ornl.gov/sci/buildings/conf-archive/2001%20B8%20papers/"
+            "115_Kriner.pdf")
+IS_12436 = ("IS 12436 : 1988 with amendment, Preformed rigid polyurethane (PUR) and "
+            "polyisocyanurate (PIR) foams for thermal insulation, Bureau of Indian "
+            "Standards, Table 1 and Appendix A")
+IS_12436_URL = "https://law.resource.org/pub/in/bis/S02/is.12436.1988.pdf"
+PLUSS_OM18 = ("Pluss Advanced Technologies, technical data sheet of savE OM18, "
+              "Doc 166, version R0, 15 February 2022")
+PLUSS_OM18_URL = ("https://pluss.co.in/wp-content/themes/pluss/assets/image/"
+                  "Literature-PLUSS/Data-Sheets/PCM/Doc%20166_PCM_OM18_TDS.pdf")
+
+SOURCED: list[dict] = [
+    {"id": "gi_sheet", "name": "Galvanised corrugated steel sheet, weathered",
+     "conductivity_w_mk": 50.0, "density_kg_m3": 7800.0, "specific_heat_j_kgk": 480.0,
+     "thermal_absorptance": 0.35, "solar_absorptance": 0.77,
+     "colour": "#9ea7ad", "finish": "smooth", "locally_available": 0,
+     "transport_multiplier": 2.0, "mason_skill": "semiskilled",
+     "conductivity_low": None, "conductivity_high": None,
+     "source": ORNL_METAL_ROOFS, "source_status": "verified", "url": ORNL_URL,
+     "source_note": ("Surface optics are the weathered values: the bare sheet went dull "
+                     "within 30 days of exposure, after which ORNL measured a solar "
+                     "reflectance of 0.23 and a thermal emittance of 0.35, the highest "
+                     "emittance any weathered sample reached. A roof in Ladakh is "
+                     "weathered for all but its first month. Conductivity, density and "
+                     "specific heat are carbon steel values, which a 0.6 mm sheet makes "
+                     "irrelevant to the result.")},
+    {"id": "gi_sheet_new", "name": "Galvanised corrugated steel sheet, new",
+     "conductivity_w_mk": 50.0, "density_kg_m3": 7800.0, "specific_heat_j_kgk": 480.0,
+     "thermal_absorptance": 0.06, "solar_absorptance": 0.34,
+     "colour": "#c8d1d6", "finish": "smooth", "locally_available": 0,
+     "transport_multiplier": 2.0, "mason_skill": "semiskilled",
+     "conductivity_low": None, "conductivity_high": None,
+     "source": ORNL_METAL_ROOFS, "source_status": "verified", "url": ORNL_URL,
+     "source_note": ("New mirror finish, labelled R66E06 by ORNL: solar reflectance "
+                     "0.66 and thermal emittance 0.06. It holds for weeks, not "
+                     "winters, so it is only right for a roof sheeted this season.")},
+    {"id": "puf_panel", "name": "Rigid polyurethane foam panel core",
+     "conductivity_w_mk": 0.023, "density_kg_m3": 34.0, "specific_heat_j_kgk": 1400.0,
+     "thermal_absorptance": None, "solar_absorptance": None,
+     "colour": "#efe7c9", "finish": "smooth", "locally_available": 0,
+     "transport_multiplier": 2.5, "mason_skill": "unskilled",
+     "conductivity_low": 0.017, "conductivity_high": 0.025,
+     "source": IS_12436, "source_status": "verified", "url": IS_12436_URL,
+     "source_note": ("0.023 W/mK is the standard's maximum at a 10 C mean, the "
+                     "temperature a shelter wall sits near; the range 0.017 to 0.025 is "
+                     "the ageing drift the standard reports. 34 kg/m3 is the middle of "
+                     "the 32 to 36 kg/m3 it calls suitable for general insulation. The "
+                     "standard gives no specific heat; 1400 J/kgK is the polyurethane "
+                     "value tabulated in ISO 10456, and at this density it stores almost "
+                     "nothing either way. Unpriced until the UT Ladakh schedule of rates "
+                     "is entered.")},
+    {"id": "water_mass", "name": "Water in sealed containers",
+     "conductivity_w_mk": 0.58, "density_kg_m3": 1000.0, "specific_heat_j_kgk": 4190.0,
+     "thermal_absorptance": None, "solar_absorptance": None,
+     "colour": "#5f8fb4", "finish": "smooth", "locally_available": 1,
+     "transport_multiplier": 1.0, "mason_skill": "unskilled",
+     "conductivity_low": None, "conductivity_high": None,
+     "source": "Properties of liquid water near 5 C, IAPWS formulation",
+     "source_status": "verified", "url": "http://www.iapws.org/relguide/IAPWS95-2018.pdf",
+     "source_note": ("Modelled as a still solid layer, which understates the heat it "
+                     "moves by convection inside the container. It is not modelled as "
+                     "freezing: a container in a room that drops below 0 C will freeze, "
+                     "burst and release its latent heat, none of which this row "
+                     "captures, so it only belongs in a room that stays above 0 C.")},
+]
+
+SOURCED_PCM: list[dict] = [
+    {"id": "om18", "name": "Pluss savE OM18", "melt_temperature_c": 18.0,
+     "latent_heat_j_kg": 169000.0, "conductivity_w_mk": 0.18, "density_kg_m3": 880.0,
+     "specific_heat_j_kgk": 2690.0, "melt_band_k": 2.0,
+     "cost_inr_m3": 180000.0, "cycle_capacity_retention": 1.0,
+     "colour": "#e6e1cf", "finish": "smooth",
+     "source": (PLUSS_OM18 + ": melting 18 C and freezing 17 C, melting latent heat "
+                "169 kJ/kg, liquid density 880 kg/m3, liquid specific heat 2.69 kJ/kgK, "
+                "conductivity 0.175 to 0.182 W/mK. Flammable, flash point 150 C, so it "
+                "must be encapsulated and kept away from a heater."),
+     "source_status": "verified"},
+]
 
 # id, name, U, SHGC, VT, layers, cost/m2, local, colour
 GLAZING: list[tuple] = [
@@ -249,6 +331,13 @@ def build_materials(raw: list[dict], report: list[str]) -> list[dict]:
         out.append(record)
         seen.add(identifier)
 
+    for record in SOURCED:
+        if record["id"] in seen:
+            continue
+        out.append({**record, "cost_inr_m3": COSTS_INR_M3.get(record["id"], 0.0),
+                    "from_layer0": False})
+        seen.add(record["id"])
+
     for (identifier, name, k, rho, cp, colour, finish, local, transport, skill,
          k_low, k_high) in SUPPLEMENT:
         if identifier in seen:
@@ -287,6 +376,8 @@ def build_pcm(raw: list[dict]) -> list[dict]:
             "source": f"{row['source']} (Layer 0 pcm.csv)",
             "source_status": "verified",
         })
+    known = {record["id"] for record in out}
+    out.extend(record for record in SOURCED_PCM if record["id"] not in known)
     return out
 
 
@@ -300,13 +391,16 @@ def write_database(path: Path, materials: list[dict], pcm: list[dict],
     for record in materials:
         connection.execute(
             "INSERT INTO materials (id, name, conductivity_w_mk, density_kg_m3, "
-            "specific_heat_j_kgk, roughness, cost_inr_m3, locally_available, "
+            "specific_heat_j_kgk, thermal_absorptance, solar_absorptance, roughness, "
+            "cost_inr_m3, locally_available, "
             "transport_multiplier, mason_skill, colour, finish, conductivity_low, "
             "conductivity_high, source, source_status, source_note, "
             "cost_source, cost_source_status) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (record["id"], record["name"], record["conductivity_w_mk"],
-             record["density_kg_m3"], record["specific_heat_j_kgk"], "MediumRough",
+             record["density_kg_m3"], record["specific_heat_j_kgk"],
+             record.get("thermal_absorptance"), record.get("solar_absorptance"),
+             "MediumRough",
              record["cost_inr_m3"], record["locally_available"],
              record["transport_multiplier"], record["mason_skill"], record["colour"],
              record["finish"], record["conductivity_low"], record["conductivity_high"],
@@ -388,7 +482,10 @@ def main() -> int:
     supplied = {record["id"] for record in materials if record["from_layer0"]}
     print(f"  {len(supplied)} from Layer 0, "
           f"{len(materials) - len(supplied)} added to complete the set")
-    print(f"phase change materials: {len(pcm)} from Layer 0")
+    sourced_pcm = {record["id"] for record in SOURCED_PCM}
+    layer0_pcm = [record for record in pcm if record["id"] not in sourced_pcm]
+    print(f"phase change materials: {len(layer0_pcm)} from Layer 0, "
+          f"{len(pcm) - len(layer0_pcm)} added from manufacturer datasheets")
     print(f"glazing systems: {len(GLAZING)} added, none supplied by Layer 0")
 
     write_database(data / "materials.db", materials, pcm, raw_materials, raw_pcm)
@@ -399,7 +496,10 @@ def main() -> int:
     obj = source / "terrain" / "terrain_mesh.obj"
     terrain_dir = data / "terrain"
     terrain_dir.mkdir(parents=True, exist_ok=True)
-    if obj.is_file():
+    if (terrain_dir / "leh.obj").is_file():
+        print("  kept leh.obj, computed at the site; Layer 0's terrain_mesh.obj was "
+              "computed about 3 km away and is not copied")
+    elif obj.is_file():
         shutil.copy2(obj, terrain_dir / "terrain_mesh.obj")
         print(f"  copied {obj.name}")
 
@@ -469,7 +569,16 @@ def main() -> int:
 
     sites = data / "sites"
     sites.mkdir(parents=True, exist_ok=True)
-    (sites / "leh.json").write_text(json.dumps(site, indent=2), encoding="utf-8")
+    target = sites / "leh.json"
+    if target.is_file():
+        existing = json.loads(target.read_text(encoding="utf-8"))
+        kept_horizon = existing.get("horizon") or {}
+        citation = str((kept_horizon.get("source") or {}).get("citation", ""))
+        if "computed at the site coordinates" in citation:
+            site["horizon"] = kept_horizon
+            print("  kept the horizon already computed at the site coordinates; "
+                  "Layer 0's table was computed about 3 km away")
+    target.write_text(json.dumps(site, indent=2) + "\n", encoding="utf-8")
 
     manifest = {
         "generated_from": str(source),
@@ -479,7 +588,9 @@ def main() -> int:
         "materials_added": sorted({record["id"] for record in materials}
                                   - supplied),
         "glazing_added": [item[0] for item in GLAZING],
-        "pcm_from_layer0": [record["id"] for record in pcm],
+        "pcm_from_layer0": [record["id"] for record in pcm
+                            if record["id"] not in {item["id"] for item in SOURCED_PCM}],
+        "pcm_added": [item["id"] for item in SOURCED_PCM],
         "corrections": {
             key: value["reason"] for key, value in CORRECTIONS.items()
             if key in supplied
