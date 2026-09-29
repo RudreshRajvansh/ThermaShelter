@@ -25,7 +25,8 @@ from .hashing import stable_hash
 from .idf import IdfBundle, build_idf
 from .materials import MaterialLibrary
 from .mesh import build_mesh
-from .metrics import (ZoneSeries, airflow_summary, condensation, energy_metrics,
+from .metrics import (ZoneSeries, air_quality, airflow_summary, condensation,
+                      energy_metrics,
                       heat_balance, solar_gain_by_facade, surface_frames,
                       zone_series)
 from .optimize import Metrics, optimise
@@ -48,8 +49,9 @@ from .schema import (Arrangement, Assumption, BuildabilityMetrics, CFDExport,
 from .uncertainty import select_parameters, uncertainty_band
 from .weather import WeatherFile, load_epw
 
-DEFAULT_COMFORT_MODEL = "imac_2016_nv"
-DEFAULT_FIXED_TARGET = "dihar_operational_target"
+DEFAULT_COMFORT_MODEL = "drdo_tot_band"
+CO2_MARGINAL_FRACTION = 0.05
+DEFAULT_FIXED_TARGET = "drdo_band_night"
 UNCERTAINTY_METRICS = (
     ("minimum_overnight_operative_c", "C", True),
     ("degree_hours_total_kh", "Kh", True),
@@ -187,7 +189,7 @@ class Engine:
         comfort = evaluate_comfort(
             products.series.operative_c, products.series.outdoor_c,
             self.comfort_model, light.period, design.occupancy, self.fixed_target,
-            design_day)
+            design_day, self._outdoor_history)
         condensation_metrics = condensation(products.output, products.model,
                                             products.series)
         cost = cost_breakdown(design, products.model, self.library)
@@ -235,13 +237,19 @@ class Engine:
         comfort = evaluate_comfort(
             products.series.operative_c, products.series.outdoor_c,
             self.comfort_model, options.period, design.occupancy, self.fixed_target,
-            design_day)
+            design_day, self._outdoor_history)
+        warnings.extend(self._applicability_warnings(comfort))
         breakdown = heat_balance(products.output, products.model, design,
                                  products.series, self.thermal_bridges)
         condensation_metrics = condensation(products.output, products.model,
                                             products.series)
         cost = cost_breakdown(design, products.model, self.library)
         build = buildability(design, products.model, self.library)
+        breathing = air_quality(products.output, design, products.bundle.fresh_air,
+                                products.bundle.ventilation_design_l_s,
+                                products.bundle.infiltration_design_l_s,
+                                options.heating_hours)
+        warnings.extend(self._air_quality_warnings(breathing))
 
         energy = None
         if options.conditioned_run:
@@ -293,6 +301,7 @@ class Engine:
             headline_metric=self._headline_metric(),
             comfort=comfort, energy=energy, breakdown=breakdown,
             condensation=condensation_metrics, cost=cost, buildability=build,
+            air_quality=breathing,
             hourly=tuple(hourly),
             airflow=airflow_summary(products.output, products.model),
             surfaces=surfaces,
@@ -327,7 +336,8 @@ class Engine:
 
     def _comfort_lower_bound(self, series: ZoneSeries) -> float | None:
         try:
-            frame = comfort_bounds_frame(series.outdoor_c, self.comfort_model)
+            frame = comfort_bounds_frame(series.outdoor_c, self.comfort_model,
+                                         self._outdoor_history)
         except EngineError:
             return None
         if frame.empty:
@@ -336,7 +346,8 @@ class Engine:
 
     def _hourly_series(self, series: ZoneSeries) -> tuple[HourlySeries, ...]:
         stamps = tuple(value.isoformat() for value in series.operative_c.index)
-        bounds = comfort_bounds_frame(series.outdoor_c, self.comfort_model)
+        bounds = comfort_bounds_frame(series.outdoor_c, self.comfort_model,
+                                      self._outdoor_history)
         aligned = bounds.reindex(series.operative_c.index).ffill().bfill()
         output = [
             HourlySeries(name="operative_temperature_c", unit="C", timestamps=stamps,
@@ -504,6 +515,45 @@ class Engine:
                 name=f"thermal_bridge_{bridge.id}", value=bridge.psi_w_mk,
                 unit="W/mK", source=bridge.source, provenance=bridge.provenance))
         return assumptions
+
+    @property
+    def _outdoor_history(self):
+        return self.weather.frame["dry_bulb_c"]
+
+    def _air_quality_warnings(self, breathing) -> list[EngineWarning]:
+        if breathing is None or breathing.night_hours_above_limit <= 0.0:
+            return []
+        peak = breathing.peak_night_co2_ppm or breathing.co2_limit_ppm
+        marginal = peak <= breathing.co2_limit_ppm * (1.0 + CO2_MARGINAL_FRACTION)
+        return [EngineWarning(
+            code="night_co2_above_limit",
+            severity=Severity.WARNING if marginal else Severity.SEVERE, origin="engine",
+            count=int(breathing.night_hours_above_limit),
+            message=(f"CO2 in the room passed {breathing.co2_limit_ppm:.0f} ppm for "
+                     f"{breathing.night_hours_above_limit:.0f} night hours, peaking at "
+                     f"{breathing.peak_night_co2_ppm:.0f} ppm. At "
+                     f"{breathing.site_pressure_kpa:.1f} kPa each occupant needs "
+                     f"{breathing.fresh_air_l_s_per_person:.1f} L/s of fresh air to hold "
+                     "the limit, which this design does not supply."))]
+
+    def _applicability_warnings(self, comfort) -> list[EngineWarning]:
+        model = self.comfort_model
+        if comfort.hours_outside_applicability <= 0.0 or model.is_fixed_band:
+            return []
+        span = model.outdoor_applicability_c
+        days = model.running_mean_days
+        mean = f"{days} day" if days else "exponentially weighted"
+        return [EngineWarning(
+            code="comfort_model_outside_applicability", severity=Severity.SEVERE,
+            origin="engine", count=int(comfort.hours_outside_applicability),
+            message=(f"{model.name} is only defined for a {mean} outdoor running mean "
+                     f"between {span.low:g} and {span.high:g} C. Here it ran from "
+                     f"{comfort.running_mean_min_c:.1f} to "
+                     f"{comfort.running_mean_max_c:.1f} C, so for "
+                     f"{comfort.hours_outside_applicability:.0f} hours the band was held "
+                     "at the edge of its range rather than computed. Those hours are "
+                     "judged against a band the model does not define; read them against "
+                     "the DRDO 17 plus or minus 3 C band instead."))]
 
     def _integrity_warnings(self) -> list[EngineWarning]:
         warnings: list[EngineWarning] = []

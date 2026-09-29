@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shelter-engine"
-version = "0.1.0"
+version = "0.2.0"
 description = "Layer 2 simulation and design-search engine for passive solar shelters"
 requires-python = ">=3.10"
 dependencies = [

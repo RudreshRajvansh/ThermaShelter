@@ -37,3 +37,8 @@ def test_field_text_keeps_precision_where_it_matters():
 def test_field_text_handles_blanks():
     assert _field_text(None) == ""
     assert _field_text("  spaced  ") == "spaced"
+
+
+def test_field_text_keeps_tiny_rates_that_rounding_would_destroy():
+    assert float(_field_text(6.769361e-08)) == pytest.approx(6.769361e-08, rel=1e-9)
+    assert float(_field_text(3.2e-10)) == pytest.approx(3.2e-10, rel=1e-9)

@@ -242,7 +242,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Layer 2 simulation and design search engine for passive shelters")
     parser.add_argument("--materials", help="path to the Layer 0 material database")
     parser.add_argument("--site", help="path to a site JSON record")
-    parser.add_argument("--comfort-model", default="imac_2016_nv")
+    parser.add_argument("--comfort-model", default="drdo_tot_band")
     parser.add_argument("--fuel", default="diesel")
     subparsers = parser.add_subparsers(dest="command", required=True)
 

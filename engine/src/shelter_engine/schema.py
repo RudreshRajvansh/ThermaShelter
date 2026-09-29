@@ -317,7 +317,9 @@ class OccupancySpec(Frozen):
 
 class VentilationSpec(Frozen):
     infiltration_ach: float = Field(default=0.60, ge=0.0, le=15.0)
-    minimum_fresh_air_ach: float = Field(default=0.35, ge=0.0, le=15.0)
+    minimum_fresh_air_ach: float = Field(default=0.0, ge=0.0, le=15.0)
+    co2_limit_ppm: float = Field(default=1000.0, ge=500.0, le=5000.0)
+    fresh_air_l_s_per_person: float | None = Field(default=None, gt=0.0, le=100.0)
     night_ventilation: bool = False
     night_ventilation_ach: float = Field(default=0.0, ge=0.0, le=20.0)
     night_ventilation_from_hour: int = Field(default=21, ge=0, le=23)
@@ -398,6 +400,7 @@ class ArrangementParams(Frozen):
     vestibule_depth_m: float = Field(default=1.20, ge=0.6, le=3.0)
     vestibule_facade: Facade = Facade.NORTH
     coupling_ach: float = Field(default=2.0, ge=0.0, le=30.0)
+    coupling_delta_t_k: float = Field(default=1.0, ge=0.0, le=10.0)
     coupling_from_hour: int = Field(default=10, ge=0, le=23)
     coupling_until_hour: int = Field(default=17, ge=0, le=23)
     coupling_source: SourceRef | None = None
@@ -574,10 +577,19 @@ class ComfortModel(Frozen):
     slope: float
     band_half_width_k: float = Field(gt=0.0, le=10.0)
     running_mean_alpha: float = Field(default=0.80, gt=0.0, lt=1.0)
+    running_mean_days: int | None = Field(default=None, ge=1, le=90)
     outdoor_applicability_c: UncertainRange
     absolute_lower_bound_c: float | None = None
     absolute_upper_bound_c: float | None = None
     source: SourceRef
+
+    @property
+    def is_fixed_band(self) -> bool:
+        return self.slope == 0.0
+
+    def outside_applicability(self, outdoor_running_mean_c: float) -> bool:
+        return not (self.outdoor_applicability_c.low <= outdoor_running_mean_c
+                    <= self.outdoor_applicability_c.high)
 
     def neutral_temperature(self, outdoor_running_mean_c: float) -> float:
         clamped = min(max(outdoor_running_mean_c, self.outdoor_applicability_c.low),
@@ -637,11 +649,14 @@ class RunOptions(Frozen):
     period: RunPeriod
     timestep_per_hour: int = Field(default=6, ge=1, le=60)
     conditioned_run: bool = True
-    heating_setpoint_c: float = Field(default=20.0, ge=0.0, le=35.0)
+    heating_setpoint_c: float = Field(default=14.0, ge=0.0, le=35.0)
+    heating_from_hour: int = Field(default=18, ge=0, le=23)
+    heating_until_hour: int = Field(default=6, ge=0, le=23)
     cooling_setpoint_c: float = Field(default=29.0, ge=5.0, le=45.0)
     surface_output: bool = True
     surface_output_period: RunPeriod | None = None
     include_horizon_shading: bool = True
+    ground_model: Literal["kiva", "monthly"] = "kiva"
     shutter_compliance_override: float | None = Field(default=None, ge=0.0, le=1.0)
     solar_distribution: Literal[
         "FullExterior", "FullInteriorAndExterior",
@@ -668,6 +683,15 @@ class RunOptions(Frozen):
     @property
     def effective_surface_period(self) -> RunPeriod:
         return self.surface_output_period or self.period
+
+    @property
+    def heating_hours(self) -> tuple[int, ...]:
+        start, end = self.heating_from_hour, self.heating_until_hour
+        if start == end:
+            return tuple(range(24))
+        if start > end:
+            return tuple(range(start, 24)) + tuple(range(0, end))
+        return tuple(range(start, end))
 
 
 class SunPosition(Frozen):
@@ -957,6 +981,11 @@ class ComfortMetrics(Frozen):
     fixed_target_hours_below: float | None = None
     fixed_target_id: str | None = None
     worst_night_margin_k: float | None = None
+    band_lower_c: float | None = None
+    band_upper_c: float | None = None
+    running_mean_min_c: float | None = None
+    running_mean_max_c: float | None = None
+    hours_outside_applicability: float = 0.0
     mean_operative_c: float | None = None
     mean_daily_swing_k: float | None = None
     decrement_factor: float | None = None
@@ -998,6 +1027,27 @@ class HeatBalanceBreakdown(Frozen):
             "thermal_bridge": max(0.0, self.thermal_bridge_kwh),
         }
         return {key: value / total for key, value in parts.items() if value > 0.0}
+
+
+class AirQualityMetrics(Frozen):
+    co2_limit_ppm: float
+    outdoor_co2_ppm: float
+    site_pressure_kpa: float
+    fresh_air_l_s_per_person: float
+    sea_level_fresh_air_l_s_per_person: float
+    fresh_air_sized_from_limit: bool = True
+    ventilation_design_l_s: float = 0.0
+    infiltration_design_l_s: float = 0.0
+    peak_night_co2_ppm: float | None = None
+    mean_night_co2_ppm: float | None = None
+    night_hours_above_limit: float = 0.0
+    hours_above_limit: float = 0.0
+    ventilation_heat_loss_kwh: float = 0.0
+    provenance: Provenance = Provenance.SIMULATED
+
+    @property
+    def breathe_safe(self) -> bool:
+        return self.night_hours_above_limit <= 0.0
 
 
 class CondensationMetrics(Frozen):
@@ -1131,6 +1181,7 @@ class SimulationResult(Frozen):
     condensation: CondensationMetrics
     cost: CostBreakdown
     buildability: BuildabilityMetrics
+    air_quality: AirQualityMetrics | None = None
     hourly: tuple[HourlySeries, ...] = ()
     airflow: AirflowSummary | None = None
     surfaces: SurfaceResults | None = None

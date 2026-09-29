@@ -10,7 +10,7 @@ import pandas as pd
 from .errors import ResultsUnavailable
 from .geometry import GeometryModel, ROOM
 from .results import SimulationOutput
-from .schema import (AirflowSummary, CondensationMetrics, DesignSpec, EnergyMetrics,
+from .schema import (AirQualityMetrics, AirflowSummary, CondensationMetrics, DesignSpec, EnergyMetrics,
                      EngineWarning, Facade, FuelModel, HeatBalanceBreakdown,
                      Provenance, Severity, SourceRef, SourceStatus, SurfaceKind,
                      ThermalBridge, ZoneAirflow, ZoneCoupling)
@@ -357,3 +357,46 @@ def airflow_summary(output, model) -> AirflowSummary | None:
             citation="Zone air change rate, standard density volume flow and cross "
                      "mixing flow reported by EnergyPlus for this run",
             status=SourceStatus.DERIVED))
+
+
+CO2_CANDIDATES = ("Zone Air CO2 Concentration",)
+VENTILATION_LOSS = "Zone Ventilation Sensible Heat Loss Energy"
+
+
+def co2_series(output: SimulationOutput, zone: str = ROOM) -> pd.Series | None:
+    found = output.first_available(CO2_CANDIDATES, key=zone)
+    if found is None:
+        return None
+    return _hourly(found[1])
+
+
+def air_quality(output: SimulationOutput, design: DesignSpec, fresh_air,
+                ventilation_l_s: float, infiltration_l_s: float,
+                night_hours: Sequence[int]) -> AirQualityMetrics | None:
+    if fresh_air is None:
+        return None
+    limit = design.ventilation.co2_limit_ppm
+    per_person = design.ventilation.fresh_air_l_s_per_person \
+        or fresh_air.fresh_air_l_s_per_person
+    series = co2_series(output)
+    peak = mean = None
+    night_above = above = 0.0
+    if series is not None and not series.empty:
+        night = np.isin(series.index.hour.to_numpy(), np.asarray(tuple(night_hours),
+                                                                 dtype=int))
+        values = series.to_numpy(dtype=float)
+        above = float(np.sum(values > limit))
+        if night.any():
+            peak = float(values[night].max())
+            mean = float(values[night].mean())
+            night_above = float(np.sum(values[night] > limit))
+    return AirQualityMetrics(
+        co2_limit_ppm=limit, outdoor_co2_ppm=fresh_air.outdoor_ppm,
+        site_pressure_kpa=fresh_air.site_pressure_kpa,
+        fresh_air_l_s_per_person=per_person,
+        sea_level_fresh_air_l_s_per_person=fresh_air.sea_level_fresh_air_l_s_per_person,
+        fresh_air_sized_from_limit=design.ventilation.fresh_air_l_s_per_person is None,
+        ventilation_design_l_s=ventilation_l_s, infiltration_design_l_s=infiltration_l_s,
+        peak_night_co2_ppm=peak, mean_night_co2_ppm=mean,
+        night_hours_above_limit=night_above, hours_above_limit=above,
+        ventilation_heat_loss_kwh=_sum_kwh(output, VENTILATION_LOSS, (ROOM,)))
