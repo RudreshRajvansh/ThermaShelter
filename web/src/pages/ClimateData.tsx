@@ -27,7 +27,7 @@ const MONTHS = [
 ];
 
 const axis = { fontSize: 11, fill: "var(--color-ink-faint)" };
-const grid = "#22334c";
+const grid = "var(--color-line)";
 
 export function ClimateData() {
   const store = useStore();
@@ -153,7 +153,7 @@ export function ClimateData() {
           />
         </div>
         {pressureGap > 0.05 && (
-          <p className="mt-3 rounded-md border border-[var(--color-diesel)] bg-[var(--color-diesel)]/10 p-3 text-xs leading-relaxed text-[#ffb4ae]">
+          <p className="mt-3 rounded-md border border-[var(--color-diesel)] bg-[var(--color-diesel)]/10 p-3 text-xs leading-relaxed text-[var(--color-danger-ink)]">
             The pressure column disagrees with the site elevation by{" "}
             {num(pressureGap * 100, 1)} percent. Every air related heat transfer in the run
             is scaled by this. Fix the file in Layer 0 before trusting any result.
@@ -174,8 +174,9 @@ export function ClimateData() {
                 <YAxis unit="°" tick={axis} stroke={grid} width={46} />
                 <Tooltip
                   contentStyle={{
-                    background: "#0b1220",
-                    border: "1px solid #22334c",
+                    background: "var(--color-day)",
+                    color: "var(--color-ink)",
+                    border: "1px solid var(--color-line)",
                     borderRadius: 8,
                     fontSize: 12,
                   }}
@@ -192,7 +193,7 @@ export function ClimateData() {
                 <Line
                   dataKey="mean"
                   name="mean air"
-                  stroke="var(--color-day)"
+                  stroke="var(--color-ink)"
                   strokeWidth={2}
                   dot={false}
                   isAnimationActive={false}
@@ -232,8 +233,9 @@ export function ClimateData() {
                 <YAxis tick={axis} stroke={grid} width={46} />
                 <Tooltip
                   contentStyle={{
-                    background: "#0b1220",
-                    border: "1px solid #22334c",
+                    background: "var(--color-day)",
+                    color: "var(--color-ink)",
+                    border: "1px solid var(--color-line)",
                     borderRadius: 8,
                     fontSize: 12,
                   }}
@@ -253,7 +255,7 @@ export function ClimateData() {
                 <Line
                   dataKey="direct"
                   name="direct normal"
-                  stroke="var(--color-day)"
+                  stroke="var(--color-ink)"
                   strokeWidth={1.75}
                   dot={false}
                   isAnimationActive={false}
@@ -290,8 +292,9 @@ export function ClimateData() {
                 />
                 <Tooltip
                   contentStyle={{
-                    background: "#0b1220",
-                    border: "1px solid #22334c",
+                    background: "var(--color-day)",
+                    color: "var(--color-ink)",
+                    border: "1px solid var(--color-line)",
                     borderRadius: 8,
                     fontSize: 12,
                   }}
@@ -404,8 +407,8 @@ export function ClimateData() {
       <div className="flex justify-end">
         <button
           type="button"
-          onClick={() => store.setStep("Design Parameters")}
-          className="rounded-md bg-[var(--color-solar)] px-4 py-2 text-sm font-medium text-[#0b1220]"
+          onClick={() => store.open("construction")}
+          className="rounded-md bg-[var(--color-solar)] px-4 py-2 text-sm font-medium text-white"
         >
           Set design parameters →
         </button>

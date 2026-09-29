@@ -126,8 +126,13 @@ def compare_to_reference(candidate: SimulationResult,
         delta_minimum_overnight_k=_delta(
             candidate.comfort.minimum_overnight_operative_c,
             reference.comfort.minimum_overnight_operative_c),
+        delta_maximum_daytime_k=_delta(
+            candidate.comfort.maximum_daytime_operative_c,
+            reference.comfort.maximum_daytime_operative_c),
         delta_degree_hours_kh=_delta(candidate.comfort.degree_hours_total_kh,
                                      reference.comfort.degree_hours_total_kh),
+        delta_hours_below_band_h=_delta(candidate.comfort.hours_below_band,
+                                        reference.comfort.hours_below_band),
         delta_heating_demand_kwh=_delta(candidate.energy.heating_demand_kwh,
                                         reference.energy.heating_demand_kwh),
         fuel_saved_units=fuel_saved,

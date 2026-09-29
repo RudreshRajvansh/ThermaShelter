@@ -70,6 +70,7 @@ ZONE_VARIABLES = (
     "Zone Windows Total Transmitted Solar Radiation Energy",
     "Enclosure Windows Total Transmitted Solar Radiation Energy",
     "Zone Total Internal Total Heating Energy",
+    "Zone Total Internal Convective Heating Rate",
     "Zone Infiltration Air Change Rate",
     "Zone Infiltration Standard Density Volume Flow Rate",
     "Zone Ventilation Air Change Rate",

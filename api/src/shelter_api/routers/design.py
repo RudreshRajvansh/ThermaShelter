@@ -3,21 +3,28 @@ from __future__ import annotations
 from datetime import date as date_type
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi import Path as PathParam
+from fastapi import Query
+from pydantic import ValidationError
 
-from shelter_engine.cfd import find_cfd_field, load_cfd_export
+from shelter_engine.cfd import (find_boundary_conditions, find_cfd_fields, label_of,
+                                load_cfd_export, load_cfd_field)
 from shelter_engine.errors import (EngineError, GeometryError, MaterialError,
-                                   SimulationFailed, SimulationTimeout)
+                                   ResultsUnavailable, SimulationFailed,
+                                   SimulationTimeout)
 from shelter_engine.hashing import stable_hash
-from shelter_engine.schema import (CFDExport, ClimateSummary, ComparisonTable,
-                                   GeometryPayload, SimulationResult, SunPath,
-                                   SurfaceResults, TerrainMesh)
+from shelter_engine.schema import (ClimateSummary, ComparisonTable, GeometryPayload,
+                                   SimulationResult, SunPath, SurfaceResults,
+                                   TerrainMesh)
 
 from ..deps import Context, get_context
-from ..schemas import (CFDAbsent, CompareRequest, GeometryRequest,
-                       SimulateRequest, SurfaceRequest)
+from ..schemas import (CFDAbsent, CFDBoundarySet, CFDFieldSet, CompareRequest,
+                       GeometryRequest, SimulateRequest, SurfaceRequest)
 
 router = APIRouter()
+
+DESIGN_HASH_PATTERN = r"^[0-9a-f]{32}$"
 
 
 def _translate(error: Exception) -> HTTPException:
@@ -158,34 +165,96 @@ def terrain(site_id: str | None = None,
     from shelter_engine.terrain import load_terrain_obj
     site = context.site(site_id)
     if not skyline_only:
-        measured = load_terrain_obj(
-            Path(context.settings.data_dir) / "terrain" / "terrain_mesh.obj", site)
+        directory = Path(context.settings.data_dir) / "terrain"
+        measured = load_terrain_obj(directory / f"{site.id}.obj", site)
         if measured is not None:
             return measured
     return terrain_mesh(site, inner_radius_m, outer_radius_m)
 
 
-@router.post("/cfd", response_model=CFDExport | CFDAbsent, tags=["cfd"])
+@router.post("/cfd", response_model=CFDFieldSet | CFDAbsent, tags=["cfd"])
 def cfd_for_design(request: GeometryRequest,
                    context: Context = Depends(get_context)):
-    design_hash = stable_hash(request.design)
+    return _cfd_payload(context, stable_hash(request.design))
+
+
+@router.get("/cfd/{design_hash}", response_model=CFDFieldSet | CFDAbsent, tags=["cfd"])
+def cfd(design_hash: str = PathParam(pattern=DESIGN_HASH_PATTERN),
+        context: Context = Depends(get_context)):
     return _cfd_payload(context, design_hash)
 
 
-@router.get("/cfd/{design_hash}", response_model=CFDExport | CFDAbsent, tags=["cfd"])
-def cfd(design_hash: str, context: Context = Depends(get_context)):
-    return _cfd_payload(context, design_hash)
+@router.get("/cfd/{design_hash}/boundary-conditions", response_model=CFDBoundarySet,
+            tags=["cfd"])
+def cfd_boundary_conditions(design_hash: str = PathParam(pattern=DESIGN_HASH_PATTERN),
+                            context: Context = Depends(get_context)) -> CFDBoundarySet:
+    exports, rejected = _load_boundaries(Path(context.settings.cfd_dir), design_hash)
+    if not exports:
+        raise HTTPException(
+            status_code=404,
+            detail=(f"No fluid dynamics boundary conditions are exported for design "
+                    f"{design_hash}." + (f" Unreadable: {'; '.join(rejected)}"
+                                         if rejected else "")))
+    return CFDBoundarySet(design_hash=design_hash, exports=list(exports.values()),
+                          rejected=rejected)
+
+
+def _load_boundaries(directory: Path, design_hash: str):
+    exports = {}
+    rejected: list[str] = []
+    for path in find_boundary_conditions(directory, design_hash):
+        try:
+            export = load_cfd_export(path)
+        except (ValidationError, ValueError, ResultsUnavailable) as error:
+            rejected.append(f"{path.name} could not be read: {str(error)[:200]}")
+            continue
+        if export.design_hash != design_hash:
+            rejected.append(f"{path.name} belongs to design {export.design_hash}")
+            continue
+        exports[label_of(path, design_hash)] = export
+    return exports, rejected
 
 
 def _cfd_payload(context: Context, design_hash: str):
     directory = Path(context.settings.cfd_dir)
-    matches = find_cfd_field(directory, design_hash)
-    if not matches:
-        return CFDAbsent(
-            design_hash=design_hash,
-            reason=("Detailed analysis has not been run for this design. An air "
-                    "temperature or velocity field can only come from a fluid dynamics "
-                    "solver, which runs offline in Layer 1 for the recommended design "
-                    "only. The main engine computes one well mixed air temperature per "
-                    "room and no velocity at all, so there is nothing here to draw."))
-    return load_cfd_export(matches[0])
+    boundaries, rejected = _load_boundaries(directory, design_hash)
+    fields = []
+    for path in find_cfd_fields(directory, design_hash):
+        try:
+            field = load_cfd_field(path)
+        except (ValidationError, ValueError, ResultsUnavailable) as error:
+            rejected.append(f"{path.name} could not be read: {str(error)[:200]}")
+            continue
+        if field.design_hash != design_hash:
+            rejected.append(f"{path.name} belongs to design {field.design_hash}")
+            continue
+        boundary = boundaries.get(field.label)
+        if boundary is not None and stable_hash(boundary) != field.boundary_hash:
+            rejected.append(
+                f"{path.name} was solved on boundary conditions that have since changed; "
+                "the field no longer describes this design and has to be solved again")
+            continue
+        if boundary is None:
+            rejected.append(
+                f"{path.name} has no matching boundary conditions, so the hour and the "
+                "surface temperatures it was solved against cannot be confirmed")
+            continue
+        fields.append(field)
+    labels = sorted(boundaries)
+    if fields:
+        return CFDFieldSet(design_hash=design_hash, fields=fields,
+                           boundary_labels=labels, rejected=rejected)
+    if labels:
+        reason = (f"Boundary conditions for {', '.join(item.replace('_', ' ') for item in labels)} "
+                  "are exported from EnergyPlus, but ANSYS Fluent has not been run on them "
+                  "for this design yet. Until it has, there is no air temperature or "
+                  "velocity field to draw; the engine computes one well mixed air "
+                  "temperature per room and no velocity at all.")
+    else:
+        reason = ("Detailed analysis has not been run for this design. An air temperature "
+                  "or velocity field can only come from a fluid dynamics solver, which "
+                  "runs offline in Layer 1 for the recommended design only. The main "
+                  "engine computes one well mixed air temperature per room and no "
+                  "velocity at all, so there is nothing here to draw.")
+    return CFDAbsent(design_hash=design_hash, reason=reason, boundary_labels=labels,
+                     rejected=rejected)

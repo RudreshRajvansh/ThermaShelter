@@ -95,6 +95,12 @@ class Context:
             self._engines[key] = engine
             return engine
 
+    def add_site(self, site: SiteSpec) -> None:
+        with self._lock:
+            self.sites[site.id] = site
+            for key in [key for key in self._engines if key[0] == site.id]:
+                del self._engines[key]
+
 
 def _warning(code: str, message: str,
              severity: Severity = Severity.SEVERE) -> EngineWarning:

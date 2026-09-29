@@ -10,12 +10,15 @@ from shelter_engine import __version__ as engine_version
 from shelter_engine.config import energyplus_available, find_energyplus
 from shelter_engine.schema import (ClimateObjective, ComfortModel, DesignSpec,
                                    FixedComfortTarget, FuelModel, GlazingSystem,
-                                   Material, PhaseChangeMaterial, SourceStatus)
+                                   Material, PhaseChangeMaterial, SiteSpec,
+                                   SourceStatus)
 
 from ..deps import Context, get_context
+from ..live import fetch_live_weather
 from shelter_engine.programme import PROGRAMMES, occupancy_for, plan_for
 
-from ..schemas import (DesignSummary, HealthResponse, MetaResponse,
+from ..schemas import (DesignSummary, HealthResponse, LiveWeather,
+                       MetaResponse,
                        ShelterUseSummary,
                        SiteSummary, ValidationEvidence)
 
@@ -28,6 +31,17 @@ def _headline(objective: ClimateObjective) -> str:
     if objective is ClimateObjective.COOLING_DOMINATED:
         return "maximum_daytime_operative_c"
     return "minimum_overnight_operative_c"
+
+
+def summarise_site(site: SiteSpec) -> SiteSummary:
+    return SiteSummary(
+        id=site.id, name=site.name, latitude_deg=site.latitude_deg,
+        longitude_deg=site.longitude_deg, elevation_m=site.elevation_m,
+        climate_objective=site.climate_objective,
+        headline_metric=_headline(site.climate_objective),
+        has_horizon=site.horizon is not None,
+        has_ground_temperatures=site.ground is not None,
+        weather_file=Path(site.epw_path).name)
 
 
 @router.get("/health", response_model=HealthResponse, tags=["meta"])
@@ -48,16 +62,7 @@ def health(context: Context = Depends(get_context)) -> HealthResponse:
 @router.get("/meta", response_model=MetaResponse, tags=["meta"])
 def meta(context: Context = Depends(get_context)) -> MetaResponse:
     library = context.library
-    sites = [
-        SiteSummary(
-            id=site.id, name=site.name, latitude_deg=site.latitude_deg,
-            longitude_deg=site.longitude_deg, elevation_m=site.elevation_m,
-            climate_objective=site.climate_objective,
-            headline_metric=_headline(site.climate_objective),
-            has_horizon=site.horizon is not None,
-            has_ground_temperatures=site.ground is not None,
-            weather_file=Path(site.epw_path).name)
-        for site in context.sites.values()]
+    sites = [summarise_site(site) for site in context.sites.values()]
 
     gaps: list[str] = []
     if library is not None and library.unsourced():
@@ -191,6 +196,14 @@ def design(identifier: str, context: Context = Depends(get_context)) -> DesignSp
             status_code=500,
             detail=f"The stored design {identifier!r} could not be read: {error}",
         ) from error
+
+
+@router.get("/live-weather", response_model=LiveWeather, tags=["catalogue"])
+def live_weather(site_id: str | None = None,
+                 context: Context = Depends(get_context)) -> LiveWeather:
+    site = context.site(site_id)
+    return fetch_live_weather(site.id, site.name, site.latitude_deg,
+                              site.longitude_deg, site.elevation_m)
 
 
 @router.get("/comfort-models", response_model=list[ComfortModel], tags=["catalogue"])

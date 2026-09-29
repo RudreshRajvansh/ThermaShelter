@@ -15,7 +15,7 @@ import { activeDesign, useStore } from "../lib/store";
 import { num, rupees, signed } from "../lib/format";
 
 const axis = { fontSize: 11, fill: "var(--color-ink-faint)" };
-const grid = "#22334c";
+const grid = "var(--color-line)";
 const COLOURS = ["var(--color-solar)", "var(--color-cold)", "var(--color-good)"];
 
 export function Compare() {
@@ -143,8 +143,8 @@ export function Compare() {
                 }
                 className={`rounded-lg border px-3 py-1.5 text-xs capitalize transition-all ${
                   on
-                    ? "border-[var(--color-solar)] bg-[var(--color-solar)]/10 text-[var(--color-solar)] font-medium shadow-sm"
-                    : "border-[var(--color-line)] bg-white/70 text-[var(--color-ink-dim)] hover:border-[var(--color-solar)] hover:shadow-sm"
+                    ? "border-[var(--color-solar)] bg-[var(--color-solar)]/10 text-[var(--color-solar-ink)] font-medium shadow-sm"
+                    : "border-[var(--color-line)] bg-[var(--color-night-2)]/70 text-[var(--color-ink-dim)] hover:border-[var(--color-solar)] hover:shadow-sm"
                 }`}
               >
                 {name.replace(/_/g, " ")}
@@ -183,8 +183,9 @@ export function Compare() {
                 <YAxis unit="°" tick={axis} stroke={grid} width={46} />
                 <Tooltip
                   contentStyle={{
-                    background: "#0b1220",
-                    border: "1px solid #22334c",
+                    background: "var(--color-day)",
+                    color: "var(--color-ink)",
+                    border: "1px solid var(--color-line)",
                     borderRadius: 8,
                     fontSize: 12,
                   }}

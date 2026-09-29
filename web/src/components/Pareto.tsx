@@ -22,7 +22,7 @@ import { activeDesign, useStore } from "../lib/store";
 import { num, rupees } from "../lib/format";
 
 const axis = { fontSize: 11, fill: "var(--color-ink-faint)" };
-const grid = "#22334c";
+const grid = "var(--color-line)";
 
 function variablesFor(): DesignVariable[] {
   return [
@@ -124,7 +124,7 @@ export function ParetoExplorer() {
           type="button"
           onClick={() => start.mutate()}
           disabled={start.isPending || Boolean(jobId) || !design}
-          className="rounded-md bg-[var(--color-solar)] px-3 py-1.5 text-xs font-medium text-[#0b1220] disabled:opacity-40"
+          className="rounded-md bg-[var(--color-solar)] px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
         >
           {jobId ? "searching…" : `Search ${budget} designs`}
         </button>
@@ -139,7 +139,7 @@ export function ParetoExplorer() {
               setPopulationSize(size);
               setGenerations(Math.max(2, Math.round(chosen / size)));
             }}
-            className="rounded border border-[var(--color-line)] bg-white px-1.5 py-0.5 text-[11px]"
+            className="rounded border border-[var(--color-line)] bg-[var(--color-night-2)] px-1.5 py-0.5 text-[11px]"
           >
             {[100, 300, 500, 900, 1000].map((item) => (
               <option key={item} value={item}>
@@ -149,7 +149,7 @@ export function ParetoExplorer() {
           </select>
         </label>
         {result && !result.complete && (
-          <span className="rounded bg-[var(--color-solar)]/15 px-2 py-0.5 text-[11px] text-[var(--color-solar)]">
+          <span className="rounded bg-[var(--color-solar)]/15 px-2 py-0.5 text-[11px] text-[var(--color-solar-ink)]">
             generation {result.generation} of {result.generations_planned} ·{" "}
             {result.evaluated} simulated so far
           </span>
@@ -163,11 +163,11 @@ export function ParetoExplorer() {
       </div>
 
       {start.isError && (
-        <div className="text-xs text-[#ffb4ae]">{String(start.error)}</div>
+        <div className="text-xs text-[var(--color-danger-ink)]">{String(start.error)}</div>
       )}
       {jobId && <Loading label="the search is running as a background job…" />}
       {progress && progress !== "running" && progress !== "done" && (
-        <div className="text-xs text-[#ffb4ae]">{progress}</div>
+        <div className="text-xs text-[var(--color-danger-ink)]">{progress}</div>
       )}
 
       {!result && !jobId && (
@@ -215,8 +215,9 @@ export function ParetoExplorer() {
                 <Tooltip
                   cursor={{ stroke: grid }}
                   contentStyle={{
-                    background: "#0b1220",
-                    border: "1px solid #22334c",
+                    background: "var(--color-day)",
+                    color: "var(--color-ink)",
+                    border: "1px solid var(--color-line)",
                     borderRadius: 8,
                     fontSize: 12,
                   }}

@@ -157,6 +157,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/live-weather": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Live Weather */
+        get: operations["live_weather_api_live_weather_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/comfort-models": {
         parameters: {
             query?: never;
@@ -446,6 +463,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cfd/{design_hash}/boundary-conditions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Cfd Boundary Conditions */
+        get: operations["cfd_boundary_conditions_api_cfd__design_hash__boundary_conditions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/optimise": {
         parameters: {
             query?: never;
@@ -512,6 +546,57 @@ export interface paths {
         post?: never;
         /** Delete Project */
         delete: operations["delete_project_api_projects__identifier__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/places": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Places */
+        get: operations["places_api_places_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sites/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve Site */
+        post: operations["resolve_site_api_sites_resolve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sites/{site_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Site Detail */
+        get: operations["site_detail_api_sites__site_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -643,6 +728,19 @@ export interface components {
             design_hash: string;
             /** Reason */
             reason: string;
+            /** Boundary Labels */
+            boundary_labels?: string[];
+            /** Rejected */
+            rejected?: string[];
+        };
+        /** CFDBoundarySet */
+        CFDBoundarySet: {
+            /** Design Hash */
+            design_hash: string;
+            /** Exports */
+            exports: components["schemas"]["CFDExport"][];
+            /** Rejected */
+            rejected?: string[];
         };
         /** CFDBoundarySurface */
         CFDBoundarySurface: {
@@ -686,6 +784,12 @@ export interface components {
             zone_volume_m3: number;
             /** Surfaces */
             surfaces: components["schemas"]["CFDBoundarySurface"][];
+            /** Internal Convective Gain W */
+            internal_convective_gain_w?: number | null;
+            /** Infiltration Sensible W */
+            infiltration_sensible_w?: number | null;
+            /** Mixing Sensible W */
+            mixing_sensible_w?: number | null;
             /**
              * Units
              * @default SI
@@ -698,6 +802,110 @@ export interface components {
             notes: string[];
             /** Source Run */
             source_run?: string | null;
+        };
+        /** CFDField */
+        CFDField: {
+            /** Design Hash */
+            design_hash: string;
+            /** Zone */
+            zone: string;
+            /** Label */
+            label: string;
+            /** Timestamp */
+            timestamp: string;
+            /** Boundary Hash */
+            boundary_hash: string;
+            /** Dims */
+            dims: [
+                number,
+                number,
+                number
+            ];
+            /** Bounds Min */
+            bounds_min: [
+                number,
+                number,
+                number
+            ];
+            /** Bounds Max */
+            bounds_max: [
+                number,
+                number,
+                number
+            ];
+            /** Temperature C */
+            temperature_c: (number | null)[];
+            /** Speed M S */
+            speed_m_s?: (number | null)[] | null;
+            /** Min C */
+            min_c: number;
+            /** Max C */
+            max_c: number;
+            /** Mean C */
+            mean_c: number;
+            /** Max Speed M S */
+            max_speed_m_s?: number | null;
+            /** Energyplus Zone Air C */
+            energyplus_zone_air_c: number;
+            solver: components["schemas"]["CFDSolverRecord"];
+            /**
+             * Notes
+             * @default []
+             */
+            notes: string[];
+            source: components["schemas"]["SourceRef"];
+            /**
+             * Provenance
+             * @default cfd
+             * @constant
+             */
+            provenance: "cfd";
+        };
+        /** CFDFieldSet */
+        CFDFieldSet: {
+            /**
+             * Available
+             * @default true
+             * @constant
+             */
+            available: true;
+            /** Design Hash */
+            design_hash: string;
+            /** Fields */
+            fields: components["schemas"]["CFDField"][];
+            /** Boundary Labels */
+            boundary_labels?: string[];
+            /** Rejected */
+            rejected?: string[];
+        };
+        /** CFDSolverRecord */
+        CFDSolverRecord: {
+            /** Solver */
+            solver: string;
+            /** Version */
+            version: string;
+            /** Turbulence Model */
+            turbulence_model: string;
+            /** Buoyancy Model */
+            buoyancy_model: string;
+            /** Radiation Model */
+            radiation_model: string;
+            /** Operating Pressure Pa */
+            operating_pressure_pa: number;
+            /** Cell Count */
+            cell_count: number;
+            /** Iterations */
+            iterations: number;
+            /** Converged */
+            converged: boolean;
+            /** Residuals */
+            residuals?: {
+                [key: string]: number;
+            };
+            /** Time Step S */
+            time_step_s?: number | null;
+            /** Averaging S */
+            averaging_s?: number | null;
         };
         /** ClimateMonth */
         ClimateMonth: {
@@ -1342,6 +1550,17 @@ export interface components {
             source: components["schemas"]["SourceRef"];
             cost_source?: components["schemas"]["SourceRef"] | null;
         };
+        /** GroundTemperatures */
+        GroundTemperatures: {
+            /** Monthly C */
+            monthly_c: number[];
+            /**
+             * Depth M
+             * @default 0.5
+             */
+            depth_m: number;
+            source: components["schemas"]["SourceRef"];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1416,6 +1635,14 @@ export interface components {
             /** @default derived */
             thermal_bridge_provenance: components["schemas"]["Provenance"];
         };
+        /** HorizonProfile */
+        HorizonProfile: {
+            /** Azimuths Deg */
+            azimuths_deg: number[];
+            /** Blocked Altitude Deg */
+            blocked_altitude_deg: number[];
+            source: components["schemas"]["SourceRef"];
+        };
         /** HourlySeries */
         HourlySeries: {
             /** Name */
@@ -1457,6 +1684,45 @@ export interface components {
              */
             notes: string[];
             source: components["schemas"]["SourceRef"];
+        };
+        /** LiveObservation */
+        LiveObservation: {
+            /** Air Temperature C */
+            air_temperature_c?: number | null;
+            /** Apparent Temperature C */
+            apparent_temperature_c?: number | null;
+            /** Relative Humidity Pct */
+            relative_humidity_pct?: number | null;
+            /** Wind Speed M S */
+            wind_speed_m_s?: number | null;
+            /** Surface Pressure Pa */
+            surface_pressure_pa?: number | null;
+            /** Cloud Cover Pct */
+            cloud_cover_pct?: number | null;
+        };
+        /** LiveWeather */
+        LiveWeather: {
+            /** Site Id */
+            site_id: string;
+            /** Available */
+            available: boolean;
+            observation?: components["schemas"]["LiveObservation"] | null;
+            /** Observed At */
+            observed_at?: string | null;
+            /** Fetched At */
+            fetched_at?: string | null;
+            /** Location */
+            location?: string | null;
+            /** Provider Elevation M */
+            provider_elevation_m?: number | null;
+            /** Elevation Mismatch */
+            elevation_mismatch?: string | null;
+            /** Detail */
+            detail?: string | null;
+            /** Provider */
+            provider: string;
+            /** Note */
+            note: string;
         };
         /** Material */
         Material: {
@@ -1890,6 +2156,29 @@ export interface components {
             appearance: components["schemas"]["MaterialAppearance"];
             source: components["schemas"]["SourceRef"];
         };
+        /** PlaceResult */
+        PlaceResult: {
+            /** Name */
+            name: string;
+            /**
+             * Region
+             * @default
+             */
+            region: string;
+            /**
+             * Country
+             * @default
+             */
+            country: string;
+            /** Country Code */
+            country_code?: string | null;
+            /** Latitude Deg */
+            latitude_deg: number;
+            /** Longitude Deg */
+            longitude_deg: number;
+            /** Elevation M */
+            elevation_m?: number | null;
+        };
         /** PlanSpec */
         PlanSpec: {
             /** @default barrack */
@@ -1968,8 +2257,12 @@ export interface components {
             citation?: components["schemas"]["SourceRef"] | null;
             /** Delta Minimum Overnight K */
             delta_minimum_overnight_k?: number | null;
+            /** Delta Maximum Daytime K */
+            delta_maximum_daytime_k?: number | null;
             /** Delta Degree Hours Kh */
             delta_degree_hours_kh?: number | null;
+            /** Delta Hours Below Band H */
+            delta_hours_below_band_h?: number | null;
             /** Delta Heating Demand Kwh */
             delta_heating_demand_kwh?: number | null;
             /** Fuel Saved Units */
@@ -1980,6 +2273,15 @@ export interface components {
             rupees_saved_per_year?: number | null;
             /** Delta Cost Inr */
             delta_cost_inr?: number | null;
+        };
+        /** ResolveSiteRequest */
+        ResolveSiteRequest: {
+            /** Latitude Deg */
+            latitude_deg: number;
+            /** Longitude Deg */
+            longitude_deg: number;
+            /** Name */
+            name?: string | null;
         };
         /** RoomPayload */
         RoomPayload: {
@@ -2201,6 +2503,96 @@ export interface components {
              * @default false
              */
             cached: boolean;
+        };
+        /** SiteDetail */
+        SiteDetail: {
+            site: components["schemas"]["SiteSpec"];
+            summary: components["schemas"]["SiteSummary"];
+            provenance?: components["schemas"]["SiteProvenance"] | null;
+            /** Notes */
+            notes?: string[];
+            /** Warnings */
+            warnings?: components["schemas"]["EngineWarning"][];
+            /**
+             * Created
+             * @default false
+             */
+            created: boolean;
+            /** Requested Latitude Deg */
+            requested_latitude_deg?: number | null;
+            /** Requested Longitude Deg */
+            requested_longitude_deg?: number | null;
+            /** Substituted Km */
+            substituted_km?: number | null;
+        };
+        /** SiteProvenance */
+        SiteProvenance: {
+            /** Elevation Source */
+            elevation_source: string;
+            /** Horizon Source */
+            horizon_source: string;
+            /** Horizon Directions */
+            horizon_directions: number;
+            /** Horizon Max Distance Km */
+            horizon_max_distance_km: number;
+            /** Weather Provider */
+            weather_provider: string;
+            /** Weather Dataset */
+            weather_dataset: string;
+            /** Weather Year */
+            weather_year: number;
+            /** Grid Latitude Deg */
+            grid_latitude_deg?: number | null;
+            /** Grid Longitude Deg */
+            grid_longitude_deg?: number | null;
+            /** Grid Distance Km */
+            grid_distance_km?: number | null;
+            /** Time Zone */
+            time_zone?: string | null;
+            /** Utc Offset H */
+            utc_offset_h: number;
+            /** Heating Degree Days */
+            heating_degree_days: number;
+            /** Cooling Degree Days */
+            cooling_degree_days: number;
+            /** Annual Mean C */
+            annual_mean_c: number;
+            /** Coldest Month Mean C */
+            coldest_month_mean_c: number;
+            /** Warmest Month Mean C */
+            warmest_month_mean_c: number;
+            /** Place Name Source */
+            place_name_source?: string | null;
+            /** Country Code */
+            country_code?: string | null;
+        };
+        /** SiteSpec */
+        SiteSpec: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Latitude Deg */
+            latitude_deg: number;
+            /** Longitude Deg */
+            longitude_deg: number;
+            /** Elevation M */
+            elevation_m: number;
+            /** Time Zone H */
+            time_zone_h: number;
+            /** Epw Path */
+            epw_path: string;
+            /** @default heating_dominated */
+            climate_objective: components["schemas"]["ClimateObjective"];
+            /**
+             * Terrain
+             * @default Country
+             * @enum {string}
+             */
+            terrain: "Country" | "Suburbs" | "City" | "Ocean" | "Urban";
+            horizon?: components["schemas"]["HorizonProfile"] | null;
+            ground?: components["schemas"]["GroundTemperatures"] | null;
+            source?: components["schemas"]["SourceRef"] | null;
         };
         /** SiteSummary */
         SiteSummary: {
@@ -2820,6 +3212,37 @@ export interface operations {
             };
         };
     };
+    live_weather_api_live_weather_get: {
+        parameters: {
+            query?: {
+                site_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveWeather"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     comfort_models_api_comfort_models_get: {
         parameters: {
             query?: never;
@@ -3267,7 +3690,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CFDExport"] | components["schemas"]["CFDAbsent"];
+                    "application/json": components["schemas"]["CFDFieldSet"] | components["schemas"]["CFDAbsent"];
                 };
             };
             /** @description Validation Error */
@@ -3298,7 +3721,38 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CFDExport"] | components["schemas"]["CFDAbsent"];
+                    "application/json": components["schemas"]["CFDFieldSet"] | components["schemas"]["CFDAbsent"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cfd_boundary_conditions_api_cfd__design_hash__boundary_conditions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                design_hash: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CFDBoundarySet"];
                 };
             };
             /** @description Validation Error */
@@ -3521,6 +3975,102 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    places_api_places_get: {
+        parameters: {
+            query: {
+                query: string;
+                count?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaceResult"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolve_site_api_sites_resolve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveSiteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    site_detail_api_sites__site_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteDetail"];
                 };
             };
             /** @description Validation Error */

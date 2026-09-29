@@ -36,6 +36,9 @@ function Recommendation({ result }: { result: SimulationResult }) {
     result.comfort.minimum_overnight_operative_c != null
       ? result.comfort.minimum_overnight_operative_c - reference.delta_minimum_overnight_k
       : null;
+  const isBaseline =
+    reference != null &&
+    result.design.name === reference.reference_name;
 
   return (
     <div>
@@ -43,7 +46,7 @@ function Recommendation({ result }: { result: SimulationResult }) {
         {cooling ? (
           <>
             The design peaks at{" "}
-            <span className="text-[var(--color-solar)]">
+            <span className="text-[var(--color-solar-ink)]">
               {num(result.comfort.maximum_daytime_operative_c)} °C
             </span>{" "}
             through the day. Mass buffers the same large day to night swing as in Ladakh,
@@ -53,19 +56,24 @@ function Recommendation({ result }: { result: SimulationResult }) {
         ) : (
           <>
             This design holds{" "}
-            <span className="text-[var(--color-solar)]">
+            <span className="text-[var(--color-solar-ink)]">
               {num(result.comfort.minimum_overnight_operative_c)} °C
             </span>{" "}
             at its coldest overnight
-            {baselineValue !== null && (
+            {isBaseline ? (
+              " . This is current construction itself, so there is nothing to"
+              + " compare it against. Choose a candidate design to see a difference."
+            ) : baselineValue !== null ? (
               <>
                 , where current construction holds{" "}
                 <span className="text-[var(--color-diesel)]">
                   {num(baselineValue)} °C
                 </span>
+                .
               </>
+            ) : (
+              "."
             )}
-            .
           </>
         )}
       </p>
@@ -108,6 +116,16 @@ export function Results({
     enabled: Boolean(simulation?.design_fingerprint) && tab === "detailed analysis",
     staleTime: Infinity,
   });
+  const boundaries = useQuery({
+    queryKey: ["cfd-boundary", simulation?.design_fingerprint],
+    queryFn: () => api.cfdBoundaryConditions(simulation!.design_fingerprint),
+    enabled:
+      Boolean(simulation?.design_fingerprint) &&
+      tab === "detailed analysis" &&
+      (cfd.data?.boundary_labels?.length ?? 0) > 0,
+    staleTime: Infinity,
+    retry: false,
+  });
 
   if (error) return <Failure error={error} />;
   if (!simulation) return <Loading label={simulating ? "running EnergyPlus…" : "waiting…"} />;
@@ -121,6 +139,9 @@ export function Results({
   const showFuel = !cooling && fuelSaved !== null && Math.abs(fuelSaved) > 0.5;
   const rupeesSaved = reference?.rupees_saved_per_year ?? null;
   const shares = simulation.breakdown;
+  const headlineDelta = cooling
+    ? reference?.delta_maximum_daytime_k ?? null
+    : reference?.delta_minimum_overnight_k ?? null;
 
   const lossPaths: [string, number][] = (
     [
@@ -175,9 +196,14 @@ export function Results({
               : undefined
           }
           baseline={
-            reference?.delta_minimum_overnight_k != null
-              ? `${signed(reference.delta_minimum_overnight_k)} K against`
-              : undefined
+            headlineDelta != null ? `${signed(headlineDelta)} K against` : undefined
+          }
+          baselineGood={
+            headlineDelta == null || headlineDelta === 0
+              ? null
+              : cooling
+                ? headlineDelta < 0
+                : headlineDelta > 0
           }
         />
         <Stat
@@ -185,8 +211,20 @@ export function Results({
           value={num(comfort.hours_below_band, 0)}
           unit="h"
           baseline={
+            reference?.delta_hours_below_band_h != null
+              ? `${signed(reference.delta_hours_below_band_h, 0)} h against`
+              : undefined
+          }
+          baselineGood={
+            reference?.delta_hours_below_band_h == null
+            || reference.delta_hours_below_band_h === 0
+              ? null
+              : reference.delta_hours_below_band_h < 0
+          }
+          note={
             reference?.delta_degree_hours_kh != null
-              ? `${signed(reference.delta_degree_hours_kh, 0)} Kh against`
+              ? `${signed(reference.delta_degree_hours_kh, 0)} Kh of degree hours outside `
+                + "the band, which counts how far outside as well as how long"
               : undefined
           }
         />
@@ -203,6 +241,12 @@ export function Results({
             reference?.delta_heating_demand_kwh != null
               ? `${signed(reference.delta_heating_demand_kwh, 0)} kWh against`
               : undefined
+          }
+          baselineGood={
+            reference?.delta_heating_demand_kwh == null
+            || reference.delta_heating_demand_kwh === 0
+              ? null
+              : reference.delta_heating_demand_kwh < 0
           }
         />
       </div>
@@ -230,6 +274,11 @@ export function Results({
                   reference?.delta_cost_inr != null
                     ? `${signed(reference.delta_cost_inr, 0)} INR against`
                     : undefined
+                }
+                baselineGood={
+                  reference?.delta_cost_inr == null || reference.delta_cost_inr === 0
+                    ? null
+                    : reference.delta_cost_inr < 0
                 }
               />
               <Stat
@@ -273,9 +322,9 @@ export function Results({
                         <span
                           className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
                             item.priority === "high"
-                              ? "bg-[var(--color-diesel)]/20 text-[#ffb4ae]"
+                              ? "bg-[var(--color-diesel)]/20 text-[var(--color-danger-ink)]"
                               : item.priority === "medium"
-                                ? "bg-[var(--color-solar)]/15 text-[var(--color-solar)]"
+                                ? "bg-[var(--color-solar)]/15 text-[var(--color-solar-ink)]"
                                 : "bg-[var(--color-line)] text-[var(--color-ink-faint)]"
                           }`}
                         >
@@ -342,7 +391,7 @@ export function Results({
                           className={`mr-1.5 rounded px-1 py-0.5 text-[10px] ${
                             item.source.status === "verified"
                               ? "bg-[var(--color-good)]/20 text-[var(--color-good)]"
-                              : "bg-[var(--color-solar)]/15 text-[var(--color-solar)]"
+                              : "bg-[var(--color-solar)]/15 text-[var(--color-solar-ink)]"
                           }`}
                         >
                           {item.source.status}
@@ -377,7 +426,7 @@ export function Results({
               ))}
               <p className="pt-2 text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
                 Solar gain through the glazing over the same period was{" "}
-                <span className="text-[var(--color-solar)]">
+                <span className="text-[var(--color-solar-ink)]">
                   {num(shares.windows_solar_gain_kwh, 0)} kWh
                 </span>
                 , and internal gains from people and equipment{" "}
@@ -414,23 +463,82 @@ export function Results({
 
           {tab === "detailed analysis" && (
             <div className="space-y-3">
-              {!cfd.data ? (
-                <Loading label="checking for a stored field…" />
+              {cfd.error ? (
+                <Failure error={cfd.error} />
+              ) : !cfd.data ? (
+                <Loading label="checking for a solved field…" />
               ) : isCfdAbsent(cfd.data) ? (
-                <Empty
-                  title="Detailed analysis has not been run for this design"
-                  detail={cfd.data.reason}
-                />
+                <Empty title="No solved air field for this design" detail={cfd.data.reason} />
               ) : (
-                <>
+                cfd.data.fields.map((field) => (
+                  <div
+                    key={field.label}
+                    className="space-y-1 rounded-md border border-[var(--color-line)] bg-[var(--color-night)] p-3 text-xs leading-relaxed"
+                  >
+                    <div className="font-medium">
+                      {field.solver.solver} {field.solver.version} ·{" "}
+                      {field.label.replace(/_/g, " ")} at {field.timestamp.replace("T", " ")}
+                    </div>
+                    {!field.solver.converged && (
+                      <div className="font-medium text-[var(--color-earth)]">
+                        Not converged. Do not quote numbers from this case.
+                      </div>
+                    )}
+                    <div>
+                      Air {num(field.min_c)} to {num(field.max_c)} °C, mean {num(field.mean_c)} °C.
+                      EnergyPlus reported {num(field.energyplus_zone_air_c)} °C for the room as one
+                      well mixed volume.
+                      {field.max_speed_m_s != null
+                        ? ` Fastest air ${num(field.max_speed_m_s, 2)} m/s.`
+                        : " Air speed was not exported from this run."}
+                    </div>
+                    <div className="text-[var(--color-ink-faint)]">
+                      {field.solver.turbulence_model} · {field.solver.buoyancy_model} · radiation{" "}
+                      {field.solver.radiation_model} · {field.solver.cell_count.toLocaleString()}{" "}
+                      cells · {field.solver.iterations} iterations · operating pressure{" "}
+                      {num(field.solver.operating_pressure_pa, 0)} Pa ·{" "}
+                      {field.solver.averaging_s != null
+                        ? `time averaged over ${num(field.solver.averaging_s, 0)} s of flow at ${num(field.solver.time_step_s ?? null, 1)} s steps`
+                        : "steady solution"}
+                    </div>
+                    <ul className="space-y-0.5 text-[11px] text-[var(--color-ink-faint)]">
+                      {field.notes.map((note, index) => (
+                        <li key={index}>· {note}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))
+              )}
+              {cfd.data && (cfd.data.rejected ?? []).length > 0 && (
+                <ul className="space-y-0.5 text-[11px] text-[var(--color-earth)]">
+                  {(cfd.data.rejected ?? []).map((item) => (
+                    <li key={item}>· {item}</li>
+                  ))}
+                </ul>
+              )}
+              {boundaries.data?.exports.map((item) => (
+                <div key={item.label} className="space-y-2">
                   <div className="rounded-md border border-[var(--color-line)] bg-[var(--color-night)] p-3 text-xs leading-relaxed">
                     <span className="font-medium">
-                      Boundary conditions for {cfd.data.label.replace(/_/g, " ")}
+                      Inputs sent to ANSYS · {item.label.replace(/_/g, " ")}
                     </span>{" "}
-                    at {cfd.data.timestamp.replace("T", " ")}. Zone air{" "}
-                    {num(cfd.data.zone_air_temperature_c)} °C, outdoor{" "}
-                    {num(cfd.data.outdoor_air_temperature_c)} °C, volume{" "}
-                    {num(cfd.data.zone_volume_m3)} m³.
+                    at {item.timestamp.replace("T", " ")}. These are EnergyPlus results used as
+                    boundary conditions, not a solved field. Zone air{" "}
+                    {num(item.zone_air_temperature_c)} °C, outdoor{" "}
+                    {num(item.outdoor_air_temperature_c)} °C, volume {num(item.zone_volume_m3)} m³.
+                    Heat into the air: internal convective{" "}
+                    {item.internal_convective_gain_w != null
+                      ? `${num(item.internal_convective_gain_w, 0)} W`
+                      : "not reported"}
+                    , infiltration{" "}
+                    {item.infiltration_sensible_w != null
+                      ? `${num(item.infiltration_sensible_w, 0)} W`
+                      : "not reported"}
+                    , from the adjoining zone{" "}
+                    {item.mixing_sensible_w != null
+                      ? `${num(item.mixing_sensible_w, 0)} W`
+                      : "not reported"}
+                    .
                   </div>
                   <table className="w-full text-left text-xs">
                     <thead className="text-[var(--color-ink-faint)]">
@@ -442,32 +550,20 @@ export function Results({
                       </tr>
                     </thead>
                     <tbody>
-                      {cfd.data.surfaces.map((surface) => (
-                        <tr
-                          key={surface.name}
-                          className="border-t border-[var(--color-line-soft)]"
-                        >
+                      {item.surfaces.map((surface) => (
+                        <tr key={surface.name} className="border-t border-[var(--color-line-soft)]">
                           <td className="py-1.5 pr-3 font-mono">{surface.name}</td>
                           <td className="tnum py-1.5 pr-3 text-right">
                             {num(surface.inside_face_temperature_c)}
                           </td>
-                          <td className="tnum py-1.5 pr-3 text-right">
-                            {num(surface.area_m2, 2)}
-                          </td>
-                          <td className="tnum py-1.5 text-right">
-                            {num(surface.emissivity, 2)}
-                          </td>
+                          <td className="tnum py-1.5 pr-3 text-right">{num(surface.area_m2, 2)}</td>
+                          <td className="tnum py-1.5 text-right">{num(surface.emissivity, 2)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  <ul className="space-y-1 text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
-                    {cfd.data.notes.map((note, index) => (
-                      <li key={index}>· {note}</li>
-                    ))}
-                  </ul>
-                </>
-              )}
+                </div>
+              ))}
             </div>
           )}
         </div>

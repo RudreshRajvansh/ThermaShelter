@@ -13,6 +13,7 @@ export type PartitionPayload = S["PartitionPayload"];
 export type ShelterUseSummary = S["ShelterUseSummary"];
 export type DesignSummary = S["DesignSummary"];
 export type ComfortModel = S["ComfortModel"];
+export type LiveWeather = S["LiveWeather"];
 export type SurfaceSeries = S["SurfaceSeries"];
 export type SurfaceResults = S["SurfaceResults"];
 export type AirflowSummary = S["AirflowSummary"];
@@ -27,8 +28,16 @@ export type MetaResponse = S["MetaResponse"];
 export type SiteSummary = S["SiteSummary"];
 export type Material = S["Material"];
 export type ValidationEvidence = S["ValidationEvidence"];
+export type GlazingSystem = S["GlazingSystem"];
+export type PlaceResult = S["PlaceResult"];
+export type SiteDetail = S["SiteDetail"];
+export type SiteProvenance = S["SiteProvenance"];
+export type SiteSpec = S["SiteSpec"];
 export type CFDExport = S["CFDExport"];
 export type CFDAbsent = S["CFDAbsent"];
+export type CFDField = S["CFDField"];
+export type CFDFieldSet = S["CFDFieldSet"];
+export type CFDBoundarySet = S["CFDBoundarySet"];
 export type Window = S["Window"];
 export type SunPath = S["SunPath"];
 export type SunPosition = S["SunPosition"];
@@ -39,9 +48,13 @@ export type ParetoResult = S["ParetoResult"];
 export type ParetoPoint = S["ParetoPoint"];
 export type OptimisationJob = S["OptimisationJob"];
 export type DesignVariable = S["DesignVariable"];
-
 export class ApiError extends Error {
-  constructor(readonly status: number, message: string, readonly body?: unknown) {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly path?: string,
+    readonly body?: unknown,
+  ) {
     super(message);
     this.name = "ApiError";
   }
@@ -68,7 +81,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       typeof body === "object" && body !== null && "detail" in body
         ? String((body as { detail: unknown }).detail)
         : `${response.status} ${response.statusText}`;
-    throw new ApiError(response.status, detail, body);
+    const unrouted = response.status === 404 && detail.trim() === "Not Found";
+    throw new ApiError(
+      response.status,
+      unrouted
+        ? `The server has no ${path.split("?")[0]} endpoint. The interface is talking to `
+          + "an API that is older than it is, so restart the API and reload this page."
+        : detail,
+      path,
+      body,
+    );
   }
   return body as T;
 }
@@ -80,9 +102,20 @@ const post = <T,>(path: string, payload: unknown) =>
 export const api = {
   meta: () => get<MetaResponse>("/api/meta"),
   materials: () => get<Material[]>("/api/materials"),
+  glazing: () => get<GlazingSystem[]>("/api/glazing"),
+  places: (query: string) =>
+    get<PlaceResult[]>(`/api/places?query=${encodeURIComponent(query)}&count=8`),
+  resolveSite: (payload: {
+    latitude_deg: number;
+    longitude_deg: number;
+    name?: string | null;
+  }) => post<SiteDetail>("/api/sites/resolve", payload),
+  site: (siteId: string) => get<SiteDetail>(`/api/sites/${encodeURIComponent(siteId)}`),
   shelterUses: () => get<ShelterUseSummary[]>("/api/shelter-uses"),
   designs: () => get<DesignSummary[]>("/api/designs"),
   comfortModels: () => get<ComfortModel[]>("/api/comfort-models"),
+  liveWeather: (siteId: string | null) =>
+    get<LiveWeather>(`/api/live-weather${siteId ? `?site_id=${siteId}` : ""}`),
   design: (identifier: string) => get<DesignSpec>(`/api/designs/${identifier}`),
   references: () => get<DesignSpec[]>("/api/references"),
   reference: (name: string) => get<DesignSpec>(`/api/references/${name}`),
@@ -108,7 +141,9 @@ export const api = {
     comfort_model_id?: string | null;
   }) => post<ComparisonTable>("/api/compare", payload),
   cfd: (designHash: string) =>
-    get<CFDExport | CFDAbsent>(`/api/cfd/${designHash}`),
+    get<CFDFieldSet | CFDAbsent>(`/api/cfd/${designHash}`),
+  cfdBoundaryConditions: (designHash: string) =>
+    get<CFDBoundarySet>(`/api/cfd/${designHash}/boundary-conditions`),
   sunPath: (siteId: string | null | undefined, day: string) =>
     get<SunPath>(
       `/api/sun-path?day=${day}${siteId ? `&site_id=${siteId}` : ""}&step_minutes=15`,
@@ -138,7 +173,7 @@ export const api = {
     ),
 };
 
-export function isCfdAbsent(value: CFDExport | CFDAbsent): value is CFDAbsent {
+export function isCfdAbsent(value: CFDFieldSet | CFDAbsent): value is CFDAbsent {
   return (value as CFDAbsent).available === false;
 }
 

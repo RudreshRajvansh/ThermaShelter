@@ -13,11 +13,13 @@ dependencies = [
     "pydantic>=2.6,<3",
     "eppy>=0.5.63",
     "pymoo>=0.6.1,<0.7",
+    "scipy>=1.11",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-cov>=5"]
 mesh = ["trimesh>=4"]
+cfd = ["gmsh>=4.13", "ansys-fluent-core>=0.42,<0.43"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

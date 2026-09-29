@@ -5,11 +5,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from shelter_engine.schema import (Assumption, ClimateObjective, DesignSpec,
-                                   DesignVariable, EngineWarning,
+from shelter_engine.schema import (Assumption, CFDExport, CFDField, ClimateObjective,
+                                   DesignSpec, DesignVariable, EngineWarning,
                                    OptimisationConstraints, ParetoResult,
                                    OccupancySpec, PlanSpec, RunOptions,
-                                   RunPeriod, ShelterUse, SourceRef)
+                                   RunPeriod, ShelterUse, SiteSpec, SourceRef)
 
 DEFAULT_START = date(2019, 1, 1)
 DEFAULT_END = date(2019, 1, 31)
@@ -39,6 +39,29 @@ class GeometryRequest(Body):
     design: DesignSpec
     site_id: str | None = None
     comfort_model_id: str | None = None
+
+
+class LiveObservation(Body):
+    air_temperature_c: float | None = None
+    apparent_temperature_c: float | None = None
+    relative_humidity_pct: float | None = None
+    wind_speed_m_s: float | None = None
+    surface_pressure_pa: float | None = None
+    cloud_cover_pct: float | None = None
+
+
+class LiveWeather(Body):
+    site_id: str
+    available: bool
+    observation: LiveObservation | None = None
+    observed_at: str | None = None
+    fetched_at: str | None = None
+    location: str | None = None
+    provider_elevation_m: float | None = None
+    elevation_mismatch: str | None = None
+    detail: str | None = None
+    provider: str
+    note: str
 
 
 class DesignSummary(Body):
@@ -189,6 +212,72 @@ class CFDAbsent(Body):
     available: Literal[False] = False
     design_hash: str
     reason: str
+    boundary_labels: list[str] = Field(default_factory=list)
+    rejected: list[str] = Field(default_factory=list)
+
+
+class CFDFieldSet(Body):
+    available: Literal[True] = True
+    design_hash: str
+    fields: list[CFDField] = Field(min_length=1)
+    boundary_labels: list[str] = Field(default_factory=list)
+    rejected: list[str] = Field(default_factory=list)
+
+
+class CFDBoundarySet(Body):
+    design_hash: str
+    exports: list[CFDExport] = Field(min_length=1)
+    rejected: list[str] = Field(default_factory=list)
+
+
+class PlaceResult(Body):
+    name: str
+    region: str = ""
+    country: str = ""
+    country_code: str | None = None
+    latitude_deg: float
+    longitude_deg: float
+    elevation_m: float | None = None
+
+
+class ResolveSiteRequest(Body):
+    latitude_deg: float = Field(ge=-90.0, le=90.0)
+    longitude_deg: float = Field(ge=-180.0, le=180.0)
+    name: str | None = Field(default=None, max_length=120)
+
+
+class SiteProvenance(Body):
+    elevation_source: str
+    horizon_source: str
+    horizon_directions: int
+    horizon_max_distance_km: float
+    weather_provider: str
+    weather_dataset: str
+    weather_year: int
+    grid_latitude_deg: float | None = None
+    grid_longitude_deg: float | None = None
+    grid_distance_km: float | None = None
+    time_zone: str | None = None
+    utc_offset_h: float
+    heating_degree_days: float
+    cooling_degree_days: float
+    annual_mean_c: float
+    coldest_month_mean_c: float
+    warmest_month_mean_c: float
+    place_name_source: str | None = None
+    country_code: str | None = None
+
+
+class SiteDetail(Body):
+    site: SiteSpec
+    summary: SiteSummary
+    provenance: SiteProvenance | None = None
+    notes: list[str] = Field(default_factory=list)
+    warnings: list[EngineWarning] = Field(default_factory=list)
+    created: bool = False
+    requested_latitude_deg: float | None = None
+    requested_longitude_deg: float | None = None
+    substituted_km: float | None = None
 
 
 class ValidationEvidence(Body):

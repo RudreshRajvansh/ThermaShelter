@@ -264,6 +264,7 @@ class MaterialLibrary:
         self._materials: dict[str, Material] = {}
         self._glazing: dict[str, GlazingSystem] = {}
         self._pcm: dict[str, PhaseChangeMaterial] = {}
+        self._fingerprint: str | None = None
         self.origin = origin
         for material in materials:
             if material.id in self._materials:
@@ -362,6 +363,15 @@ class MaterialLibrary:
     @property
     def phase_change_materials(self) -> tuple[PhaseChangeMaterial, ...]:
         return tuple(self._pcm.values())
+
+    @property
+    def fingerprint(self) -> str:
+        from .hashing import stable_hash
+
+        if self._fingerprint is None:
+            self._fingerprint = stable_hash(self.materials, self.glazing_systems,
+                                            self.phase_change_materials)
+        return self._fingerprint
 
     def implausible(self) -> dict[str, list[str]]:
         found: dict[str, list[str]] = {}
