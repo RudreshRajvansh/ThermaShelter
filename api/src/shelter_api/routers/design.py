@@ -22,7 +22,7 @@ from shelter_engine.schema import (ClimateSummary, ComparisonTable, GeometryPayl
 from ..deps import Context, get_context
 from ..schemas import (CFDAbsent, CFDBoundarySet, CFDFieldSet, CompareRequest,
                        EndurancePayload, EnduranceRequest, GeometryRequest,
-                       LeftoverHeatPayload,
+                       HorizonCase, HorizonValuePayload, LeftoverHeatPayload,
                        SimulateRequest, SurfaceRequest)
 
 router = APIRouter()
@@ -105,6 +105,48 @@ def endurance(request: EnduranceRequest,
             him_tapak_source=HIM_TAPAK_SOURCE,
             solar_storage_kwh=round(spare.solar_storage_kwh, 2),
             solar_system_source=SOLAR_SYSTEM_SOURCE, notes=list(spare.notes)))
+
+
+@router.post("/horizon-value", response_model=HorizonValuePayload, tags=["design"])
+def horizon_value(request: SimulateRequest,
+                  context: Context = Depends(get_context)) -> HorizonValuePayload:
+    engine = context.engine(request.site_id, request.comfort_model_id)
+    if engine.site.horizon is None:
+        raise HTTPException(
+            status_code=422,
+            detail=(f"{engine.site.name} has no horizon profile, so there is nothing to "
+                    "compare a flat skyline against."))
+    options = request.to_options().model_copy(update={"surface_output": False})
+    runs = {}
+    try:
+        for label, shaded in (("with_horizon", True), ("flat", False)):
+            result = engine.simulate(
+                request.design, options.model_copy(update={"include_horizon_shading":
+                                                           shaded}),
+                with_uncertainty=False, with_reference=False)
+            runs[label] = HorizonCase(
+                minimum_overnight_operative_c=result.comfort.minimum_overnight_operative_c,
+                hours_below_band=result.comfort.hours_below_band,
+                degree_hours_below_kh=result.comfort.degree_hours_below_kh,
+                heating_kwh=result.energy.heating_demand_kwh,
+                fuel_units=result.energy.fuel_units,
+                fuel_unit_name=result.energy.fuel_unit_name,
+                windows_solar_gain_kwh=result.breakdown.windows_solar_gain_kwh)
+    except Exception as error:
+        raise _translate(error) from error
+    real, flat = runs["with_horizon"], runs["flat"]
+
+    def gap(a: float | None, b: float | None) -> float | None:
+        return round(a - b, 3) if a is not None and b is not None else None
+
+    return HorizonValuePayload(
+        site_id=engine.site.id, with_horizon=real, flat=flat,
+        overnight_minimum_difference_k=gap(real.minimum_overnight_operative_c,
+                                           flat.minimum_overnight_operative_c),
+        heating_difference_kwh=gap(real.heating_kwh, flat.heating_kwh),
+        fuel_difference_units=gap(real.fuel_units, flat.fuel_units),
+        max_blocked_altitude_deg=engine.site.horizon.max_blocked_deg,
+        horizon_source=engine.site.horizon.source)
 
 
 @router.post("/geometry", response_model=GeometryPayload, tags=["design"])

@@ -327,6 +327,27 @@ class EndurancePayload(Body):
 
 
 
+class HorizonCase(Body):
+    minimum_overnight_operative_c: float | None = None
+    hours_below_band: float | None = None
+    degree_hours_below_kh: float | None = None
+    heating_kwh: float | None = None
+    fuel_units: float | None = None
+    fuel_unit_name: str | None = None
+    windows_solar_gain_kwh: float | None = None
+
+
+class HorizonValuePayload(Body):
+    site_id: str
+    with_horizon: HorizonCase
+    flat: HorizonCase
+    overnight_minimum_difference_k: float | None = None
+    heating_difference_kwh: float | None = None
+    fuel_difference_units: float | None = None
+    max_blocked_altitude_deg: float
+    horizon_source: SourceRef
+
+
 class WinterMinimumPayload(Body):
     winter: int
     night_of: str

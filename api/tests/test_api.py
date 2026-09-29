@@ -547,3 +547,15 @@ def test_live_weather_flags_an_elevation_mismatch(client, monkeypatch):
     assert body["available"] is True
     assert body["elevation_mismatch"]
     assert "4600" in body["elevation_mismatch"]
+
+
+def test_horizon_value_compares_the_real_skyline_with_a_flat_one(client, design):
+    response = client.post("/api/horizon-value", json={"design": design, "period": WINDOW,
+                                                       "conditioned_run": True})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["max_blocked_altitude_deg"] > 0
+    assert body["with_horizon"]["windows_solar_gain_kwh"] <= \
+        body["flat"]["windows_solar_gain_kwh"] + 1e-6
+    assert body["heating_difference_kwh"] == pytest.approx(
+        body["with_horizon"]["heating_kwh"] - body["flat"]["heating_kwh"], abs=1e-3)
