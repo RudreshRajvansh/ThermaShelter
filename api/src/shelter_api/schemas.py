@@ -253,6 +253,7 @@ class SiteProvenance(Body):
     horizon_max_distance_km: float
     weather_provider: str
     weather_dataset: str
+    weather_model: str | None = None
     weather_year: int
     grid_latitude_deg: float | None = None
     grid_longitude_deg: float | None = None

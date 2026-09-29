@@ -180,7 +180,8 @@ def test_a_picked_point_becomes_a_site_with_its_own_terrain_and_weather(world):
     assert len(site["ground"]["monthly_c"]) == 12
     provenance = body["provenance"]
     assert provenance["weather_year"] >= 2020
-    assert "ERA5" in provenance["weather_dataset"]
+    assert "ECMWF IFS" in provenance["weather_dataset"]
+    assert provenance["weather_model"] == "ecmwf_ifs"
     assert provenance["heating_degree_days"] > provenance["cooling_degree_days"]
     assert provenance["grid_distance_km"] > 0.0
     assert any("not a typical meteorological year" in note for note in body["notes"])
@@ -318,4 +319,4 @@ def test_a_site_outside_india_carries_the_comfort_model_caveat(world):
         body = resolve(client, latitude=LATITUDE, longitude=LONGITUDE + 0.5).json()
     finally:
         sites.fetch_json = fake_fetch
-    assert any("India Model for Adaptive Comfort" in note for note in body["notes"])
+    assert any("DRDO" in note and "Outside India" in note for note in body["notes"])

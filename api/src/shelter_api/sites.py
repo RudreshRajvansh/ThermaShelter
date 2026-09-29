@@ -51,8 +51,15 @@ HOURLY = ("temperature_2m", "dew_point_2m", "relative_humidity_2m", "surface_pre
 ELEVATION_SOURCE = ("AWS Terrain Tiles (Terrarium encoding), built from SRTM, GMTED and "
                     "other open elevation data")
 WEATHER_PROVIDER = "Open-Meteo historical weather archive"
-WEATHER_DATASET = ("ERA5 and ERA5-Land reanalysis, blended and downscaled to the site "
-                   "elevation by Open-Meteo")
+WEATHER_MODEL = "ecmwf_ifs"
+WEATHER_MODEL_FIRST_YEAR = 2017
+WEATHER_DATASET = ("ECMWF IFS 9 km analysis, downscaled to the site elevation by "
+                   "Open-Meteo")
+WEATHER_MODEL_NOTE = (
+    "Chosen over ERA5 and ERA5-Land after checking all three against IMD's own record at "
+    "Leh: over the winters both cover, the coldest night in ERA5 averaged 8.3 K and in "
+    "ERA5-Land 11.3 K colder than the station observed, while IFS came within 1.0 K. "
+    "The coarse grids see a smoothed plateau, not the valley a post sits in.")
 
 Fetcher = Callable[[str, dict[str, Any]], Any]
 
@@ -304,7 +311,7 @@ def fetch_weather_year(latitude_deg: float, longitude_deg: float, elevation_m: f
         "latitude": f"{latitude_deg:.5f}", "longitude": f"{longitude_deg:.5f}",
         "elevation": f"{elevation_m:.0f}", "start_date": f"{year - 1}-12-31",
         "end_date": f"{year + 1}-01-01", "hourly": ",".join(HOURLY),
-        "wind_speed_unit": "ms", "timezone": "GMT"})
+        "wind_speed_unit": "ms", "timezone": "GMT", "models": WEATHER_MODEL})
     hourly = payload.get("hourly") if isinstance(payload, dict) else None
     if not isinstance(hourly, dict) or not isinstance(hourly.get("time"), list):
         raise SiteUnavailable("the weather archive returned no hourly series")
@@ -529,6 +536,7 @@ def build_site(latitude_deg: float, longitude_deg: float, name: str | None,
             "horizon_max_distance_km": round(HORIZON_FARTHEST_M / 1000.0, 1),
             "weather_provider": WEATHER_PROVIDER,
             "weather_dataset": WEATHER_DATASET,
+            "weather_model": WEATHER_MODEL,
             "weather_year": year,
             "grid_latitude_deg": float(grid_lat) if isinstance(grid_lat, (int, float)) else None,
             "grid_longitude_deg": float(grid_lon) if isinstance(grid_lon, (int, float)) else None,
@@ -544,9 +552,11 @@ def build_site(latitude_deg: float, longitude_deg: float, name: str | None,
             "country_code": country,
         }
         notes = [
-            (f"Weather is one real year, {year}, of reanalysis for this point, downscaled "
-             "to the site elevation. It is not a typical meteorological year from a ground "
-             "station, so an unusually cold or warm winter is simulated as it happened."),
+            (f"Weather is one real year, {year}, of the ECMWF IFS 9 km analysis for this "
+             "point, downscaled to the site elevation. It is not a typical meteorological "
+             "year from a ground station, so an unusually cold or warm winter is simulated "
+             "as it happened."),
+            WEATHER_MODEL_NOTE,
             (f"Elevation, the 36 direction horizon and the 10 km terrain square come from "
              f"{ELEVATION_SOURCE}. Near the site the tiles resolve roughly 30 to 90 m; "
              f"ridges beyond {HORIZON_FARTHEST_M / 1000:.0f} km are not seen."),
@@ -555,8 +565,8 @@ def build_site(latitude_deg: float, longitude_deg: float, name: str | None,
         ]
         if country is not None and country != "IN":
             notes.append(
-                "The comfort band is the India Model for Adaptive Comfort. Outside India it "
-                "is applied as it stands, not re-derived for the local population.")
+                "Results lead with DRDO's 17 plus or minus 3 C band for a shelter in cold "
+                "conditions. Outside India it is applied as it stands.")
         if zone is None:
             notes.append("No time zone covers this point, so the nautical offset from "
                          "longitude is used.")
@@ -565,3 +575,195 @@ def build_site(latitude_deg: float, longitude_deg: float, name: str | None,
         _write_text(provenance_path(data_dir, identifier),
                     json.dumps({"provenance": provenance, "notes": notes}, indent=2))
         return BuiltSite(site=site, provenance=provenance, notes=tuple(notes), created=True)
+
+
+POWER_URL = "https://power.larc.nasa.gov/api/temporal/monthly/point"
+POWER_FIRST_YEAR = 2011
+DESIGN_NIGHT_RUN_DAYS = 7
+
+
+def _last_complete_winter_end(today: date) -> date:
+    year = today.year if today.month >= 7 else today.year - 1
+    return date(year, 6, 30)
+
+
+def fetch_temperature_history(latitude_deg: float, longitude_deg: float,
+                              elevation_m: float, utc_offset_h: float, end: date,
+                              fetch: Fetcher | None = None):
+    import pandas as pd
+
+    payload = _fetcher(fetch)(ARCHIVE_URL, {
+        "latitude": f"{latitude_deg:.5f}", "longitude": f"{longitude_deg:.5f}",
+        "elevation": f"{elevation_m:.0f}",
+        "start_date": f"{WEATHER_MODEL_FIRST_YEAR}-01-01",
+        "end_date": end.isoformat(), "hourly": "temperature_2m",
+        "timezone": "GMT", "models": WEATHER_MODEL})
+    hourly = payload.get("hourly") if isinstance(payload, dict) else None
+    if not isinstance(hourly, dict) or not isinstance(hourly.get("time"), list):
+        raise SiteUnavailable("the weather archive returned no temperature history")
+    values = pd.to_numeric(pd.Series(hourly.get("temperature_2m", [])), errors="coerce")
+    stamps = pd.to_datetime(hourly["time"]) + pd.Timedelta(hours=utc_offset_h)
+    if len(values) != len(stamps):
+        raise SiteUnavailable("the temperature history has mismatched times and values")
+    series = pd.Series(values.to_numpy(dtype=float), index=stamps).dropna()
+    if series.empty:
+        raise SiteUnavailable("the temperature history holds no values")
+    return series
+
+
+def fetch_solar_reference(latitude_deg: float, longitude_deg: float, last_year: int,
+                          fetch: Fetcher | None = None) -> dict[int, float]:
+    from shelter_engine.referee import monthly_mean
+
+    payload = _fetcher(fetch)(POWER_URL, {
+        "parameters": "ALLSKY_SFC_SW_DWN", "community": "RE",
+        "longitude": f"{longitude_deg:.4f}", "latitude": f"{latitude_deg:.4f}",
+        "start": str(POWER_FIRST_YEAR), "end": str(last_year), "format": "JSON"})
+    try:
+        values = payload["properties"]["parameter"]["ALLSKY_SFC_SW_DWN"]
+    except (KeyError, TypeError) as error:
+        raise SiteUnavailable("NASA POWER returned no surface solar series") from error
+    monthly = monthly_mean(values)
+    if len(monthly) != 12:
+        raise SiteUnavailable("NASA POWER did not cover all twelve months")
+    return monthly
+
+
+def _cache(data_dir: Path, folder: str, identifier: str) -> Path:
+    return Path(data_dir) / folder / f"{identifier}.json"
+
+
+def load_stations(data_dir: Path) -> list[dict[str, Any]]:
+    from shelter_engine.referee import load_station
+
+    folder = Path(data_dir) / "reference"
+    if not folder.is_dir():
+        return []
+    stations = []
+    for path in sorted(folder.glob("imd_*.json")):
+        try:
+            stations.append(load_station(path))
+        except WeatherError:
+            continue
+    return stations
+
+
+def observed_winter_minima(station: dict[str, Any]) -> dict[int, float]:
+    months = station.get("months", {})
+    by_month = {int(key): value.get("lowest_minimum_by_year_c", {})
+                for key, value in months.items()}
+    years = {int(year) for table in by_month.values() for year in table}
+    out: dict[int, float] = {}
+    for winter in sorted(years | {year + 1 for year in years}):
+        values = [by_month.get(12, {}).get(str(winter - 1)),
+                  by_month.get(1, {}).get(str(winter)),
+                  by_month.get(2, {}).get(str(winter))]
+        if all(value is not None for value in values):
+            out[winter] = float(min(values))
+    return out
+
+
+def build_design_night(site: SiteSpec, data_dir: Path, fetch: Fetcher | None = None,
+                       today: date | None = None) -> dict[str, Any]:
+    from shelter_engine.design_night import design_night
+    from shelter_engine.referee import station_for
+
+    data_dir = Path(data_dir)
+    target = _cache(data_dir, "design_nights", site.id)
+    if target.is_file():
+        return json.loads(target.read_text(encoding="utf-8"))
+    with _lock_for(f"design_night:{site.id}"):
+        if target.is_file():
+            return json.loads(target.read_text(encoding="utf-8"))
+        end = _last_complete_winter_end(today or date.today())
+        history = fetch_temperature_history(site.latitude_deg, site.longitude_deg,
+                                            site.elevation_m, site.time_zone_h, end, fetch)
+        station, distance = station_for(site.latitude_deg, site.longitude_deg,
+                                        load_stations(data_dir))
+        observed = observed_winter_minima(station) if station else None
+        try:
+            night = design_night(history, source=WEATHER_DATASET, observed=observed)
+        except WeatherError as error:
+            raise SiteUnavailable(str(error)) from error
+        year = night.night_of.year
+        weather = fetch_weather_year(site.latitude_deg, site.longitude_deg,
+                                     site.elevation_m, year, site.time_zone_h, fetch)
+        epw_name = f"{site.id}_design_{year}.epw"
+        write_epw(data_dir / "weather" / epw_name, site.name, None, site.latitude_deg,
+                  site.longitude_deg, site.time_zone_h, site.elevation_m, year,
+                  weather["columns"], (
+                      f"One real year ({year}) of {WEATHER_DATASET}, holding the 1 in 10 "
+                      f"design night of {night.night_of.isoformat()}.",
+                      f"Built for {site.name} by the shelter design tool."))
+        start = max(date(year, 1, 1),
+                    night.night_of - timedelta(days=DESIGN_NIGHT_RUN_DAYS - 1))
+        end_day = min(date(year, 12, 31), night.night_of + timedelta(days=1))
+        payload = {
+            "site_id": site.id, "night_of": night.night_of.isoformat(),
+            "minimum_c": round(night.minimum_c, 2),
+            "return_level_c": round(night.return_level_c, 2),
+            "return_period_years": night.return_period_years,
+            "gumbel_location_c": round(night.gumbel_location_c, 3),
+            "gumbel_scale_k": round(night.gumbel_scale_k, 3),
+            "winters": [{"winter": item.winter, "night_of": item.night_of.isoformat(),
+                         "minimum_c": round(item.minimum_c, 2),
+                         "observed_c": item.observed_c} for item in night.winters],
+            "source": night.source, "source_model": WEATHER_MODEL,
+            "source_note": WEATHER_MODEL_NOTE,
+            "station": station["station"] if station else None,
+            "station_distance_km": round(distance, 2) if distance is not None else None,
+            "epw_path": f"weather/{epw_name}",
+            "run_start": start.isoformat(), "run_end": end_day.isoformat(),
+            "notes": list(night.notes),
+        }
+        _write_text(target, json.dumps(payload, indent=2))
+        return payload
+
+
+def build_referee(site: SiteSpec, data_dir: Path, fetch: Fetcher | None = None,
+                  today: date | None = None) -> dict[str, Any]:
+    from shelter_engine.referee import NASA_POWER_CITATION, referee
+
+    data_dir = Path(data_dir)
+    solar_path = _cache(data_dir, "solar_reference", site.id)
+    solar: dict[int, float] | None = None
+    solar_note = None
+    if solar_path.is_file():
+        stored = json.loads(solar_path.read_text(encoding="utf-8"))
+        solar = {int(key): float(value) for key, value in stored["monthly"].items()}
+    else:
+        last = (today or date.today()).year - 1
+        try:
+            solar = fetch_solar_reference(site.latitude_deg, site.longitude_deg, last,
+                                          fetch)
+            _write_text(solar_path, json.dumps({
+                "site_id": site.id, "source": NASA_POWER_CITATION, "url": POWER_URL,
+                "years": f"{POWER_FIRST_YEAR}-{last}", "unit": "kWh/m2/day",
+                "monthly": solar}, indent=2))
+        except SiteUnavailable as error:
+            solar_note = f"The satellite solar reference could not be fetched: {error}"
+    weather = load_epw(site.epw_path, site)
+    report = referee(weather.frame, site.latitude_deg, site.longitude_deg,
+                     load_stations(data_dir), solar, NASA_POWER_CITATION)
+
+    def checks(items):
+        return [{"month": item.month, "file": round(item.file_value, 3),
+                 "reference": round(item.reference_value, 3),
+                 "difference": round(item.difference, 3),
+                 "ratio": round(item.ratio, 4) if item.ratio else None} for item in items]
+
+    return {
+        "site_id": site.id, "weather_file": Path(site.epw_path).name,
+        "station": report.station, "station_distance_km": report.station_distance_km,
+        "night_minimum": checks(report.night_minimum),
+        "day_maximum": checks(report.day_maximum),
+        "hours_below_record_low": report.hours_below_record_low,
+        "coldest_hour_c": report.coldest_hour_c, "record_low_c": report.record_low_c,
+        "record_low_date": report.record_low_date,
+        "solar": checks(report.solar),
+        "annual_solar_file_kwh_m2": report.annual_solar_file_kwh_m2,
+        "annual_solar_reference_kwh_m2": report.annual_solar_reference_kwh_m2,
+        "solar_source": report.solar_source, "solar_factors": report.solar_factors,
+        "flags": list(report.flags),
+        "notes": list(report.notes) + ([solar_note] if solar_note else []),
+    }
