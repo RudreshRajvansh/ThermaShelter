@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import threading
 import uuid
 
@@ -8,11 +9,17 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from shelter_engine.schema import OptimisationSpec
 
 from ..deps import Context, get_context
-from ..schemas import OptimisationJob, OptimiseRequest, ProjectRequest
+from ..schemas import (LeverPayload, LeverRequest, OptimisationJob, OptimiseRequest,
+                       ProjectRequest)
 
 router = APIRouter()
 
 _running = threading.Semaphore(2)
+MAX_DEFAULT_WORKERS = 8
+
+
+def default_workers() -> int:
+    return max(1, min(MAX_DEFAULT_WORKERS, (os.cpu_count() or 2) - 1))
 
 
 def _run_optimisation(context: Context, job_id: str, site_id: str,
@@ -43,6 +50,20 @@ def _run_optimisation(context: Context, job_id: str, site_id: str,
         _running.release()
 
 
+@router.post("/search-levers", response_model=list[LeverPayload], tags=["search"])
+def levers(payload: LeverRequest,
+           context: Context = Depends(get_context)) -> list[LeverPayload]:
+    from shelter_engine.optimize import search_levers
+    from shelter_engine.schema import ClimateObjective
+
+    site = context.site(payload.site_id)
+    if context.library is None:
+        raise HTTPException(status_code=503, detail="The material database is not loaded.")
+    cold = site.climate_objective is not ClimateObjective.COOLING_DOMINATED
+    return [LeverPayload(variable=lever.variable, label=lever.label, group=lever.group)
+            for lever in search_levers(payload.design, context.library, cold)]
+
+
 @router.post("/optimise", response_model=OptimisationJob, tags=["search"])
 def start_optimisation(payload: OptimiseRequest, background: BackgroundTasks,
                        context: Context = Depends(get_context)) -> OptimisationJob:
@@ -56,7 +77,9 @@ def start_optimisation(payload: OptimiseRequest, background: BackgroundTasks,
             objectives=tuple(payload.objectives),
             population_size=payload.population_size,
             generations=payload.generations,
-            seed=payload.seed)
+            seed=payload.seed,
+            workers=payload.workers or default_workers(),
+            robust_top=payload.robust_top, robust_keep=payload.robust_keep)
     except Exception as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 

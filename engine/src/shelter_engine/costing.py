@@ -109,6 +109,23 @@ def cost_breakdown(design: DesignSpec, model: GeometryModel,
         assumptions=tuple(assumptions))
 
 
+def material_mass_kg(design: DesignSpec, model: GeometryModel,
+                     library: MaterialLibrary) -> tuple[float, float]:
+    imported = 0.0
+    total = 0.0
+    for polygon in model.polygons:
+        construction = _construction_for(polygon.kind, design, polygon.outside_boundary)
+        if construction is None:
+            continue
+        share = 0.5 if polygon.outside_boundary == "Surface" else 1.0
+        for layer in library.layers(construction):
+            mass = polygon.area_m2 * share * layer.thickness_m * layer.material.density_kg_m3
+            total += mass
+            if not layer.material.locally_available:
+                imported += mass
+    return imported, total
+
+
 def buildability(design: DesignSpec, model: GeometryModel, library: MaterialLibrary,
                  constraints: OptimisationConstraints | None = None
                  ) -> BuildabilityMetrics:

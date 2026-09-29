@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -48,6 +49,7 @@ DEFAULT_WARMUP_DAYS = 7
 IDEAL_LOADS_MAX_SUPPLY_C = 50.0
 IDEAL_LOADS_MIN_SUPPLY_C = 13.0
 HEATING_OFF_C = -60.0
+_EPPY_LOCK = threading.RLock()
 KIVA_FOUNDATION = "SLAB_ON_GRADE"
 KIVA_SOIL = {"conductivity_w_mk": 1.731, "density_kg_m3": 1842.3,
              "specific_heat_j_kgk": 418.7}
@@ -890,6 +892,15 @@ def build_idf(design: DesignSpec, site: SiteSpec, model: GeometryModel,
               conditioned: bool = False,
               install: EnergyPlusInstall | None = None,
               force_finite_difference: bool = False) -> IdfBundle:
+    with _EPPY_LOCK:
+        return _build_idf(design, site, model, constructions, options, conditioned,
+                          install, force_finite_difference)
+
+
+def _build_idf(design: DesignSpec, site: SiteSpec, model: GeometryModel,
+               constructions: ConstructionSet, options: RunOptions,
+               conditioned: bool, install: EnergyPlusInstall | None,
+               force_finite_difference: bool) -> IdfBundle:
     install = install or find_energyplus()
     IDF = _idf_class(install)
     idf = IDF(io.StringIO(""))

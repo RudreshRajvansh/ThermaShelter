@@ -46,6 +46,11 @@ def analytic_metrics(design: DesignSpec, library) -> dict[str, float]:
         "condensation_hours": max(0.0, 120.0 - 40.0 * solar - 30.0 * shutters),
         "wall_thickness_m": design.wall.thickness_m,
         "surface_to_volume": design.plan.surface_to_volume,
+        "night_degree_hours_below_kh": degree_hours * 0.6,
+        "heating_litres": degree_hours * 0.05,
+        "imported_tonnes": 1.0 + 20.0 * design.wall.layers[1].thickness_m,
+        "peak_night_co2_ppm": 950.0,
+        "co2_limit_ppm": 1000.0,
     }
 
 
@@ -115,10 +120,11 @@ def test_objective_vector_penalises_missing_metrics():
 
 
 def test_constraint_count_tracks_optional_constraints():
-    assert constraint_count(OptimisationConstraints()) == 3
-    assert constraint_count(OptimisationConstraints(max_total_cost_inr=1.0)) == 4
+    assert constraint_count(OptimisationConstraints()) == 4
+    assert constraint_count(OptimisationConstraints(enforce_co2_limit=False)) == 3
+    assert constraint_count(OptimisationConstraints(max_total_cost_inr=1.0)) == 5
     assert constraint_count(OptimisationConstraints(
-        max_total_cost_inr=1.0, min_worst_night_margin_k=0.0)) == 5
+        max_total_cost_inr=1.0, min_worst_night_margin_k=0.0)) == 6
 
 
 def test_validate_spec_rejects_unknown_objectives():
@@ -399,3 +405,160 @@ def test_a_failing_stage_callback_cannot_kill_the_search(library):
                       site_id="leh", on_stage=explode)
     assert result.front
     assert result.complete is True
+
+
+def _point(tag: str, objectives: dict[str, float]):
+    from shelter_engine.schema import ParetoPoint
+    return ParetoPoint(design_hash=tag, design=fixtures.design(), objectives=objectives)
+
+
+def test_knee_is_the_point_furthest_below_the_line_joining_the_extremes():
+    from shelter_engine.optimize import _knee, knee_scores
+    names = ("a", "b")
+    points = [_point("left", {"a": 0.0, "b": 10.0}), _point("right", {"a": 10.0, "b": 0.0}),
+              _point("bulge", {"a": 3.0, "b": 3.0}), _point("near", {"a": 1.0, "b": 8.5})]
+    assert _knee(points, names) == "bulge"
+    scores = knee_scores(points, names)
+    assert scores[0] == pytest.approx(0.0, abs=1e-9)
+    assert scores[1] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_knee_works_on_three_objectives():
+    from shelter_engine.optimize import _knee
+    names = ("a", "b", "c")
+    points = [_point("x", {"a": 0.0, "b": 1.0, "c": 1.0}),
+              _point("y", {"a": 1.0, "b": 0.0, "c": 1.0}),
+              _point("z", {"a": 1.0, "b": 1.0, "c": 0.0}),
+              _point("middle", {"a": 0.3, "b": 0.3, "c": 0.3})]
+    assert _knee(points, names) == "middle"
+
+
+def test_knee_respects_maximised_objectives():
+    from shelter_engine.optimize import _knee
+    names = ("degree_hours_total_kh", "worst_night_margin_k")
+    points = [_point("cold_cheap", {"degree_hours_total_kh": 0.0,
+                                    "worst_night_margin_k": -10.0}),
+              _point("warm", {"degree_hours_total_kh": 10.0,
+                              "worst_night_margin_k": 0.0}),
+              _point("balanced", {"degree_hours_total_kh": 3.0,
+                                  "worst_night_margin_k": -3.0})]
+    assert _knee(points, names) == "balanced"
+
+
+def test_knee_falls_back_when_one_design_wins_every_objective():
+    from shelter_engine.optimize import _knee
+    names = ("a", "b")
+    points = [_point("best", {"a": 0.0, "b": 0.0}), _point("worse", {"a": 2.0, "b": 1.0})]
+    assert _knee(points, names) == "best"
+
+
+def test_the_co2_constraint_is_violated_only_above_the_tolerance():
+    from shelter_engine.optimize import constraint_vector
+    constraints = OptimisationConstraints(co2_tolerance_fraction=0.05)
+    design = fixtures.design()
+    ok = constraint_vector({"peak_night_co2_ppm": 1040.0, "co2_limit_ppm": 1000.0},
+                           design, constraints)[-1]
+    bad = constraint_vector({"peak_night_co2_ppm": 1100.0, "co2_limit_ppm": 1000.0},
+                            design, constraints)[-1]
+    unoccupied = constraint_vector({}, design, constraints)[-1]
+    assert ok <= 0.0 < bad
+    assert unoccupied == 0.0
+
+
+def test_a_stale_design_is_not_feasible(library):
+    def stale(design):
+        metrics = analytic_metrics(design, library)
+        metrics["peak_night_co2_ppm"] = 1500.0
+        return metrics
+    spec = OptimisationSpec(
+        base_design=fixtures.design(),
+        variables=(DesignVariable(name="wall.layers.2.thickness_m", kind="real",
+                                  low=0.2, high=0.5),),
+        constraints=OptimisationConstraints(max_condensation_hours=500.0),
+        population_size=8, generations=2, seed=1,
+        objectives=("night_degree_hours_below_kh", "imported_tonnes"))
+    result = optimise(spec, stale)
+    assert not any(point.feasible for point in result.front)
+
+
+def test_parallel_workers_find_the_same_front_as_one(library):
+    def make(workers):
+        return OptimisationSpec(
+            base_design=fixtures.design(),
+            variables=(DesignVariable(name="wall.layers.2.thickness_m", kind="real",
+                                      low=0.15, high=0.55),
+                       DesignVariable(name="wall.layers.1.thickness_m", kind="real",
+                                      low=0.02, high=0.18)),
+            constraints=OptimisationConstraints(max_condensation_hours=500.0),
+            population_size=10, generations=3, seed=4, workers=workers,
+            objectives=("night_degree_hours_below_kh", "imported_tonnes"))
+    serial = optimise(make(1), lambda design: analytic_metrics(design, library))
+    parallel = optimise(make(4), lambda design: analytic_metrics(design, library))
+    assert {p.design_hash for p in serial.front} == {p.design_hash for p in parallel.front}
+    assert serial.knee_hash == parallel.knee_hash
+
+
+def test_heating_objectives_are_known():
+    from shelter_engine.optimize import HEATING_OBJECTIVES, KNOWN_OBJECTIVES
+    assert HEATING_OBJECTIVES <= KNOWN_OBJECTIVES
+    assert {"night_degree_hours_below_kh", "imported_tonnes"} <= KNOWN_OBJECTIVES
+
+
+def test_levers_find_the_real_mass_and_insulation_layers(library):
+    from shelter_engine.optimize import search_levers
+    names = {lever.variable.name for lever in search_levers(fixtures.design(), library)}
+    assert "wall.layers.2.thickness_m" in names
+    assert "wall.layers.1.thickness_m" in names
+    assert "arrangement" in names and "windows.south.wwr" in names
+
+
+def test_a_steel_skin_is_never_offered_as_thermal_mass(library):
+    from shelter_engine.optimize import search_levers
+    from shelter_engine.schema import ConstructionSpec, LayerSpec
+    prefab = fixtures.design(wall=ConstructionSpec(name="prefab", layers=(
+        LayerSpec(material_id="gi_sheet", thickness_m=0.0006),
+        LayerSpec(material_id="eps_thermocol", thickness_m=0.10),
+        LayerSpec(material_id="gi_sheet", thickness_m=0.0006))))
+    levers = search_levers(prefab, library)
+    assert not any(lever.label.startswith("wall mass") for lever in levers)
+    assert any(lever.variable.name == "wall.layers.1.thickness_m" for lever in levers)
+
+
+def test_a_trombe_wall_base_is_not_offered_an_arrangement_it_cannot_reach(library):
+    from shelter_engine.optimize import search_levers
+    from shelter_engine.schema import Arrangement
+    names = {lever.variable.name
+             for lever in search_levers(fixtures.design(Arrangement.TROMBE_WALL), library)}
+    assert "arrangement" not in names and "windows.south.wwr" not in names
+
+
+def test_switching_to_a_trombe_wall_drops_the_south_window():
+    design = materialise(fixtures.design(), {"arrangement": "trombe_wall"})
+    assert design.arrangement.value == "trombe_wall"
+    assert design.windows[Facade.SOUTH].wwr == 0.0
+
+
+def test_switching_arrangement_supplies_a_partition_when_the_base_has_none():
+    base = fixtures.design(partition=None)
+    design = materialise(base, {"arrangement": "sunspace"})
+    assert design.partition is not None
+    assert design.partition.layers == base.wall.layers
+
+
+def test_every_random_candidate_from_the_levers_is_a_valid_design(library):
+    import random
+    from shelter_engine.optimize import search_levers
+    base = fixtures.design()
+    levers = search_levers(base, library)
+    rng = random.Random(11)
+    for _ in range(200):
+        assignment = {}
+        for lever in levers:
+            variable = lever.variable
+            if variable.kind == "real":
+                assignment[variable.name] = rng.uniform(variable.low, variable.high)
+            elif variable.kind == "choice":
+                assignment[variable.name] = rng.choice(variable.options)
+            else:
+                assignment[variable.name] = rng.random() < 0.5
+        materialise(base, assignment)

@@ -130,15 +130,29 @@ class CompareRequest(Body):
                           surface_output=False)
 
 
+class LeverRequest(Body):
+    design: DesignSpec
+    site_id: str | None = None
+
+
+class LeverPayload(Body):
+    variable: DesignVariable
+    label: str
+    group: str
+
+
 class OptimiseRequest(Body):
     base_design: DesignSpec
     variables: list[DesignVariable] = Field(min_length=1, max_length=24)
     constraints: OptimisationConstraints = OptimisationConstraints()
     objectives: list[str] = Field(default_factory=lambda: [
-        "degree_hours_total_kh", "total_cost_inr", "worst_night_margin_k"])
+        "night_degree_hours_below_kh", "heating_litres", "imported_tonnes"])
     population_size: int = Field(default=24, ge=8, le=200)
     generations: int = Field(default=10, ge=1, le=200)
     seed: int = 1
+    workers: int | None = Field(default=None, ge=1, le=32)
+    robust_top: int = Field(default=5, ge=0, le=20)
+    robust_keep: int = Field(default=3, ge=1, le=20)
     site_id: str | None = None
     period: Window = Window()
 

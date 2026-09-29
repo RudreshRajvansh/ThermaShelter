@@ -212,11 +212,14 @@ def evaluate_comfort(operative_c: pd.Series, outdoor_c: pd.Series,
             worst_margin = float(np.min(values[nightly] - lower[nightly]))
 
     fixed_below = None
+    fixed_degree_hours = None
     if fixed_target is not None:
         target_mask = np.isin(index.hour.to_numpy(),
                               np.asarray(fixed_target.hours, dtype=int))
         fixed_below = float(np.sum(np.logical_and(
             target_mask, values < fixed_target.lower_bound_c)))
+        shortfall = np.clip(fixed_target.lower_bound_c - values, 0.0, None)
+        fixed_degree_hours = float(np.sum(shortfall[target_mask]))
 
     indoor_swing = _daily_swing(operative)
     outdoor_swing = _daily_swing(outdoor)
@@ -243,6 +246,7 @@ def evaluate_comfort(operative_c: pd.Series, outdoor_c: pd.Series,
         degree_hours_total_kh=float(np.sum(deficit) + np.sum(excess)),
         occupied_hours_outside_band=float(np.sum(np.logical_and(outside, occupied_mask))),
         fixed_target_hours_below=fixed_below,
+        fixed_target_degree_hours_below_kh=fixed_degree_hours,
         fixed_target_id=fixed_target.id if fixed_target is not None else None,
         worst_night_margin_k=worst_margin,
         band_lower_c=float(lower.min()),

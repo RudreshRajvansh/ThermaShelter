@@ -983,6 +983,7 @@ class ComfortMetrics(Frozen):
     degree_hours_total_kh: float = 0.0
     occupied_hours_outside_band: float = 0.0
     fixed_target_hours_below: float | None = None
+    fixed_target_degree_hours_below_kh: float | None = None
     fixed_target_id: str | None = None
     worst_night_margin_k: float | None = None
     band_lower_c: float | None = None
@@ -1254,7 +1255,9 @@ class DesignVariable(Frozen):
 
 
 class OptimisationConstraints(Frozen):
-    minimum_fresh_air_ach: float = Field(default=0.35, ge=0.0, le=10.0)
+    minimum_fresh_air_ach: float = Field(default=0.0, ge=0.0, le=10.0)
+    enforce_co2_limit: bool = True
+    co2_tolerance_fraction: float = Field(default=0.05, ge=0.0, le=0.5)
     max_wall_thickness_m: float = Field(default=0.60, gt=0.0, le=2.0)
     max_condensation_hours: float = Field(default=50.0, ge=0.0)
     max_total_cost_inr: float | None = Field(default=None, ge=0.0)
@@ -1270,8 +1273,11 @@ class OptimisationSpec(Frozen):
     population_size: int = Field(default=40, ge=8, le=400)
     generations: int = Field(default=25, ge=1, le=500)
     seed: int = 1
-    objectives: tuple[str, ...] = ("degree_hours_total_kh", "total_cost_inr",
-                                   "worst_night_margin_k")
+    workers: int = Field(default=1, ge=1, le=32)
+    robust_top: int = Field(default=0, ge=0, le=20)
+    robust_keep: int = Field(default=3, ge=1, le=20)
+    objectives: tuple[str, ...] = ("night_degree_hours_below_kh", "heating_litres",
+                                   "imported_tonnes")
 
     @model_validator(mode="after")
     def _names_unique(self) -> "OptimisationSpec":
@@ -1299,6 +1305,20 @@ class ParetoPoint(Frozen):
     flags: tuple[str, ...] = ()
 
 
+class RobustnessRow(Frozen):
+    design_hash: str
+    knee_rank: int
+    metric: str
+    unit: str
+    nominal: float
+    best: float
+    worst: float
+    corner_runs: int
+    dominant_parameter: str | None = None
+    robust_rank: int
+    selected: bool = False
+
+
 class ParetoResult(Frozen):
     spec_hash: str
     site_id: str
@@ -1313,6 +1333,7 @@ class ParetoResult(Frozen):
     complete: bool = True
     warnings: tuple[EngineWarning, ...] = ()
     knee_hash: str | None = None
+    robustness: tuple[RobustnessRow, ...] = ()
 
 
 class CFDBoundarySurface(Frozen):

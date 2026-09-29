@@ -18,7 +18,8 @@ from .climate import summarise as summarise_climate
 from .comfort import ComfortCatalogue, comfort_bounds_frame, evaluate_comfort, load_catalogue
 from .config import SETTINGS, EngineSettings, EnergyPlusInstall, find_energyplus
 from .constructions import ConstructionSet, build_constructions
-from .costing import buildability, cost_breakdown, envelope_u_values, glazing_u_values
+from .costing import (buildability, cost_breakdown, envelope_u_values, glazing_u_values,
+                      material_mass_kg)
 from .endurance import (CUTOFF_HOUR, FLOOR_C, EnduranceResult, coast_down, cutoff_for,
                         night_window, window_sum)
 from .errors import EngineError, SimulationFailed
@@ -32,7 +33,7 @@ from .metrics import (HEATING_CANDIDATES as HEATING_ENERGY_CANDIDATES,
                       air_quality, airflow_summary, condensation, energy_metrics,
                       heat_balance, solar_gain_by_facade, surface_frames,
                       zone_series)
-from .optimize import Metrics, optimise
+from .optimize import HEATING_OBJECTIVES, Metrics, knee_scores, optimise
 from .programme import layout_for
 from .recommend import RecommendationInputs, generate_recommendations
 from .results import SimulationOutput, blocking
@@ -45,7 +46,8 @@ from .schema import (Arrangement, Assumption, BuildabilityMetrics, CFDExport,
                      ComparisonRow, ComparisonTable, CostBreakdown, DesignSpec,
                      EnergyMetrics, EngineWarning, Facade, FixedComfortTarget,
                      FuelModel, GeometryPayload, HeatBalanceBreakdown,
-                     HourlySeries, OptimisationSpec, ParetoResult, Provenance,
+                     HourlySeries, OptimisationSpec, ParetoPoint, ParetoResult,
+                     Provenance, RobustnessRow,
                      RunOptions, RunPeriod, Severity, SimulationResult, SiteSpec,
                      SourceRef, SourceStatus, SunPath, SurfaceResults,
                      SurfaceSeries, TerrainMesh, ThermalBridge, UncertaintyBand)
@@ -178,10 +180,10 @@ class Engine:
                             constructions=constructions, bundle=bundle,
                             runtime_s=runtime)
 
-    def metrics_for(self, design: DesignSpec,
-                    options: RunOptions) -> Metrics:
+    def metrics_for(self, design: DesignSpec, options: RunOptions,
+                    with_heating: bool = False) -> Metrics:
         key = stable_hash("metrics", design, self.site, options, self.comfort_model.id,
-                          self.library.fingerprint, __version__)
+                          self.library.fingerprint, with_heating, __version__)
         cached = self._metric_cache.get(key)
         if cached is not None:
             return cached
@@ -196,7 +198,14 @@ class Engine:
         condensation_metrics = condensation(products.output, products.model,
                                             products.series)
         cost = cost_breakdown(design, products.model, self.library)
+        imported_kg, total_kg = material_mass_kg(design, products.model, self.library)
+        breathing = air_quality(products.output, design, products.bundle.fresh_air,
+                                products.bundle.ventilation_design_l_s,
+                                products.bundle.infiltration_design_l_s,
+                                light.heating_hours)
         metrics: Metrics = {
+            "imported_tonnes": imported_kg / 1000.0,
+            "material_tonnes": total_kg / 1000.0,
             "degree_hours_total_kh": comfort.degree_hours_total_kh,
             "degree_hours_below_kh": comfort.degree_hours_below_kh,
             "degree_hours_above_kh": comfort.degree_hours_above_kh,
@@ -212,9 +221,25 @@ class Engine:
                              comfort.minimum_overnight_operative_c),
                             ("minimum_operative_c", comfort.minimum_operative_c),
                             ("minimum_on_design_day_c", comfort.minimum_on_design_day_c),
-                            ("time_lag_h", comfort.time_lag_h)):
+                            ("time_lag_h", comfort.time_lag_h),
+                            ("night_degree_hours_below_kh",
+                             comfort.fixed_target_degree_hours_below_kh),
+                            ("night_hours_below_target", comfort.fixed_target_hours_below),
+                            ("peak_night_co2_ppm",
+                             breathing.peak_night_co2_ppm if breathing else None),
+                            ("co2_limit_ppm",
+                             breathing.co2_limit_ppm if breathing else None)):
             if value is not None:
                 metrics[name] = float(value)
+        if with_heating:
+            heated = self._run(design, light, conditioned=True)
+            energy = energy_metrics(heated.output,
+                                    heated.bundle.conditioned_zone_names, self.fuel)
+            if energy.heating_demand_kwh is not None:
+                metrics["heating_demand_kwh"] = float(energy.heating_demand_kwh)
+            if energy.fuel_units is not None:
+                metrics["fuel_units"] = float(energy.fuel_units)
+                metrics["heating_litres"] = float(energy.fuel_units)
         self._metric_cache.set(key, metrics)
         return metrics
 
@@ -459,6 +484,59 @@ class Engine:
                 evaluate, design, self.library, parameters, metric, unit,
                 nominal_value=float(nominal)))
         return bands
+
+    def _corner_band(self, design: DesignSpec, options: RunOptions, metric: str,
+                     unit: str, nominal: float | None = None) -> UncertaintyBand:
+        light = options.model_copy(update={"surface_output": False,
+                                           "conditioned_run": False})
+        parameters = select_parameters(design, self.library)
+
+        def evaluate(variant: DesignSpec, library: MaterialLibrary) -> float:
+            probe = Engine(self.site, library,
+                           comfort_model_id=self.comfort_model.id,
+                           fixed_target_id=self.fixed_target.id
+                           if self.fixed_target else None,
+                           fuel=self.fuel, thermal_bridges=self.thermal_bridges,
+                           references=self.references, catalogue=self.catalogue,
+                           cache=self._cache, settings=self.settings,
+                           install=self.install, weather=self.weather)
+            probe._metric_cache = self._metric_cache
+            value = probe.metrics_for(variant, light).get(metric)
+            if value is None:
+                raise EngineError(f"the corner run produced no {metric}")
+            return float(value)
+
+        return uncertainty_band(evaluate, design, self.library, parameters, metric, unit,
+                                nominal_value=nominal)
+
+    def robustness(self, result: ParetoResult, options: RunOptions, top: int = 5,
+                   keep: int = 3, metric: str = "night_degree_hours_below_kh",
+                   unit: str = "Kh", workers: int = 1) -> tuple[RobustnessRow, ...]:
+        pool = [point for point in result.front if point.feasible] or list(result.front)
+        if not pool or top <= 0:
+            return ()
+        scores = knee_scores(pool, result.objectives)
+        ranked = [pool[index] for index in np.argsort(scores)[::-1][:top]]
+
+        def band_for(point: ParetoPoint) -> UncertaintyBand:
+            return self._corner_band(point.design, options, metric, unit,
+                                     point.metrics.get(metric))
+
+        if workers > 1 and len(ranked) > 1:
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=min(workers, len(ranked))) as executor:
+                bands = list(executor.map(band_for, ranked))
+        else:
+            bands = [band_for(point) for point in ranked]
+        order = sorted(range(len(ranked)), key=lambda index: bands[index].high)
+        robust_rank = {index: position + 1 for position, index in enumerate(order)}
+        return tuple(RobustnessRow(
+            design_hash=point.design_hash, knee_rank=index + 1, metric=metric, unit=unit,
+            nominal=bands[index].nominal, best=bands[index].low, worst=bands[index].high,
+            corner_runs=bands[index].runs,
+            dominant_parameter=bands[index].dominant_parameter,
+            robust_rank=robust_rank[index], selected=robust_rank[index] <= keep)
+            for index, point in enumerate(ranked))
 
     def _reference_result(self, reference: str | DesignSpec | None,
                           options: RunOptions,
@@ -771,10 +849,17 @@ class Engine:
     def optimise(self, spec: OptimisationSpec, options: RunOptions,
                  on_stage: Callable[[ParetoResult], None] | None = None
                  ) -> ParetoResult:
+        heated = bool(HEATING_OBJECTIVES & set(spec.objectives))
+
         def evaluate(design: DesignSpec) -> Metrics:
-            return self.metrics_for(design, options)
-        return optimise(spec, evaluate, site_id=self.site.id,
-                        cache=LRUCache(maxsize=8192), on_stage=on_stage)
+            return self.metrics_for(design, options, with_heating=heated)
+        result = optimise(spec, evaluate, site_id=self.site.id,
+                          cache=LRUCache(maxsize=8192), on_stage=on_stage)
+        if spec.robust_top <= 0:
+            return result
+        rows = self.robustness(result, options, spec.robust_top, spec.robust_keep,
+                               workers=spec.workers)
+        return result.model_copy(update={"robustness": rows})
 
     def cfd_export(self, design: DesignSpec, options: RunOptions
                    ) -> tuple[CFDExport, ...]:
