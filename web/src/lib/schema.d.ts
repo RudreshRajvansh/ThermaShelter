@@ -259,6 +259,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/endurance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Endurance */
+        post: operations["endurance_api_endurance_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/horizon-value": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Horizon Value */
+        post: operations["horizon_value_api_horizon_value_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/geometry": {
         parameters: {
             query?: never;
@@ -480,6 +514,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/search-levers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Levers */
+        post: operations["levers_api_search_levers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/optimise": {
         parameters: {
             query?: never;
@@ -602,10 +653,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sites/{site_id}/design-night": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Design Night */
+        get: operations["design_night_api_sites__site_id__design_night_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sites/{site_id}/referee": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Weather Referee */
+        get: operations["weather_referee_api_sites__site_id__referee_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AirQualityMetrics */
+        AirQualityMetrics: {
+            /** Co2 Limit Ppm */
+            co2_limit_ppm: number;
+            /** Outdoor Co2 Ppm */
+            outdoor_co2_ppm: number;
+            /** Site Pressure Kpa */
+            site_pressure_kpa: number;
+            /** Fresh Air L S Per Person */
+            fresh_air_l_s_per_person: number;
+            /** Sea Level Fresh Air L S Per Person */
+            sea_level_fresh_air_l_s_per_person: number;
+            /**
+             * Fresh Air Sized From Limit
+             * @default true
+             */
+            fresh_air_sized_from_limit: boolean;
+            /**
+             * Ventilation Design L S
+             * @default 0
+             */
+            ventilation_design_l_s: number;
+            /**
+             * Infiltration Design L S
+             * @default 0
+             */
+            infiltration_design_l_s: number;
+            /** Peak Night Co2 Ppm */
+            peak_night_co2_ppm?: number | null;
+            /** Mean Night Co2 Ppm */
+            mean_night_co2_ppm?: number | null;
+            /**
+             * Night Hours Above Limit
+             * @default 0
+             */
+            night_hours_above_limit: number;
+            /**
+             * Hours Above Limit
+             * @default 0
+             */
+            hours_above_limit: number;
+            /**
+             * Ventilation Heat Loss Kwh
+             * @default 0
+             */
+            ventilation_heat_loss_kwh: number;
+            /** @default simulated */
+            provenance: components["schemas"]["Provenance"];
+        };
         /** AirflowSummary */
         AirflowSummary: {
             /**
@@ -668,6 +802,11 @@ export interface components {
              * @default 2
              */
             coupling_ach: number;
+            /**
+             * Coupling Delta T K
+             * @default 1
+             */
+            coupling_delta_t_k: number;
             /**
              * Coupling From Hour
              * @default 10
@@ -1096,10 +1235,25 @@ export interface components {
             occupied_hours_outside_band: number;
             /** Fixed Target Hours Below */
             fixed_target_hours_below?: number | null;
+            /** Fixed Target Degree Hours Below Kh */
+            fixed_target_degree_hours_below_kh?: number | null;
             /** Fixed Target Id */
             fixed_target_id?: string | null;
             /** Worst Night Margin K */
             worst_night_margin_k?: number | null;
+            /** Band Lower C */
+            band_lower_c?: number | null;
+            /** Band Upper C */
+            band_upper_c?: number | null;
+            /** Running Mean Min C */
+            running_mean_min_c?: number | null;
+            /** Running Mean Max C */
+            running_mean_max_c?: number | null;
+            /**
+             * Hours Outside Applicability
+             * @default 0
+             */
+            hours_outside_applicability: number;
             /** Mean Operative C */
             mean_operative_c?: number | null;
             /** Mean Daily Swing K */
@@ -1126,6 +1280,8 @@ export interface components {
              * @default 0.8
              */
             running_mean_alpha: number;
+            /** Running Mean Days */
+            running_mean_days?: number | null;
             outdoor_applicability_c: components["schemas"]["UncertainRange"];
             /** Absolute Lower Bound C */
             absolute_lower_bound_c?: number | null;
@@ -1276,6 +1432,43 @@ export interface components {
              */
             assumptions: components["schemas"]["Assumption"][];
         };
+        /** DesignNightPayload */
+        DesignNightPayload: {
+            /** Site Id */
+            site_id: string;
+            /** Night Of */
+            night_of: string;
+            /** Minimum C */
+            minimum_c: number;
+            /** Return Level C */
+            return_level_c: number;
+            /** Return Period Years */
+            return_period_years: number;
+            /** Gumbel Location C */
+            gumbel_location_c: number;
+            /** Gumbel Scale K */
+            gumbel_scale_k: number;
+            /** Winters */
+            winters: components["schemas"]["WinterMinimumPayload"][];
+            /** Source */
+            source: string;
+            /** Source Model */
+            source_model: string;
+            /** Source Note */
+            source_note: string;
+            /** Station */
+            station?: string | null;
+            /** Station Distance Km */
+            station_distance_km?: number | null;
+            /** Epw Path */
+            epw_path: string;
+            /** Run Start */
+            run_start: string;
+            /** Run End */
+            run_end: string;
+            /** Notes */
+            notes?: string[];
+        };
         /** DesignSpec */
         DesignSpec: {
             /**
@@ -1305,7 +1498,8 @@ export interface components {
             };
             /** @default {
              *       "infiltration_ach": 0.6,
-             *       "minimum_fresh_air_ach": 0.35,
+             *       "minimum_fresh_air_ach": 0,
+             *       "co2_limit_ppm": 1000,
              *       "night_ventilation": false,
              *       "night_ventilation_ach": 0,
              *       "night_ventilation_from_hour": 21,
@@ -1339,6 +1533,7 @@ export interface components {
              *       "vestibule_depth_m": 1.2,
              *       "vestibule_facade": "north",
              *       "coupling_ach": 2,
+             *       "coupling_delta_t_k": 1,
              *       "coupling_from_hour": 10,
              *       "coupling_until_hour": 17
              *     } */
@@ -1387,6 +1582,74 @@ export interface components {
             high?: number | null;
             /** Options */
             options?: string[] | null;
+        };
+        /** EndurancePayload */
+        EndurancePayload: {
+            /** Site Id */
+            site_id: string;
+            /** Night Of */
+            night_of: string;
+            /** Design Night Minimum C */
+            design_night_minimum_c: number;
+            /** Return Level C */
+            return_level_c: number;
+            /** Return Period Years */
+            return_period_years: number;
+            /** Cutoff */
+            cutoff: string;
+            /** Floor C */
+            floor_c: number;
+            floor_source: components["schemas"]["SourceRef"];
+            /** Reached Floor */
+            reached_floor: boolean;
+            /** Hours Above Floor */
+            hours_above_floor: number;
+            /** Hours Simulated After Cutoff */
+            hours_simulated_after_cutoff: number;
+            /** Operative At Cutoff C */
+            operative_at_cutoff_c: number;
+            /** Minimum After Cutoff C */
+            minimum_after_cutoff_c: number;
+            /** Minimum At */
+            minimum_at: string;
+            /** Night Heating Kwh */
+            night_heating_kwh: number;
+            /** Night Fuel Units */
+            night_fuel_units?: number | null;
+            /** Fuel */
+            fuel?: string | null;
+            /** Fuel Unit Name */
+            fuel_unit_name?: string | null;
+            /** Weather Source */
+            weather_source: string;
+            leftover_heat: components["schemas"]["LeftoverHeatPayload"];
+        };
+        /** EnduranceRequest */
+        EnduranceRequest: {
+            design: components["schemas"]["DesignSpec"];
+            /** Site Id */
+            site_id?: string | null;
+            /**
+             * Floor C
+             * @default 5
+             */
+            floor_c: number;
+            /**
+             * Cutoff Hour
+             * @default 18
+             */
+            cutoff_hour: number;
+            /**
+             * Extra Days
+             * @default 2
+             */
+            extra_days: number;
+            /**
+             * Fuel
+             * @default kerosene
+             * @enum {string}
+             */
+            fuel: "kerosene" | "diesel";
         };
         /** EnergyMetrics */
         EnergyMetrics: {
@@ -1635,6 +1898,23 @@ export interface components {
             /** @default derived */
             thermal_bridge_provenance: components["schemas"]["Provenance"];
         };
+        /** HorizonCase */
+        HorizonCase: {
+            /** Minimum Overnight Operative C */
+            minimum_overnight_operative_c?: number | null;
+            /** Hours Below Band */
+            hours_below_band?: number | null;
+            /** Degree Hours Below Kh */
+            degree_hours_below_kh?: number | null;
+            /** Heating Kwh */
+            heating_kwh?: number | null;
+            /** Fuel Units */
+            fuel_units?: number | null;
+            /** Fuel Unit Name */
+            fuel_unit_name?: string | null;
+            /** Windows Solar Gain Kwh */
+            windows_solar_gain_kwh?: number | null;
+        };
         /** HorizonProfile */
         HorizonProfile: {
             /** Azimuths Deg */
@@ -1642,6 +1922,22 @@ export interface components {
             /** Blocked Altitude Deg */
             blocked_altitude_deg: number[];
             source: components["schemas"]["SourceRef"];
+        };
+        /** HorizonValuePayload */
+        HorizonValuePayload: {
+            /** Site Id */
+            site_id: string;
+            with_horizon: components["schemas"]["HorizonCase"];
+            flat: components["schemas"]["HorizonCase"];
+            /** Overnight Minimum Difference K */
+            overnight_minimum_difference_k?: number | null;
+            /** Heating Difference Kwh */
+            heating_difference_kwh?: number | null;
+            /** Fuel Difference Units */
+            fuel_difference_units?: number | null;
+            /** Max Blocked Altitude Deg */
+            max_blocked_altitude_deg: number;
+            horizon_source: components["schemas"]["SourceRef"];
         };
         /** HourlySeries */
         HourlySeries: {
@@ -1684,6 +1980,41 @@ export interface components {
              */
             notes: string[];
             source: components["schemas"]["SourceRef"];
+        };
+        /** LeftoverHeatPayload */
+        LeftoverHeatPayload: {
+            /** Night Heating Kwh */
+            night_heating_kwh: number;
+            /** Night Peak Kw */
+            night_peak_kw?: number | null;
+            /** Litres */
+            litres?: number | null;
+            /** Him Tapak Hours Low */
+            him_tapak_hours_low?: number | null;
+            /** Him Tapak Hours High */
+            him_tapak_hours_high?: number | null;
+            /** Him Tapak Fuel Input Kw */
+            him_tapak_fuel_input_kw?: number[] | null;
+            him_tapak_source: components["schemas"]["SourceRef"];
+            /** Solar Storage Kwh */
+            solar_storage_kwh: number;
+            solar_system_source: components["schemas"]["SourceRef"];
+            /** Notes */
+            notes?: string[];
+        };
+        /** LeverPayload */
+        LeverPayload: {
+            variable: components["schemas"]["DesignVariable"];
+            /** Label */
+            label: string;
+            /** Group */
+            group: string;
+        };
+        /** LeverRequest */
+        LeverRequest: {
+            design: components["schemas"]["DesignSpec"];
+            /** Site Id */
+            site_id?: string | null;
         };
         /** LiveObservation */
         LiveObservation: {
@@ -1864,6 +2195,19 @@ export interface components {
             /** Provenance Gaps */
             provenance_gaps: string[];
         };
+        /** MonthCheckPayload */
+        MonthCheckPayload: {
+            /** Month */
+            month: number;
+            /** File */
+            file: number;
+            /** Reference */
+            reference: number;
+            /** Difference */
+            difference: number;
+            /** Ratio */
+            ratio?: number | null;
+        };
         /** OccupancySpec */
         OccupancySpec: {
             /**
@@ -1922,9 +2266,19 @@ export interface components {
         OptimisationConstraints: {
             /**
              * Minimum Fresh Air Ach
-             * @default 0.35
+             * @default 0
              */
             minimum_fresh_air_ach: number;
+            /**
+             * Enforce Co2 Limit
+             * @default true
+             */
+            enforce_co2_limit: boolean;
+            /**
+             * Co2 Tolerance Fraction
+             * @default 0.05
+             */
+            co2_tolerance_fraction: number;
             /**
              * Max Wall Thickness M
              * @default 0.6
@@ -1976,7 +2330,9 @@ export interface components {
             /** Variables */
             variables: components["schemas"]["DesignVariable"][];
             /** @default {
-             *       "minimum_fresh_air_ach": 0.35,
+             *       "minimum_fresh_air_ach": 0,
+             *       "enforce_co2_limit": true,
+             *       "co2_tolerance_fraction": 0.05,
              *       "max_wall_thickness_m": 0.6,
              *       "max_condensation_hours": 50,
              *       "seismic_wall_thickness_flag_m": 0.45
@@ -1999,6 +2355,18 @@ export interface components {
              * @default 1
              */
             seed: number;
+            /** Workers */
+            workers?: number | null;
+            /**
+             * Robust Top
+             * @default 5
+             */
+            robust_top: number;
+            /**
+             * Robust Keep
+             * @default 3
+             */
+            robust_keep: number;
             /** Site Id */
             site_id?: string | null;
             /** @default {
@@ -2106,6 +2474,11 @@ export interface components {
             warnings: components["schemas"]["EngineWarning"][];
             /** Knee Hash */
             knee_hash?: string | null;
+            /**
+             * Robustness
+             * @default []
+             */
+            robustness: components["schemas"]["RobustnessRow"][];
         };
         /** PartitionPayload */
         PartitionPayload: {
@@ -2248,6 +2621,48 @@ export interface components {
             /** @default derived */
             provenance: components["schemas"]["Provenance"];
         };
+        /** RefereePayload */
+        RefereePayload: {
+            /** Site Id */
+            site_id: string;
+            /** Weather File */
+            weather_file: string;
+            /** Station */
+            station?: string | null;
+            /** Station Distance Km */
+            station_distance_km?: number | null;
+            /** Night Minimum */
+            night_minimum?: components["schemas"]["MonthCheckPayload"][];
+            /** Day Maximum */
+            day_maximum?: components["schemas"]["MonthCheckPayload"][];
+            /**
+             * Hours Below Record Low
+             * @default 0
+             */
+            hours_below_record_low: number;
+            /** Coldest Hour C */
+            coldest_hour_c?: number | null;
+            /** Record Low C */
+            record_low_c?: number | null;
+            /** Record Low Date */
+            record_low_date?: string | null;
+            /** Solar */
+            solar?: components["schemas"]["MonthCheckPayload"][];
+            /** Annual Solar File Kwh M2 */
+            annual_solar_file_kwh_m2?: number | null;
+            /** Annual Solar Reference Kwh M2 */
+            annual_solar_reference_kwh_m2?: number | null;
+            /** Solar Source */
+            solar_source?: string | null;
+            /** Solar Factors */
+            solar_factors?: {
+                [key: string]: number;
+            };
+            /** Flags */
+            flags?: string[];
+            /** Notes */
+            notes?: string[];
+        };
         /** ReferenceComparison */
         ReferenceComparison: {
             /** Reference Name */
@@ -2282,6 +2697,34 @@ export interface components {
             longitude_deg: number;
             /** Name */
             name?: string | null;
+        };
+        /** RobustnessRow */
+        RobustnessRow: {
+            /** Design Hash */
+            design_hash: string;
+            /** Knee Rank */
+            knee_rank: number;
+            /** Metric */
+            metric: string;
+            /** Unit */
+            unit: string;
+            /** Nominal */
+            nominal: number;
+            /** Best */
+            best: number;
+            /** Worst */
+            worst: number;
+            /** Corner Runs */
+            corner_runs: number;
+            /** Dominant Parameter */
+            dominant_parameter?: string | null;
+            /** Robust Rank */
+            robust_rank: number;
+            /**
+             * Selected
+             * @default false
+             */
+            selected: boolean;
         };
         /** RoomPayload */
         RoomPayload: {
@@ -2453,6 +2896,7 @@ export interface components {
             condensation: components["schemas"]["CondensationMetrics"];
             cost: components["schemas"]["CostBreakdown"];
             buildability: components["schemas"]["BuildabilityMetrics"];
+            air_quality?: components["schemas"]["AirQualityMetrics"] | null;
             /**
              * Hourly
              * @default []
@@ -2539,6 +2983,8 @@ export interface components {
             weather_provider: string;
             /** Weather Dataset */
             weather_dataset: string;
+            /** Weather Model */
+            weather_model?: string | null;
             /** Weather Year */
             weather_year: number;
             /** Grid Latitude Deg */
@@ -2904,9 +3350,16 @@ export interface components {
             infiltration_ach: number;
             /**
              * Minimum Fresh Air Ach
-             * @default 0.35
+             * @default 0
              */
             minimum_fresh_air_ach: number;
+            /**
+             * Co2 Limit Ppm
+             * @default 1000
+             */
+            co2_limit_ppm: number;
+            /** Fresh Air L S Per Person */
+            fresh_air_l_s_per_person?: number | null;
             /**
              * Night Ventilation
              * @default false
@@ -2974,6 +3427,17 @@ export interface components {
              * @default 0.1
              */
             overhang_offset_m: number;
+        };
+        /** WinterMinimumPayload */
+        WinterMinimumPayload: {
+            /** Winter */
+            winter: number;
+            /** Night Of */
+            night_of: string;
+            /** Minimum C */
+            minimum_c: number;
+            /** Observed C */
+            observed_c?: number | null;
         };
         /** ZoneAirflow */
         ZoneAirflow: {
@@ -3339,6 +3803,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ValidationEvidence"];
+                };
+            };
+        };
+    };
+    endurance_api_endurance_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnduranceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EndurancePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    horizon_value_api_horizon_value_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SimulateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HorizonValuePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -3766,6 +4296,39 @@ export interface operations {
             };
         };
     };
+    levers_api_search_levers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeverRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeverPayload"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_optimisations_api_optimise_get: {
         parameters: {
             query?: {
@@ -4071,6 +4634,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SiteDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    design_night_api_sites__site_id__design_night_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DesignNightPayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    weather_referee_api_sites__site_id__referee_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefereePayload"];
                 };
             };
             /** @description Validation Error */

@@ -9,13 +9,23 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { MetaResponse } from "../lib/api";
+import type { MetaResponse, ParetoPoint } from "../lib/api";
 import { Failure, Warnings } from "./Kit";
 import { BUDGETS, describeDesign, useStore } from "../lib/store";
-import { LEVER_NAMES, bestPoint } from "./SearchRunner";
-import { num, rupees } from "../lib/format";
+import { LEVER_NAMES, OBJECTIVE_LABEL, bestPoint } from "./SearchRunner";
+import { num } from "../lib/format";
 
 const axis = { fontSize: 11, fill: "var(--color-ink-faint)" };
+
+function objective(point: ParetoPoint, name: string): number | null {
+  const value = point.objectives[name];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function metric(point: ParetoPoint, name: string): number | null {
+  const value = point.metrics?.[name];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
 
 export function SearchPanel({ meta }: { meta: MetaResponse | undefined }) {
   const store = useStore();
@@ -23,7 +33,6 @@ export function SearchPanel({ meta }: { meta: MetaResponse | undefined }) {
   const result = search.result;
   const best = useMemo(() => bestPoint(result), [result]);
   const site = meta?.sites.find((item) => item.id === store.siteId);
-  const headline = site?.headline_metric ?? "minimum_overnight_operative_c";
 
   if (!searchRequest) {
     return (
@@ -32,8 +41,10 @@ export function SearchPanel({ meta }: { meta: MetaResponse | undefined }) {
           <h2 className="text-lg font-semibold tracking-tight">No search has run for these inputs</h2>
           <p className="mt-2 text-sm leading-relaxed text-[var(--color-ink-dim)]">
             The other tabs analyse the design exactly as you entered it. A search varies{" "}
-            {LEVER_NAMES}, simulating every candidate in EnergyPlus against this site's weather
-            year, and recommends the best balance of warmth, cost and the worst design night.
+            {LEVER_NAMES}. Every candidate is simulated in EnergyPlus against this site's
+            weather, must keep night CO₂ under its limit, and is judged on three things: how
+            far the occupied night falls below DRDO's 14 °C, the kerosene it burns, and the
+            tonnes of material brought in.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -62,11 +73,48 @@ export function SearchPanel({ meta }: { meta: MetaResponse | undefined }) {
       : 0;
 
   const points = (result?.front ?? []).map((point) => ({
-    degreeHours: point.objectives.degree_hours_total_kh ?? 0,
-    cost: point.objectives.total_cost_inr ?? 0,
+    hash: point.design_hash,
+    degreeHours: objective(point, "night_degree_hours_below_kh") ?? 0,
+    litres: objective(point, "heating_litres") ?? 0,
+    tonnes: objective(point, "imported_tonnes") ?? 0,
     feasible: point.feasible,
     knee: point.design_hash === result?.knee_hash,
+    shortlisted: (result?.robustness ?? []).some(
+      (row) => row.selected && row.design_hash === point.design_hash,
+    ),
   }));
+
+  const facts = best
+    ? [
+        {
+          term: "coldest night hour",
+          value: num(metric(best, "minimum_overnight_operative_c"), 1),
+          unit: "°C",
+        },
+        {
+          term: OBJECTIVE_LABEL.night_degree_hours_below_kh.label,
+          value: num(objective(best, "night_degree_hours_below_kh"), 0),
+          unit: OBJECTIVE_LABEL.night_degree_hours_below_kh.unit,
+        },
+        {
+          term: OBJECTIVE_LABEL.heating_litres.label,
+          value: num(objective(best, "heating_litres"), 1),
+          unit: OBJECTIVE_LABEL.heating_litres.unit,
+        },
+        {
+          term: OBJECTIVE_LABEL.imported_tonnes.label,
+          value: num(objective(best, "imported_tonnes"), 2),
+          unit: OBJECTIVE_LABEL.imported_tonnes.unit,
+        },
+        {
+          term: "highest night CO₂",
+          value: num(metric(best, "peak_night_co2_ppm"), 0),
+          unit: `ppm, limit ${num(metric(best, "co2_limit_ppm"), 0)}`,
+        },
+      ]
+    : [];
+
+  const frontByHash = new Map((result?.front ?? []).map((point) => [point.design_hash, point]));
 
   return (
     <div className="space-y-6">
@@ -98,6 +146,7 @@ export function SearchPanel({ meta }: { meta: MetaResponse | undefined }) {
         {!running && result && (
           <p className="tnum text-[13px] text-[var(--color-ink-faint)]">
             {result.evaluated} designs simulated in {num(result.runtime_s, 0)} s
+            {site ? ` at ${site.name}` : ""}
           </p>
         )}
         {search.failure && <Failure error={search.failure} />}
@@ -111,38 +160,21 @@ export function SearchPanel({ meta }: { meta: MetaResponse | undefined }) {
             </p>
             <p className="mt-1 text-xl font-semibold tracking-tight">{describeDesign(best.design)}</p>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--color-ink-dim)]">
-              Of the designs simulated, this one sits closest to the ideal corner once warmth,
-              cost and the worst design night are weighed together. The others on the chart are
-              all defensible; choosing between them is a judgement about budget and buildability.
+              Of the designs that kept night CO₂ under the limit, this one bulges furthest
+              toward the ideal corner from the line joining the best design on each measure.
+              The others on the chart are all defensible; choosing between them is a judgement
+              about fuel against airlift.
             </p>
           </div>
-          <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-3">
-            {[
-              {
-                term: headline.replace(/_/g, " "),
-                value: num(best.metrics?.minimum_overnight_operative_c, 1),
-                unit: "°C",
-              },
-              {
-                term: "hours outside the comfort band",
-                value: num(best.metrics?.hours_outside_band, 0),
-                unit: "h",
-              },
-              {
-                term: "delivered material cost",
-                value: rupees(best.objectives.total_cost_inr ?? 0),
-                unit: "",
-              },
-            ].map((item) => (
+          <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+            {facts.map((item) => (
               <div key={item.term}>
                 <dt className="text-[13px] text-[var(--color-ink-faint)]">{item.term}</dt>
                 <dd className="tnum mt-1 text-lg font-semibold">
                   {item.value}
-                  {item.unit && (
-                    <span className="ml-1 text-sm font-normal text-[var(--color-ink-dim)]">
-                      {item.unit}
-                    </span>
-                  )}
+                  <span className="ml-1 text-sm font-normal text-[var(--color-ink-dim)]">
+                    {item.unit}
+                  </span>
                 </dd>
               </div>
             ))}
@@ -179,11 +211,87 @@ export function SearchPanel({ meta }: { meta: MetaResponse | undefined }) {
         </div>
       )}
 
+      {(result?.robustness ?? []).length > 0 && (
+        <div className="panel space-y-3 p-5">
+          <div>
+            <h3 className="text-base font-semibold tracking-tight">Shortlist for ANSYS</h3>
+            <p className="mt-1 text-sm leading-relaxed text-[var(--color-ink-dim)]">
+              The five best by the knee rule, each re-run at every corner of its uncertain
+              inputs. Ranked by the worst corner, because a design that is best on paper and
+              fragile in the field is the wrong one to confirm. The top three go on to ANSYS.
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-[13px]">
+              <thead className="text-[11px] uppercase tracking-wide text-[var(--color-ink-faint)]">
+                <tr>
+                  <th className="py-1 pr-3 font-medium">Robust</th>
+                  <th className="py-1 pr-3 font-medium">Design</th>
+                  <th className="py-1 pr-3 font-medium">Nominal</th>
+                  <th className="py-1 pr-3 font-medium">Across corners</th>
+                  <th className="py-1 pr-3 font-medium">Driven by</th>
+                  <th className="py-1 font-medium" />
+                </tr>
+              </thead>
+              <tbody>
+                {[...(result?.robustness ?? [])]
+                  .sort((a, b) => a.robust_rank - b.robust_rank)
+                  .map((row) => {
+                    const point = frontByHash.get(row.design_hash);
+                    return (
+                      <tr key={row.design_hash} className="border-t border-[var(--color-line-soft)]">
+                        <td className="tnum py-2 pr-3 font-semibold">
+                          #{row.robust_rank}
+                          {row.selected && (
+                            <span className="ml-2 rounded bg-[var(--color-good)]/15 px-1.5 py-0.5 text-[11px] font-medium text-[var(--color-good)]">
+                              to ANSYS
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2 pr-3 text-[var(--color-ink-dim)]">
+                          {point ? describeDesign(point.design) : row.design_hash.slice(0, 8)}
+                          <span className="ml-1 text-[var(--color-ink-faint)]">
+                            (knee #{row.knee_rank})
+                          </span>
+                        </td>
+                        <td className="tnum py-2 pr-3">
+                          {num(row.nominal, 0)} {row.unit}
+                        </td>
+                        <td className="tnum py-2 pr-3">
+                          {num(row.best, 0)} to {num(row.worst, 0)} {row.unit}
+                        </td>
+                        <td className="py-2 pr-3 text-[var(--color-ink-faint)]">
+                          {row.dominant_parameter ?? "no uncertain inputs"}
+                        </td>
+                        <td className="py-2 text-right">
+                          {point && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                store.applyOverride(point.design);
+                                store.open("3d model");
+                              }}
+                              className="rounded-md border border-[var(--color-line)] px-2 py-1 text-[12px] hover:border-[var(--color-solar)]"
+                            >
+                              Open
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {points.length > 0 && (
         <div className="panel space-y-3 p-5">
           <p className="text-sm text-[var(--color-ink-dim)]">
-            Every design the search kept. Left is warmer, down is cheaper, and the highlighted
-            point is the recommendation.
+            Every design the search kept. Left is warmer at night, down burns less kerosene,
+            and larger points bring in more material. The highlighted point is the
+            recommendation; outlined points are the ANSYS shortlist.
           </p>
           <div className="h-[300px]">
             <ResponsiveContainer>
@@ -192,17 +300,25 @@ export function SearchPanel({ meta }: { meta: MetaResponse | undefined }) {
                 <XAxis
                   type="number"
                   dataKey="degreeHours"
-                  name="degree hours"
+                  name="night degree hours"
                   tick={axis}
                   stroke="var(--color-line)"
                   label={{
-                    value: "degree hours outside the band (Kh)",
+                    value: "night degree hours below 14 °C (Kh)",
                     position: "insideBottom",
                     offset: -16,
                     ...axis,
                   }}
                 />
-                <YAxis type="number" dataKey="cost" name="cost" tick={axis} stroke="var(--color-line)" width={72} />
+                <YAxis
+                  type="number"
+                  dataKey="litres"
+                  name="kerosene"
+                  tick={axis}
+                  stroke="var(--color-line)"
+                  width={56}
+                  label={{ value: "litres", angle: -90, position: "insideLeft", ...axis }}
+                />
                 <Tooltip
                   cursor={{ strokeDasharray: "3 3" }}
                   contentStyle={{
@@ -213,13 +329,13 @@ export function SearchPanel({ meta }: { meta: MetaResponse | undefined }) {
                     fontSize: 12,
                   }}
                   formatter={(value: number, key: string) =>
-                    key === "cost" ? rupees(value) : num(value, 0)
+                    key === "kerosene" ? `${num(value, 1)} L` : `${num(value, 0)} Kh`
                   }
                 />
                 <Scatter data={points}>
-                  {points.map((point, index) => (
+                  {points.map((point) => (
                     <Cell
-                      key={index}
+                      key={point.hash}
                       fill={
                         point.knee
                           ? "var(--color-solar)"
@@ -227,7 +343,9 @@ export function SearchPanel({ meta }: { meta: MetaResponse | undefined }) {
                             ? "var(--color-cold)"
                             : "var(--color-diesel)"
                       }
-                      r={point.knee ? 7 : 4}
+                      stroke={point.shortlisted ? "var(--color-good)" : undefined}
+                      strokeWidth={point.shortlisted ? 2.5 : 0}
+                      r={point.knee ? 8 : 3 + Math.min(6, point.tonnes)}
                     />
                   ))}
                 </Scatter>
@@ -235,9 +353,9 @@ export function SearchPanel({ meta }: { meta: MetaResponse | undefined }) {
             </ResponsiveContainer>
           </div>
           <p className="text-[13px] leading-relaxed text-[var(--color-ink-faint)]">
-            Red points broke a constraint and are shown rather than hidden. Rupee figures come
-            from delivered material rates that carry no verified source yet, so read the cost
-            axis as relative.
+            Red points broke a limit, usually night CO₂, and are shown rather than hidden.
+            Rupees are left out until they come from the UT Ladakh schedule of rates; litres
+            and tonnes are what a post and an airlift actually count.
           </p>
         </div>
       )}

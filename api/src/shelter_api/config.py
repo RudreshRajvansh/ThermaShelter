@@ -31,7 +31,7 @@ class Settings:
     comfort_model_id: str = field(
         default_factory=lambda: os.environ.get("SHELTER_COMFORT_MODEL",
                                                "drdo_tot_band"))
-    fuel: str = field(default_factory=lambda: os.environ.get("SHELTER_FUEL", "diesel"))
+    fuel: str = field(default_factory=lambda: os.environ.get("SHELTER_FUEL", "kerosene"))
     allow_origins: tuple[str, ...] = field(
         default_factory=lambda: tuple(
             item.strip() for item in os.environ.get(

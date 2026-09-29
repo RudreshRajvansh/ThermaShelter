@@ -9,13 +9,27 @@ import {
 import { activeDesign, describeDesign, useStore, type SearchState } from "../lib/store";
 import { num } from "../lib/format";
 
-export const LEVERS: DesignVariable[] = [
-  { name: "wall.layers.2.thickness_m", kind: "real", low: 0.15, high: 0.55, options: null },
-  { name: "wall.layers.1.thickness_m", kind: "real", low: 0.02, high: 0.18, options: null },
-  { name: "windows.south.wwr", kind: "real", low: 0.08, high: 0.45, options: null },
-];
+export const LEVER_NAMES =
+  "wall mass and its material, wall, roof and floor insulation and their material, " +
+  "plan proportion, ceiling height, orientation, south glazing, shutters, glazing type, " +
+  "arrangement and a phase change layer";
 
-export const LEVER_NAMES = "wall mass, insulation thickness and south glazing area";
+export const OBJECTIVES = [
+  "night_degree_hours_below_kh",
+  "heating_litres",
+  "imported_tonnes",
+] as const;
+
+export const OBJECTIVE_LABEL: Record<string, { label: string; unit: string }> = {
+  night_degree_hours_below_kh: { label: "night degree hours below 14 °C", unit: "Kh" },
+  heating_litres: { label: "kerosene to hold 14 °C at night", unit: "L" },
+  imported_tonnes: { label: "material brought in from outside Ladakh", unit: "t" },
+};
+
+async function leversFor(design: DesignSpec, siteId: string): Promise<DesignVariable[]> {
+  const levers = await api.searchLevers(design, siteId);
+  return levers.map((lever) => lever.variable);
+}
 
 export function bestPoint(result: ParetoResult | null): ParetoPoint | null {
   if (!result || result.front.length === 0) return null;
@@ -38,18 +52,22 @@ export function SearchRunner() {
     pushed.current = null;
     updateSearch({ token: searchRequest.token, jobId: null, result: null, failure: null });
     const { budget } = searchRequest;
-    api
-      .optimise({
-        base_design: design,
-        variables: LEVERS,
-        objectives: ["degree_hours_total_kh", "total_cost_inr", "worst_night_margin_k"],
-        constraints: { max_condensation_hours: 2000, max_wall_thickness_m: 0.9 },
-        population_size: budget.size,
-        generations: Math.max(2, Math.round(budget.designs / budget.size)),
-        seed: 1,
-        site_id: siteId,
-        period,
-      })
+    leversFor(design, siteId)
+      .then((variables) =>
+        api.optimise({
+          base_design: design,
+          variables,
+          objectives: [...OBJECTIVES],
+          constraints: { max_condensation_hours: 2000, max_wall_thickness_m: 0.9 },
+          population_size: budget.size,
+          generations: Math.max(2, Math.round(budget.designs / budget.size)),
+          seed: 1,
+          robust_top: 5,
+          robust_keep: 3,
+          site_id: siteId,
+          period,
+        }),
+      )
       .then((job) => updateSearch({ jobId: job.job_id }))
       .catch((error: unknown) =>
         updateSearch({ failure: error instanceof Error ? error.message : String(error) }),

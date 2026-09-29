@@ -48,6 +48,15 @@ export type ParetoResult = S["ParetoResult"];
 export type ParetoPoint = S["ParetoPoint"];
 export type OptimisationJob = S["OptimisationJob"];
 export type DesignVariable = S["DesignVariable"];
+export type LeverPayload = S["LeverPayload"];
+export type RobustnessRow = S["RobustnessRow"];
+export type DesignNightPayload = S["DesignNightPayload"];
+export type RefereePayload = S["RefereePayload"];
+export type MonthCheckPayload = S["MonthCheckPayload"];
+export type EndurancePayload = S["EndurancePayload"];
+export type LeftoverHeatPayload = S["LeftoverHeatPayload"];
+export type HorizonValuePayload = S["HorizonValuePayload"];
+export type AirQualityMetrics = S["AirQualityMetrics"];
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -161,9 +170,21 @@ export const api = {
     population_size?: number;
     generations?: number;
     seed?: number;
+    robust_top?: number;
+    robust_keep?: number;
     site_id?: string | null;
     period: Window;
   }) => post<OptimisationJob>("/api/optimise", payload),
+  searchLevers: (design: DesignSpec, siteId?: string | null) =>
+    post<LeverPayload[]>("/api/search-levers", { design, site_id: siteId ?? null }),
+  designNight: (siteId: string) =>
+    get<DesignNightPayload>(`/api/sites/${encodeURIComponent(siteId)}/design-night`),
+  referee: (siteId: string) =>
+    get<RefereePayload>(`/api/sites/${encodeURIComponent(siteId)}/referee`),
+  endurance: (payload: { design: DesignSpec; site_id?: string | null; floor_c?: number }) =>
+    post<EndurancePayload>("/api/endurance", payload),
+  horizonValue: (payload: { design: DesignSpec; site_id?: string | null; period: Window }) =>
+    post<HorizonValuePayload>("/api/horizon-value", payload),
   optimisationStatus: (jobId: string) =>
     get<OptimisationJob>(`/api/optimise/${jobId}`),
   terrain: (siteId: string | null | undefined, inner = 110, outer = 320) =>

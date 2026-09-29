@@ -12,7 +12,7 @@ import {
   Warnings,
 } from "../components/Kit";
 import { PerformanceChart } from "../components/PerformanceChart";
-import { ParetoExplorer } from "../components/Pareto";
+import { BreatheSafe, DrdoOutputs, FuelOut, SkylineValue } from "../components/DrdoOutputs";
 import { activeDesign, useStore } from "../lib/store";
 import { num, rupees, signed } from "../lib/format";
 
@@ -20,7 +20,6 @@ const TABS = [
   "summary",
   "materials",
   "heat flow",
-  "pareto explorer",
   "assumptions",
   "validation",
   "detailed analysis",
@@ -251,6 +250,11 @@ export function Results({
         />
       </div>
 
+      {!cooling && <DrdoOutputs result={simulation} />}
+      <BreatheSafe result={simulation} />
+      {!cooling && <FuelOut result={simulation} />}
+      <SkylineValue result={simulation} />
+
       <Panel
         title="Performance over time"
         subtitle="Operative temperature, not air temperature. The faint red line is what current construction does under the same weather, the same occupancy and the same period."
@@ -292,10 +296,26 @@ export function Results({
                 }
               />
               <Stat
-                label="Ventilation"
-                value={simulation.buildability.minimum_ventilation_met ? "Met" : "Not met"}
-                note="a health constraint that was satisfied, never a score"
-                tone={simulation.buildability.minimum_ventilation_met ? "good" : "bad"}
+                label="Night CO₂"
+                value={
+                  simulation.air_quality == null
+                    ? "not occupied"
+                    : simulation.air_quality.night_hours_above_limit > 0
+                      ? "Over the limit"
+                      : "Within the limit"
+                }
+                note={
+                  simulation.air_quality
+                    ? `peak ${num(simulation.air_quality.peak_night_co2_ppm, 0)} ppm against ${num(simulation.air_quality.co2_limit_ppm, 0)} ppm, a health limit held, never a score`
+                    : undefined
+                }
+                tone={
+                  simulation.air_quality == null
+                    ? "neutral"
+                    : simulation.air_quality.night_hours_above_limit > 0
+                      ? "bad"
+                      : "good"
+                }
               />
               <Stat
                 label="Indoor swing against outdoor"
@@ -436,8 +456,6 @@ export function Results({
               </p>
             </div>
           )}
-
-          {tab === "pareto explorer" && <ParetoExplorer />}
 
           {tab === "assumptions" && (
             <AssumptionTable assumptions={simulation.assumptions} />

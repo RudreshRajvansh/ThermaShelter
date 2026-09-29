@@ -722,7 +722,7 @@ def build_design_night(site: SiteSpec, data_dir: Path, fetch: Fetcher | None = N
 
 def build_referee(site: SiteSpec, data_dir: Path, fetch: Fetcher | None = None,
                   today: date | None = None) -> dict[str, Any]:
-    from shelter_engine.referee import NASA_POWER_CITATION, referee
+    from shelter_engine.referee import NASA_POWER_CITATION, NASA_POWER_NAME, referee
 
     data_dir = Path(data_dir)
     solar_path = _cache(data_dir, "solar_reference", site.id)
@@ -744,7 +744,8 @@ def build_referee(site: SiteSpec, data_dir: Path, fetch: Fetcher | None = None,
             solar_note = f"The satellite solar reference could not be fetched: {error}"
     weather = load_epw(site.epw_path, site)
     report = referee(weather.frame, site.latitude_deg, site.longitude_deg,
-                     load_stations(data_dir), solar, NASA_POWER_CITATION)
+                     load_stations(data_dir), solar, NASA_POWER_CITATION,
+                     NASA_POWER_NAME)
 
     def checks(items):
         return [{"month": item.month, "file": round(item.file_value, 3),

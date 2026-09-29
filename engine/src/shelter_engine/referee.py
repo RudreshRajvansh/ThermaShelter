@@ -15,6 +15,7 @@ SOLAR_TOLERANCE = 0.10
 TEMPERATURE_TOLERANCE_K = 3.0
 MONTH_NAMES = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct",
                "Nov", "Dec")
+NASA_POWER_NAME = "NASA POWER"
 NASA_POWER_CITATION = ("NASA POWER, all sky surface shortwave downward irradiance "
                        "(ALLSKY_SFC_SW_DWN), from CERES SYN1deg, monthly means")
 
@@ -99,7 +100,9 @@ def _monthly_solar_kwh_m2_day(ghi_wh_m2: pd.Series) -> dict[int, float]:
 def referee(frame: pd.DataFrame, latitude_deg: float, longitude_deg: float,
             stations: list[Mapping[str, Any]] | None = None,
             solar_reference: Mapping[int, float] | None = None,
-            solar_source: str | None = None) -> RefereeReport:
+            solar_source: str | None = None,
+            solar_name: str | None = None) -> RefereeReport:
+    solar_label = solar_name or solar_source or "the satellite reference"
     if "dry_bulb_c" not in frame or frame["dry_bulb_c"].dropna().empty:
         raise WeatherError("the weather frame has no dry bulb temperature")
     dry = frame["dry_bulb_c"].dropna()
@@ -181,14 +184,14 @@ def referee(frame: pd.DataFrame, latitude_deg: float, longitude_deg: float,
             worst = max(high, key=lambda check: check.ratio or 0.0)
             flags.append(
                 f"The weather file's sunshine is more than {SOLAR_TOLERANCE:.0%} above "
-                f"{solar_source or 'the satellite reference'} in {len(high)} months, by "
+                f"{solar_label} in {len(high)} months, by "
                 f"up to {(worst.ratio - 1.0):.0%} in {MONTH_NAMES[worst.month - 1]}. Too "
                 "much sun makes a passive design look better than it is.")
         if low:
             worst = min(low, key=lambda check: check.ratio or 0.0)
             flags.append(
                 f"The weather file's sunshine is more than {SOLAR_TOLERANCE:.0%} below "
-                f"{solar_source or 'the satellite reference'} in {len(low)} months, by up "
+                f"{solar_label} in {len(low)} months, by up "
                 f"to {(1.0 - worst.ratio):.0%} in {MONTH_NAMES[worst.month - 1]}.")
     elif solar_reference is None:
         notes.append("No satellite solar reference is on file for this site.")

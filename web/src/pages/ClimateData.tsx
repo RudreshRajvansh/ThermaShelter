@@ -18,6 +18,7 @@ import {
 } from "recharts";
 import { api } from "../lib/api";
 import { Failure, Loading, Panel, Stat, Warnings } from "../components/Kit";
+import { DesignNight, WeatherReferee } from "../components/WeatherCheck";
 import { useStore } from "../lib/store";
 import { num } from "../lib/format";
 
@@ -119,6 +120,9 @@ export function ClimateData() {
           />
         </div>
       </Panel>
+
+      {store.siteId && <WeatherReferee siteId={store.siteId} />}
+      {store.siteId && <DesignNight siteId={store.siteId} />}
 
       <Panel
         title="Air pressure at altitude"
