@@ -1,0 +1,77 @@
+{
+  "site_id": "leh",
+  "night_of": "2025-01-16",
+  "minimum_c": -20.8,
+  "return_level_c": -20.28,
+  "return_period_years": 10.0,
+  "gumbel_location_c": -16.155,
+  "gumbel_scale_k": 1.833,
+  "winters": [
+    {
+      "winter": 2018,
+      "night_of": "2018-01-02",
+      "minimum_c": -13.6,
+      "observed_c": -15.2
+    },
+    {
+      "winter": 2019,
+      "night_of": "2019-01-28",
+      "minimum_c": -19.3,
+      "observed_c": -17.5
+    },
+    {
+      "winter": 2020,
+      "night_of": "2019-12-16",
+      "minimum_c": -16.2,
+      "observed_c": -20.7
+    },
+    {
+      "winter": 2021,
+      "night_of": "2020-12-16",
+      "minimum_c": -17.8,
+      "observed_c": -16.4
+    },
+    {
+      "winter": 2022,
+      "night_of": "2022-01-27",
+      "minimum_c": -16.3,
+      "observed_c": -18.0
+    },
+    {
+      "winter": 2023,
+      "night_of": "2023-01-17",
+      "minimum_c": -16.2,
+      "observed_c": -16.8
+    },
+    {
+      "winter": 2024,
+      "night_of": "2024-02-02",
+      "minimum_c": -16.2,
+      "observed_c": -18.0
+    },
+    {
+      "winter": 2025,
+      "night_of": "2025-02-06",
+      "minimum_c": -20.9,
+      "observed_c": null
+    },
+    {
+      "winter": 2026,
+      "night_of": "2026-01-24",
+      "minimum_c": -17.6,
+      "observed_c": null
+    }
+  ],
+  "source": "ECMWF IFS 9 km analysis, downscaled to the site elevation by Open-Meteo",
+  "source_model": "ecmwf_ifs",
+  "source_note": "Chosen over ERA5 and ERA5-Land after checking all three against IMD's own record at Leh: over the winters both cover, the coldest night in ERA5 averaged 8.3 K and in ERA5-Land 11.3 K colder than the station observed, while IFS came within 1.0 K. The coarse grids see a smoothed plateau, not the valley a post sits in.",
+  "station": "Leh",
+  "station_distance_km": 3.33,
+  "epw_path": "weather/leh_design_2025.epw",
+  "run_start": "2025-01-10",
+  "run_end": "2025-01-17",
+  "notes": [
+    "The fit rests on 9 winters, so the 10 year return level is an extrapolation beyond most of the record.",
+    "Against 7 observed winters the source's coldest night differs by +1.0 K on average."
+  ]
+}

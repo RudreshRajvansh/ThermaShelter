@@ -19,14 +19,16 @@ from .comfort import ComfortCatalogue, comfort_bounds_frame, evaluate_comfort, l
 from .config import SETTINGS, EngineSettings, EnergyPlusInstall, find_energyplus
 from .constructions import ConstructionSet, build_constructions
 from .costing import buildability, cost_breakdown, envelope_u_values, glazing_u_values
+from .endurance import (CUTOFF_HOUR, FLOOR_C, EnduranceResult, coast_down, cutoff_for,
+                        night_window, window_sum)
 from .errors import EngineError, SimulationFailed
 from .geometry import GeometryModel, ROOM, build_geometry
 from .hashing import stable_hash
 from .idf import IdfBundle, build_idf
 from .materials import MaterialLibrary
 from .mesh import build_mesh
-from .metrics import (ZoneSeries, air_quality, airflow_summary, condensation,
-                      energy_metrics,
+from .metrics import (HEATING_CANDIDATES as HEATING_ENERGY_CANDIDATES, ZoneSeries,
+                      air_quality, airflow_summary, condensation, energy_metrics,
                       heat_balance, solar_gain_by_facade, surface_frames,
                       zone_series)
 from .optimize import Metrics, optimise
@@ -519,6 +521,48 @@ class Engine:
     @property
     def _outdoor_history(self):
         return self.weather.frame["dry_bulb_c"]
+
+    def endurance(self, design: DesignSpec, night_of: date, period: RunPeriod,
+                  floor_c: float = FLOOR_C,
+                  cutoff_hour: int = CUTOFF_HOUR) -> EnduranceResult:
+        cutoff = cutoff_for(night_of, cutoff_hour)
+        base = RunOptions(period=period, surface_output=False, conditioned_run=True)
+        cut = base.model_copy(update={"heating_cutoff": cutoff})
+        key = stable_hash("endurance", design, self.site, base, cutoff, floor_c,
+                          self.library.fingerprint, __version__)
+        cached = self._cache.get(key)
+        if cached is not None:
+            return cached
+        heated = self._run(design, base, conditioned=True)
+        coasting = self._run(design, cut, conditioned=True)
+        nominal = self._in_nominal_year(night_of)
+        reached, hours, start, lowest, lowest_at, span = coast_down(
+            coasting.series.operative_c, cutoff_for(nominal, cutoff_hour), floor_c)
+        lowest_at = lowest_at.replace(year=lowest_at.year + night_of.year - nominal.year) \
+            if night_of.month != 2 or night_of.day != 29 else lowest_at
+        night_start, night_end = night_window(nominal)
+        joules = pd.Series(dtype=float)
+        for name in HEATING_ENERGY_CANDIDATES:
+            wide = heated.output.wide(name)
+            if not wide.empty:
+                joules = wide.sum(axis=1)
+                break
+        night_kwh = window_sum(joules, night_start, night_end) / 3_600_000.0
+        result = EnduranceResult(
+            night_of=night_of, cutoff=cutoff, floor_c=floor_c, reached_floor=reached,
+            hours_above_floor=hours, operative_at_cutoff_c=start,
+            minimum_after_cutoff_c=lowest, minimum_at=lowest_at,
+            hours_simulated_after_cutoff=span, night_heating_kwh=night_kwh,
+            night_fuel_units=self.fuel.units_for(night_kwh) if self.fuel else None,
+            fuel_unit_name=self.fuel.unit if self.fuel else None,
+            fuel=self.fuel.fuel if self.fuel else None)
+        self._cache.set(key, result)
+        return result
+
+    def _in_nominal_year(self, day: date) -> date:
+        if day.month == 2 and day.day == 29:
+            return date(self._nominal_year, 2, 28)
+        return day.replace(year=self._nominal_year)
 
     def _air_quality_warnings(self, breathing) -> list[EngineWarning]:
         if breathing is None or breathing.night_hours_above_limit <= 0.0:

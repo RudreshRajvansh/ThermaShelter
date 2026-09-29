@@ -652,6 +652,7 @@ class RunOptions(Frozen):
     heating_setpoint_c: float = Field(default=14.0, ge=0.0, le=35.0)
     heating_from_hour: int = Field(default=18, ge=0, le=23)
     heating_until_hour: int = Field(default=6, ge=0, le=23)
+    heating_cutoff: datetime | None = None
     cooling_setpoint_c: float = Field(default=29.0, ge=5.0, le=45.0)
     surface_output: bool = True
     surface_output_period: RunPeriod | None = None
@@ -678,6 +679,9 @@ class RunOptions(Frozen):
         if window is not None and not (
                 window.start >= self.period.start and window.end <= self.period.end):
             raise ValueError("surface_output_period must lie inside period")
+        cutoff = self.heating_cutoff
+        if cutoff is not None and not self.period.contains(cutoff):
+            raise ValueError("heating_cutoff must fall inside the run period")
         return self
 
     @property

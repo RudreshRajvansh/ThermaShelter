@@ -281,6 +281,92 @@ class SiteDetail(Body):
     substituted_km: float | None = None
 
 
+class EnduranceRequest(Body):
+    design: DesignSpec
+    site_id: str | None = None
+    floor_c: float = Field(default=5.0, ge=-10.0, le=20.0)
+    cutoff_hour: int = Field(default=18, ge=0, le=23)
+    extra_days: int = Field(default=2, ge=0, le=10)
+    fuel: Literal["kerosene", "diesel"] = "kerosene"
+
+
+class EndurancePayload(Body):
+    site_id: str
+    night_of: str
+    design_night_minimum_c: float
+    return_level_c: float
+    return_period_years: float
+    cutoff: str
+    floor_c: float
+    floor_source: SourceRef
+    reached_floor: bool
+    hours_above_floor: float
+    hours_simulated_after_cutoff: float
+    operative_at_cutoff_c: float
+    minimum_after_cutoff_c: float
+    minimum_at: str
+    night_heating_kwh: float
+    night_fuel_units: float | None = None
+    fuel: str | None = None
+    fuel_unit_name: str | None = None
+    weather_source: str
+
+
+class WinterMinimumPayload(Body):
+    winter: int
+    night_of: str
+    minimum_c: float
+    observed_c: float | None = None
+
+
+class DesignNightPayload(Body):
+    site_id: str
+    night_of: str
+    minimum_c: float
+    return_level_c: float
+    return_period_years: float
+    gumbel_location_c: float
+    gumbel_scale_k: float
+    winters: list[WinterMinimumPayload]
+    source: str
+    source_model: str
+    source_note: str
+    station: str | None = None
+    station_distance_km: float | None = None
+    epw_path: str
+    run_start: str
+    run_end: str
+    notes: list[str] = Field(default_factory=list)
+
+
+class MonthCheckPayload(Body):
+    month: int = Field(ge=1, le=12)
+    file: float
+    reference: float
+    difference: float
+    ratio: float | None = None
+
+
+class RefereePayload(Body):
+    site_id: str
+    weather_file: str
+    station: str | None = None
+    station_distance_km: float | None = None
+    night_minimum: list[MonthCheckPayload] = Field(default_factory=list)
+    day_maximum: list[MonthCheckPayload] = Field(default_factory=list)
+    hours_below_record_low: int = 0
+    coldest_hour_c: float | None = None
+    record_low_c: float | None = None
+    record_low_date: str | None = None
+    solar: list[MonthCheckPayload] = Field(default_factory=list)
+    annual_solar_file_kwh_m2: float | None = None
+    annual_solar_reference_kwh_m2: float | None = None
+    solar_source: str | None = None
+    solar_factors: dict[int, float] = Field(default_factory=dict)
+    flags: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
 class ValidationEvidence(Body):
     standard_140: dict[str, Any] | None = None
     thermal_bridge: dict[str, Any] | None = None

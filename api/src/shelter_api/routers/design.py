@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date as date_type
+from datetime import timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -20,7 +21,8 @@ from shelter_engine.schema import (ClimateSummary, ComparisonTable, GeometryPayl
 
 from ..deps import Context, get_context
 from ..schemas import (CFDAbsent, CFDBoundarySet, CFDFieldSet, CompareRequest,
-                       GeometryRequest, SimulateRequest, SurfaceRequest)
+                       EndurancePayload, EnduranceRequest, GeometryRequest,
+                       SimulateRequest, SurfaceRequest)
 
 router = APIRouter()
 
@@ -37,6 +39,54 @@ def _translate(error: Exception) -> HTTPException:
     if isinstance(error, EngineError):
         return HTTPException(status_code=422, detail=str(error))
     raise error
+
+
+@router.post("/endurance", response_model=EndurancePayload, tags=["design"])
+def endurance(request: EnduranceRequest,
+              context: Context = Depends(get_context)) -> EndurancePayload:
+    from shelter_engine.endurance import FLOOR_SOURCE
+    from shelter_engine.schema import RunPeriod
+
+    from .. import sites as site_builder
+
+    site = context.site(request.site_id)
+    try:
+        night = site_builder.build_design_night(site, Path(context.settings.data_dir))
+    except site_builder.SiteUnavailable as error:
+        raise HTTPException(
+            status_code=503,
+            detail=f"No design night is available for {site.name}: {error}") from error
+    night_of = date_type.fromisoformat(night["night_of"])
+    start = date_type.fromisoformat(night["run_start"])
+    end = min(date_type(night_of.year, 12, 31),
+              date_type.fromisoformat(night["run_end"])
+              + timedelta(days=request.extra_days))
+    engine = context.design_night_engine(request.site_id, request.fuel, night)
+    try:
+        result = engine.endurance(request.design,
+                                  night_of, RunPeriod(start=start, end=end,
+                                                      label="design night"),
+                                  floor_c=request.floor_c,
+                                  cutoff_hour=request.cutoff_hour)
+    except Exception as error:
+        raise _translate(error) from error
+    return EndurancePayload(
+        site_id=site.id, night_of=night["night_of"],
+        design_night_minimum_c=night["minimum_c"],
+        return_level_c=night["return_level_c"],
+        return_period_years=night["return_period_years"],
+        cutoff=result.cutoff.isoformat(), floor_c=result.floor_c,
+        floor_source=FLOOR_SOURCE, reached_floor=result.reached_floor,
+        hours_above_floor=round(result.hours_above_floor, 1),
+        hours_simulated_after_cutoff=round(result.hours_simulated_after_cutoff, 1),
+        operative_at_cutoff_c=round(result.operative_at_cutoff_c, 2),
+        minimum_after_cutoff_c=round(result.minimum_after_cutoff_c, 2),
+        minimum_at=result.minimum_at.isoformat(),
+        night_heating_kwh=round(result.night_heating_kwh, 2),
+        night_fuel_units=(round(result.night_fuel_units, 2)
+                          if result.night_fuel_units is not None else None),
+        fuel=result.fuel, fuel_unit_name=result.fuel_unit_name,
+        weather_source=night["source"])
 
 
 @router.post("/geometry", response_model=GeometryPayload, tags=["design"])

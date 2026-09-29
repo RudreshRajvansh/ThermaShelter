@@ -1,0 +1,21 @@
+{
+  "site_id": "leh",
+  "source": "NASA POWER, all sky surface shortwave downward irradiance (ALLSKY_SFC_SW_DWN), from CERES SYN1deg, monthly means",
+  "url": "https://power.larc.nasa.gov/api/temporal/monthly/point",
+  "years": "2011-2025",
+  "unit": "kWh/m2/day",
+  "monthly": {
+    "1": 2.8802999999999996,
+    "2": 3.61386,
+    "3": 5.08894,
+    "4": 6.227153333333332,
+    "5": 7.034773333333334,
+    "6": 6.853886666666666,
+    "7": 6.835066666666667,
+    "8": 6.232013333333333,
+    "9": 5.684646666666667,
+    "10": 4.46704,
+    "11": 3.4488133333333337,
+    "12": 2.8527733333333334
+  }
+}

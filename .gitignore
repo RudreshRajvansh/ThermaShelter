@@ -27,3 +27,9 @@ data/terrain/tiles/
 pyfluent_watchdog.err
 **/__pycache__/
 web/tsconfig.tsbuildinfo
+data/design_nights/n[0-9]*_*.json
+data/design_nights/s[0-9]*_*.json
+data/solar_reference/n[0-9]*_*.json
+data/solar_reference/s[0-9]*_*.json
+data/weather/n[0-9]*_design_*.epw
+data/weather/s[0-9]*_design_*.epw

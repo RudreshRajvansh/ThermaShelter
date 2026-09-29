@@ -95,6 +95,28 @@ class Context:
             self._engines[key] = engine
             return engine
 
+    def design_night_engine(self, site_id: str | None, fuel: str,
+                            night: dict) -> Engine:
+        base = self.engine(site_id)
+        path = Path(night["epw_path"])
+        if not path.is_absolute():
+            path = (Path(self.settings.data_dir) / path).resolve()
+        key = (base.site.id, f"design_night:{path.name}:{fuel}")
+        with self._lock:
+            existing = self._engines.get(key)
+            if existing is not None:
+                return existing
+            try:
+                engine = Engine(base.site.model_copy(update={"epw_path": str(path)}),
+                                self.library, comfort_model_id=base.comfort_model.id,
+                                fuel=fuel, references=self.references,
+                                catalogue=self.catalogue,
+                                cfd_directory=self.settings.cfd_dir)
+            except (EngineError, WeatherError) as error:
+                raise HTTPException(status_code=503, detail=str(error)) from error
+            self._engines[key] = engine
+            return engine
+
     def add_site(self, site: SiteSpec) -> None:
         with self._lock:
             self.sites[site.id] = site

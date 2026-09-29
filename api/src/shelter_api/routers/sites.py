@@ -10,7 +10,8 @@ from shelter_engine.weather import load_epw_cached
 
 from .. import sites as site_builder
 from ..deps import Context, get_context
-from ..schemas import PlaceResult, ResolveSiteRequest, SiteDetail, SiteProvenance
+from ..schemas import (DesignNightPayload, PlaceResult, RefereePayload,
+                       ResolveSiteRequest, SiteDetail, SiteProvenance)
 from .catalog import summarise_site
 
 router = APIRouter()
@@ -118,3 +119,31 @@ def site_detail(site_id: str, context: Context = Depends(get_context)) -> SiteDe
     if not notes and site.source is not None:
         notes = tuple(part for part in (site.source.citation, site.source.note) if part)
     return _detail(site, provenance, notes, False)
+
+
+@router.get("/sites/{site_id}/design-night", response_model=DesignNightPayload,
+            tags=["site"])
+def design_night(site_id: str,
+                 context: Context = Depends(get_context)) -> DesignNightPayload:
+    site = context.site(site_id)
+    try:
+        payload = site_builder.build_design_night(site, Path(context.settings.data_dir))
+    except site_builder.SiteUnavailable as error:
+        raise HTTPException(
+            status_code=503,
+            detail=(f"The design night for {site.name} is not on this machine and could "
+                    f"not be built: {error}")) from error
+    return DesignNightPayload.model_validate(payload)
+
+
+@router.get("/sites/{site_id}/referee", response_model=RefereePayload, tags=["site"])
+def weather_referee(site_id: str,
+                    context: Context = Depends(get_context)) -> RefereePayload:
+    site = _absolute(context, context.site(site_id))
+    try:
+        payload = site_builder.build_referee(site, Path(context.settings.data_dir))
+    except WeatherError as error:
+        raise HTTPException(status_code=422,
+                            detail=f"The weather file could not be checked: {error}") \
+            from error
+    return RefereePayload.model_validate(payload)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
@@ -305,6 +306,39 @@ def _all_days_schedule(idf, name: str, active_hours: Sequence[int],
     return _compact_schedule(idf, name, limits,
                              [(("AllDays",), _hour_profile(active_hours, on_value,
                                                            off_value))])
+
+
+def _heating_schedule(idf, name: str, active_hours: Sequence[int], on_value: float,
+                      off_value: float, cutoff: datetime | None) -> str:
+    if cutoff is None:
+        return _all_days_schedule(idf, name, active_hours, on_value, off_value,
+                                  TEMPERATURE_LIMITS)
+    obj = _new(idf, "Schedule:Compact", Name=name,
+               Schedule_Type_Limits_Name=TEMPERATURE_LIMITS)
+    fields: list[Any] = []
+
+    def block(through: str, steps: Sequence[tuple[int, float]]) -> None:
+        fields.append(f"Through: {through}")
+        fields.append("For: AllDays")
+        last = 0
+        for until_hour, value in steps:
+            if until_hour <= last and until_hour != 24:
+                continue
+            fields.append(f"Until: {until_hour:02d}:00")
+            fields.append(value)
+            last = until_hour
+
+    day = cutoff.date()
+    before = day - timedelta(days=1)
+    if day.month != 1 or day.day != 1:
+        block(f"{before.month}/{before.day}",
+              _hour_profile(active_hours, on_value, off_value))
+    last_hours = [hour for hour in active_hours if hour < cutoff.hour]
+    block(f"{day.month}/{day.day}", _hour_profile(last_hours, on_value, off_value))
+    if day.month != 12 or day.day != 31:
+        block("12/31", [(24, off_value)])
+    _append_extensible(obj, fields)
+    return name
 
 
 def _compliance_days(compliance: float) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -971,8 +1005,9 @@ def build_idf(design: DesignSpec, site: SiteSpec, model: GeometryModel,
                            design.arrangement_params.coupling_hours)
     if conditioned:
         heating_hours = () if occupancy.unoccupied else options.heating_hours
-        _all_days_schedule(idf, HEATING_SETPOINT_SCHEDULE, heating_hours,
-                           options.heating_setpoint_c, HEATING_OFF_C, TEMPERATURE_LIMITS)
+        _heating_schedule(idf, HEATING_SETPOINT_SCHEDULE, heating_hours,
+                          options.heating_setpoint_c, HEATING_OFF_C,
+                          options.heating_cutoff)
         _constant_schedule(idf, COOLING_SETPOINT_SCHEDULE,
                            options.cooling_setpoint_c, TEMPERATURE_LIMITS)
         _constant_schedule(idf, CONTROL_TYPE_SCHEDULE, 4, CONTROL_LIMITS)
