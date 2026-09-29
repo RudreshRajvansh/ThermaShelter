@@ -402,7 +402,7 @@ def optimise(spec: OptimisationSpec, evaluate: Evaluator, site_id: str = "",
     if spec.workers > 1:
         from multiprocessing.pool import ThreadPool
 
-        from pymoo.core.problem import StarmapParallelization
+        from pymoo.parallelization import StarmapParallelization
         pool = ThreadPool(spec.workers)
         runner = StarmapParallelization(pool.starmap)
     problem, records = _build_problem(spec, evaluate, cache, failures, runner)

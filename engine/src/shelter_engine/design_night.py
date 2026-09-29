@@ -65,7 +65,7 @@ def nightly_minima(hourly_c: pd.Series) -> pd.Series:
     night = clean[(hours >= NIGHT_START_HOUR) | (hours < NIGHT_END_HOUR)]
     if night.empty:
         raise WeatherError("the hourly series has no night hours")
-    night_of = (night.index - pd.Timedelta(hours=NIGHT_END_HOUR)).normalize()
+    night_of = (night.index - pd.to_timedelta(NIGHT_END_HOUR, unit="h")).normalize()
     return night.groupby(night_of).min()
 
 

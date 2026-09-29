@@ -12,7 +12,7 @@ dependencies = [
     "pandas>=2.1,<3",
     "pydantic>=2.6,<3",
     "eppy>=0.5.63",
-    "pymoo>=0.6.1,<0.7",
+    "pymoo>=0.6.2,<0.7",
     "scipy>=1.11",
 ]
 
