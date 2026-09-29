@@ -30,7 +30,7 @@ class Settings:
         default_factory=lambda: os.environ.get("SHELTER_DEFAULT_SITE", "leh"))
     comfort_model_id: str = field(
         default_factory=lambda: os.environ.get("SHELTER_COMFORT_MODEL",
-                                               "imac_2016_nv"))
+                                               "drdo_tot_band"))
     fuel: str = field(default_factory=lambda: os.environ.get("SHELTER_FUEL", "diesel"))
     allow_origins: tuple[str, ...] = field(
         default_factory=lambda: tuple(

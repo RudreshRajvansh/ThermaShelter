@@ -29,8 +29,8 @@ COPY api/pyproject.toml ./api/
 COPY api/src ./api/src
 
 RUN pip install --no-cache-dir ./engine \
- && pip install --no-cache-dir --no-deps ./api \
- && pip install --no-cache-dir "fastapi>=0.110,<1" "uvicorn[standard]>=0.27,<1"
+ && pip install --no-cache-dir ./api \
+ && python -c "import shelter_api.main, shelter_api.sites, ladybug.epw, timezonefinder, zoneinfo, PIL.Image; zoneinfo.ZoneInfo('Asia/Kolkata')"
 
 COPY engine/tests ./engine/tests
 COPY scripts ./scripts
