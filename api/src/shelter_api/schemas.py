@@ -290,6 +290,19 @@ class EnduranceRequest(Body):
     fuel: Literal["kerosene", "diesel"] = "kerosene"
 
 
+class LeftoverHeatPayload(Body):
+    night_heating_kwh: float
+    night_peak_kw: float | None = None
+    litres: float | None = None
+    him_tapak_hours_low: float | None = None
+    him_tapak_hours_high: float | None = None
+    him_tapak_fuel_input_kw: list[float] | None = None
+    him_tapak_source: SourceRef
+    solar_storage_kwh: float
+    solar_system_source: SourceRef
+    notes: list[str] = Field(default_factory=list)
+
+
 class EndurancePayload(Body):
     site_id: str
     night_of: str
@@ -310,6 +323,8 @@ class EndurancePayload(Body):
     fuel: str | None = None
     fuel_unit_name: str | None = None
     weather_source: str
+    leftover_heat: LeftoverHeatPayload
+
 
 
 class WinterMinimumPayload(Body):

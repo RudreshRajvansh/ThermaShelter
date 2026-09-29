@@ -191,6 +191,31 @@ def test_window_sum_is_half_open():
                       datetime(2019, 1, 16, 20)) == 5.0
 
 
+def test_leftover_heat_turns_the_night_into_him_tapak_hours():
+    from shelter_engine.leftover_heat import leftover_heat
+    fuel = fixtures.fuel_model().model_copy(update={"fuel": "kerosene"})
+    spare = leftover_heat(30.0, 2500.0, fuel)
+    litres = 30.0 / (fuel.lower_heating_value_kwh_per_unit * fuel.appliance_efficiency)
+    assert spare.litres == pytest.approx(litres)
+    assert spare.him_tapak_hours_low == pytest.approx(litres / 0.7)
+    assert spare.him_tapak_hours_high == pytest.approx(litres / 0.5)
+    assert spare.solar_storage_kwh == 30.0
+    assert not spare.notes
+
+
+def test_leftover_heat_warns_when_one_heater_cannot_keep_up():
+    from shelter_engine.leftover_heat import leftover_heat
+    fuel = fixtures.fuel_model().model_copy(update={"fuel": "kerosene"})
+    assert any("cannot hold" in note for note in leftover_heat(30.0, 9000.0, fuel).notes)
+
+
+def test_leftover_heat_with_no_heat_needed_and_no_fuel():
+    from shelter_engine.leftover_heat import leftover_heat
+    spare = leftover_heat(-2.0, None, None)
+    assert spare.night_heating_kwh == 0.0 and spare.litres is None
+    assert any("needs no heat" in note for note in spare.notes)
+
+
 def test_a_cutoff_outside_the_run_is_refused():
     period = RunPeriod(start=date(2019, 1, 10), end=date(2019, 1, 16))
     with pytest.raises(ValueError):

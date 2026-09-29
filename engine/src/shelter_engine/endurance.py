@@ -32,6 +32,7 @@ class EnduranceResult:
     minimum_at: datetime
     hours_simulated_after_cutoff: float
     night_heating_kwh: float
+    night_peak_w: float | None
     night_fuel_units: float | None
     fuel_unit_name: str | None
     fuel: str | None

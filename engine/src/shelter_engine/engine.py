@@ -27,7 +27,8 @@ from .hashing import stable_hash
 from .idf import IdfBundle, build_idf
 from .materials import MaterialLibrary
 from .mesh import build_mesh
-from .metrics import (HEATING_CANDIDATES as HEATING_ENERGY_CANDIDATES, ZoneSeries,
+from .metrics import (HEATING_CANDIDATES as HEATING_ENERGY_CANDIDATES,
+                      HEATING_RATE_CANDIDATES, ZoneSeries,
                       air_quality, airflow_summary, condensation, energy_metrics,
                       heat_balance, solar_gain_by_facade, surface_frames,
                       zone_series)
@@ -548,11 +549,21 @@ class Engine:
                 joules = wide.sum(axis=1)
                 break
         night_kwh = window_sum(joules, night_start, night_end) / 3_600_000.0
+        peak = None
+        for name in HEATING_RATE_CANDIDATES:
+            wide = heated.output.wide(name)
+            if not wide.empty:
+                rate = wide.sum(axis=1)
+                window = rate[(rate.index >= pd.Timestamp(night_start))
+                              & (rate.index < pd.Timestamp(night_end))]
+                peak = float(window.max()) if not window.empty else None
+                break
         result = EnduranceResult(
             night_of=night_of, cutoff=cutoff, floor_c=floor_c, reached_floor=reached,
             hours_above_floor=hours, operative_at_cutoff_c=start,
             minimum_after_cutoff_c=lowest, minimum_at=lowest_at,
             hours_simulated_after_cutoff=span, night_heating_kwh=night_kwh,
+            night_peak_w=peak,
             night_fuel_units=self.fuel.units_for(night_kwh) if self.fuel else None,
             fuel_unit_name=self.fuel.unit if self.fuel else None,
             fuel=self.fuel.fuel if self.fuel else None)

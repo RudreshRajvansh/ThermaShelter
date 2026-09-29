@@ -22,6 +22,7 @@ from shelter_engine.schema import (ClimateSummary, ComparisonTable, GeometryPayl
 from ..deps import Context, get_context
 from ..schemas import (CFDAbsent, CFDBoundarySet, CFDFieldSet, CompareRequest,
                        EndurancePayload, EnduranceRequest, GeometryRequest,
+                       LeftoverHeatPayload,
                        SimulateRequest, SurfaceRequest)
 
 router = APIRouter()
@@ -45,6 +46,8 @@ def _translate(error: Exception) -> HTTPException:
 def endurance(request: EnduranceRequest,
               context: Context = Depends(get_context)) -> EndurancePayload:
     from shelter_engine.endurance import FLOOR_SOURCE
+    from shelter_engine.leftover_heat import (HIM_TAPAK_SOURCE, SOLAR_SYSTEM_SOURCE,
+                                              leftover_heat)
     from shelter_engine.schema import RunPeriod
 
     from .. import sites as site_builder
@@ -70,6 +73,7 @@ def endurance(request: EnduranceRequest,
                                   cutoff_hour=request.cutoff_hour)
     except Exception as error:
         raise _translate(error) from error
+    spare = leftover_heat(result.night_heating_kwh, result.night_peak_w, engine.fuel)
     return EndurancePayload(
         site_id=site.id, night_of=night["night_of"],
         design_night_minimum_c=night["minimum_c"],
@@ -86,7 +90,21 @@ def endurance(request: EnduranceRequest,
         night_fuel_units=(round(result.night_fuel_units, 2)
                           if result.night_fuel_units is not None else None),
         fuel=result.fuel, fuel_unit_name=result.fuel_unit_name,
-        weather_source=night["source"])
+        weather_source=night["source"],
+        leftover_heat=LeftoverHeatPayload(
+            night_heating_kwh=round(spare.night_heating_kwh, 2),
+            night_peak_kw=(round(spare.night_peak_w / 1000.0, 2)
+                           if spare.night_peak_w is not None else None),
+            litres=round(spare.litres, 2) if spare.litres is not None else None,
+            him_tapak_hours_low=(round(spare.him_tapak_hours_low, 1)
+                                 if spare.him_tapak_hours_low is not None else None),
+            him_tapak_hours_high=(round(spare.him_tapak_hours_high, 1)
+                                  if spare.him_tapak_hours_high is not None else None),
+            him_tapak_fuel_input_kw=([round(value, 2) for value in spare.him_tapak_input_kw]
+                                     if spare.him_tapak_input_kw else None),
+            him_tapak_source=HIM_TAPAK_SOURCE,
+            solar_storage_kwh=round(spare.solar_storage_kwh, 2),
+            solar_system_source=SOLAR_SYSTEM_SOURCE, notes=list(spare.notes)))
 
 
 @router.post("/geometry", response_model=GeometryPayload, tags=["design"])
