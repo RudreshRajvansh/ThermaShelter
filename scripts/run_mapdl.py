@@ -44,7 +44,13 @@ def solve(case, level: str, cycles: int, substeps: int, workdir: Path, executabl
     deck = write_deck(case, grid, cycles=cycles, substeps=substeps)
     print(f"  {level}, {substeps} substeps: {deck.node_count} nodes, "
           f"{deck.element_count} elements", flush=True)
-    path, runtime = run_deck(deck, workdir, executable, cores, timeout_s)
+    source = workdir / "shelter.inp"
+    result = workdir / "mapdl_hourly.csv"
+    if source.is_file() and result.is_file() and source.read_text(encoding="utf-8") == deck.text:
+        path, runtime = result, max(0.0, result.stat().st_mtime - source.stat().st_mtime)
+        print("    reusing the finished run in this folder", flush=True)
+    else:
+        path, runtime = run_deck(deck, workdir, executable, cores, timeout_s)
     run = parse_hourly(path, case, deck, level, cycles, runtime)
     fit = agreement(case, run)
     print(f"    {runtime:.0f} s, RMSE {fit.rmse_k:.2f} K, bias {fit.bias_k:+.2f} K",
@@ -98,13 +104,20 @@ def main() -> int:
         if args.checks:
             heaviest = max(case.wall, key=lambda layer: layer.density_kg_m3
                            * layer.specific_heat_j_kgk * layer.thickness_m)
-            for result in (check_rectangle(base / "check_rectangle", executable),
-                           check_wall(case.wall, base / "check_wall", executable),
-                           check_step(heaviest, base / "check_step", executable,
-                                      substeps=args.substeps)):
+            results = [check_rectangle(base / "check_rectangle", executable),
+                       check_wall(case.wall, base / "check_wall", executable),
+                       check_step(heaviest, base / "check_step", executable,
+                                  substeps=args.substeps)]
+            if args.study:
+                results.append(check_step(heaviest, base / "check_step_halved", executable,
+                                          substeps=args.substeps * 2))
+            for index, result in enumerate(results):
                 print(f"  check {result.name}: {result.max_abs_k:.4f} K against "
                       f"{result.tolerance_k} K", flush=True)
-                checks.append(check_record(result))
+                record = check_record(result)
+                if index == 3:
+                    record = record.model_copy(update={"name": "step_halved"})
+                checks.append(record)
         main_run = solve(case, args.level, args.cycles, args.substeps,
                          base / args.level, executable, args.cores, args.timeout)
         levels = [level_summary(case, main_run, args.substeps)]

@@ -6,6 +6,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
+from . import egress
 from .schemas import LiveObservation, LiveWeather
 
 ENDPOINT = "https://api.open-meteo.com/v1/forecast"
@@ -27,8 +28,8 @@ NOT_AN_INPUT = (
 
 def _url(latitude: float, longitude: float) -> str:
     query = urllib.parse.urlencode({
-        "latitude": f"{latitude:.4f}",
-        "longitude": f"{longitude:.4f}",
+        "latitude": egress.grid(latitude),
+        "longitude": egress.grid(longitude),
         "current": ",".join((
             "temperature_2m", "relative_humidity_2m", "apparent_temperature",
             "wind_speed_10m", "surface_pressure", "cloud_cover",
@@ -41,6 +42,9 @@ def _url(latitude: float, longitude: float) -> str:
 def fetch_live_weather(site_id: str, name: str, latitude: float, longitude: float,
                        elevation_m: float) -> LiveWeather:
     started = datetime.now(timezone.utc)
+    if egress.offline():
+        return LiveWeather(site_id=site_id, available=False, detail=egress.OFFLINE_MESSAGE,
+                           provider=PROVIDER, note=NOT_AN_INPUT)
     try:
         request = urllib.request.Request(
             _url(latitude, longitude),

@@ -20,9 +20,10 @@ from shelter_engine.schema import CommanderCard, RunOptions, RunPeriod, SiteSpec
 from shelter_engine.site_data import components_from_wind, wind_from_components
 from shelter_engine.weather import load_epw
 
+from . import egress
 from . import sites as site_builder
 
-FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+FORECAST_URL = egress.endpoint("SHELTER_FORECAST_URL", "https://api.open-meteo.com/v1/forecast")
 LOGGER = logging.getLogger("shelter_api.operate")
 PAST_DAYS = 7
 FORECAST_DAYS = 3
@@ -42,7 +43,7 @@ class Forecast:
 def fetch_forecast(latitude_deg: float, longitude_deg: float, elevation_m: float,
                    fetch: Callable | None = None) -> dict[str, Any]:
     payload = site_builder._fetcher(fetch)(FORECAST_URL, {
-        "latitude": f"{latitude_deg:.4f}", "longitude": f"{longitude_deg:.4f}",
+        "latitude": egress.grid(latitude_deg), "longitude": egress.grid(longitude_deg),
         "elevation": f"{elevation_m:.0f}", "past_days": str(PAST_DAYS + 1),
         "forecast_days": str(FORECAST_DAYS), "hourly": ",".join(site_builder.HOURLY),
         "wind_speed_unit": "ms", "timezone": "GMT"})
@@ -82,8 +83,8 @@ def forecast_for(post_id: str, latitude_deg: float, longitude_deg: float, elevat
         cache.write_text(json.dumps({"fetched_at": now.isoformat(), "hourly": hourly}),
                          encoding="utf-8")
         return Forecast(times, columns, now, "forecast")
-    except (site_builder.SiteUnavailable, WeatherError, OSError, ValueError):
-        pass
+    except (site_builder.SiteUnavailable, WeatherError, OSError, ValueError) as error:
+        LOGGER.info("forecast for %s not fetched, trying the cache: %s", post_id, error)
     if not cache.is_file():
         return None
     try:
@@ -114,6 +115,14 @@ def mass_scaled(library: MaterialLibrary, design, multiplier: float) -> Material
                            origin=f"{library.origin} (mass x{multiplier:.2f})")
 
 
+def post_design(post: dict):
+    from shelter_engine.schema import DesignSpec
+
+    design = DesignSpec.model_validate(post["design"])
+    occupancy = design.occupancy.model_copy(update={"occupants": int(post["soldiers"])})
+    return design.variant(occupancy=occupancy)
+
+
 def calibrated_design(design, calibration: dict | None):
     if not calibration:
         return design
@@ -141,8 +150,7 @@ def tonight(post: dict, site: SiteSpec, library: MaterialLibrary, data_dir: Path
             ) -> CommanderCard:
     from shelter_engine.schema import DesignSpec, FuelModel
 
-    design = calibrated_design(DesignSpec.model_validate(post["design"]),
-                               post.get("calibration"))
+    design = calibrated_design(post_design(post), post.get("calibration"))
     calibration = post.get("calibration") or {}
     run_library = mass_scaled(library, design, float(calibration.get("mass_multiplier", 1.0)))
     night_of = night_of_for(now)
@@ -246,3 +254,79 @@ class Scheduler:
                 self.job()
             except Exception:
                 LOGGER.exception("the scheduled Commander Card run failed")
+
+
+RECENT_DAYS = 85
+
+
+def fetch_window(latitude_deg: float, longitude_deg: float, elevation_m: float, first: date,
+                 last: date, today: date, fetch: Callable | None = None) -> dict[str, Any]:
+    recent = (today - first).days <= RECENT_DAYS
+    params = {"latitude": egress.grid(latitude_deg), "longitude": egress.grid(longitude_deg),
+              "elevation": f"{elevation_m:.0f}", "start_date": first.isoformat(),
+              "end_date": last.isoformat(), "hourly": ",".join(site_builder.HOURLY),
+              "wind_speed_unit": "ms", "timezone": "GMT"}
+    if not recent:
+        params["models"] = site_builder.WEATHER_MODEL
+    payload = site_builder._fetcher(fetch)(FORECAST_URL if recent
+                                           else site_builder.ARCHIVE_URL, params)
+    hourly = payload.get("hourly") if isinstance(payload, dict) else None
+    if not isinstance(hourly, dict) or not isinstance(hourly.get("time"), list):
+        raise site_builder.SiteUnavailable("the weather service returned no hourly series")
+    return hourly
+
+
+def calibration_model(post: dict, site: SiteSpec, library: MaterialLibrary, data_dir: Path,
+                      first: date, last: date, hourly: dict[str, Any],
+                      engine_kwargs: dict) -> Callable[[float, float], pd.Series]:
+    times, columns = _columns(hourly)
+    base = load_epw(site.epw_path, site)
+    spliced = splice_forecast(base.frame, times, columns, site.time_zone_h, first, last)
+    path = Path(data_dir) / "forecast" / f"{post['id']}_calibration.epw"
+    site_builder.write_epw(path, site.name, None, site.latitude_deg, site.longitude_deg,
+                           site.time_zone_h, site.elevation_m, 2019, spliced, (
+                               f"Site weather with the observed days {first} to {last} "
+                               "spliced in for calibration.",
+                               f"Built for post {post['id']} by the shelter tool."))
+    run_site = site.model_copy(update={"epw_path": str(path)})
+    design = post_design(post)
+
+    def evaluate(ach: float, mass: float) -> pd.Series:
+        variant = calibrated_design(design, {"infiltration_ach": ach})
+        engine = Engine(run_site, mass_scaled(library, variant, mass), **engine_kwargs)
+        start = _nominal(first, engine._nominal_year)
+        period = RunPeriod(start=start, end=_nominal(last, engine._nominal_year),
+                           label="calibration")
+        products = engine._run(variant, RunOptions(period=period, conditioned_run=False,
+                                                   surface_output=False,
+                                                   spin_up_days=SPIN_UP_DAYS),
+                               conditioned=False)
+        return _shift(products.series.air_c.resample("1h").mean(), first.year - start.year)
+
+    return evaluate
+
+
+def calibrate(post: dict, site: SiteSpec, library: MaterialLibrary, data_dir: Path,
+              logger_csv: str, today: date, engine_kwargs: dict,
+              fetch: Callable | None = None) -> dict:
+    from shelter_engine.calibration import fit, read_logger_csv
+
+    record = read_logger_csv(logger_csv)
+    first = record.temperature_c.index[0].date()
+    last = record.temperature_c.index[-1].date()
+    if first.year != last.year:
+        raise EngineError("the logger file crosses the new year; calibrate on one side of it")
+    if last > today:
+        raise EngineError("the logger file runs into the future")
+    hourly = fetch_window(post["latitude_deg"], post["longitude_deg"], site.elevation_m,
+                          first - timedelta(days=1), last + timedelta(days=1), today, fetch)
+    evaluate = calibration_model(post, site, library, data_dir, first, last, hourly,
+                                 engine_kwargs)
+    start_ach = float((post.get("calibration") or {}).get(
+        "infiltration_ach", post_design(post).ventilation.infiltration_ach))
+    result = fit(evaluate, record, start_ach)
+    return {"infiltration_ach": result.infiltration_ach,
+            "mass_multiplier": result.mass_multiplier,
+            "rmse_before_k": round(result.rmse_before_k, 3),
+            "rmse_after_k": round(result.rmse_after_k, 3),
+            "calibrated_on": today.isoformat(), "hours": result.hours}

@@ -150,3 +150,69 @@ def test_an_offline_post_still_gets_a_card_on_climatology(client, monkeypatch):
     everything = client.post("/api/posts/cards?lang=hi").json()
     assert everything[0]["post_id"] == "P-20" and everything[0]["card"]
     assert client.get("/api/posts?lang=hi").json()[0]["status"] == card["status"]
+
+
+def test_calibration_recovers_the_leakage_that_made_the_logger(client, monkeypatch, tmp_path):
+    from shelter_api import operate
+    from shelter_api.deps import get_context
+
+    context = get_context()
+    if not context.ready:
+        pytest.skip("EnergyPlus is not available")
+    weather = hourly(datetime(2026, 9, 9), 24 * 7, temperature=2.0)["hourly"]
+    for index in range(len(weather["time"])):
+        hour = index % 24
+        weather["temperature_2m"][index] = 2.0 + 8.0 * np.sin(np.pi * (hour - 6) / 12.0)
+        weather["shortwave_radiation"][index] = max(0.0, 700.0 * np.sin(np.pi * (hour - 1) / 12.0))
+        weather["direct_normal_irradiance"][index] = weather["shortwave_radiation"][index]
+    monkeypatch.setattr(operate, "fetch_window", lambda *args, **kwargs: weather)
+    body = post_body(id="P-30", design=post_body()["design"])
+    client.put("/api/posts/P-30", json=body)
+    site = context.site("leh")
+    kwargs = {"comfort_model_id": context.engine("leh").comfort_model.id, "fuel": "kerosene",
+              "references": context.references, "catalogue": context.catalogue}
+    evaluate = operate.calibration_model(body, site, context.library, tmp_path,
+                                         date(2026, 9, 10), date(2026, 9, 13), weather, kwargs)
+    truth = evaluate(1.6, 1.0)
+    lines = ["timestamp,temperature_c"] + [f"{stamp:%Y-%m-%d %H:%M},{value:.3f}"
+                                           for stamp, value in truth.items()]
+    response = client.post("/api/posts/P-30/calibration", content="\n".join(lines) + "\n",
+                           headers={"Content-Type": "text/csv"})
+    assert response.status_code == 200, response.text
+    fitted = response.json()
+    assert fitted["rmse_after_k"] < fitted["rmse_before_k"]
+    assert fitted["rmse_after_k"] < 0.25
+    assert fitted["infiltration_ach"] == pytest.approx(1.6, abs=0.3)
+    saved = client.get("/api/posts").json()
+    assert next(item for item in saved if item["post"]["id"] == "P-30")["post"]["calibration"]
+    assert client.post("/api/posts/P-30/calibration", content="").status_code == 422
+    assert client.post("/api/posts/NOPE/calibration", content="x").status_code == 404
+    future = "timestamp,temperature_c\n" + "\n".join(
+        f"2030-01-01 {hour:02d}:00,5" for hour in range(24)) + "\n2030-01-02 00:00,5\n"
+    assert client.post("/api/posts/P-30/calibration", content=future).status_code == 422
+
+
+def test_outside_calls_carry_only_the_grid_and_stop_when_offline(tmp_path, monkeypatch):
+    from shelter_api import egress, live, operate, sites
+
+    captured = {}
+
+    def capture(url, params):
+        captured.update(params)
+        return hourly(datetime(2026, 12, 6), 240)
+
+    operate.forecast_for("P9", 34.13647, 77.54712, 3500.0, tmp_path, datetime(2026, 12, 14),
+                         fetch=capture)
+    assert captured["latitude"] == "34.1" and captured["longitude"] == "77.5"
+    assert egress.grid(-12.349) == "-12.3" and egress.grid(0.04) == "0.0"
+    monkeypatch.setenv("SHELTER_OFFLINE", "1")
+    with pytest.raises(sites.SiteUnavailable, match="SHELTER_OFFLINE"):
+        sites.fetch_json("https://example.org/x", {})
+    weather = live.fetch_live_weather("leh", "Leh", 34.1, 77.5, 3500.0)
+    assert weather.available is False and "SHELTER_OFFLINE" in weather.detail
+    assert operate.forecast_for("P10", 34.1, 77.5, 3500.0, tmp_path, datetime(2026, 12, 14)) \
+        is None
+    monkeypatch.setenv("SHELTER_FORECAST_URL", "http://forecast.local/v1/forecast")
+    assert egress.endpoint("SHELTER_FORECAST_URL", "x") == "http://forecast.local/v1/forecast"
+    monkeypatch.delenv("SHELTER_OFFLINE")
+    assert not egress.offline()

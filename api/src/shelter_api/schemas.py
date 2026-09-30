@@ -91,7 +91,7 @@ class Post(Body):
     latitude_deg: float = Field(ge=-90.0, le=90.0)
     longitude_deg: float = Field(ge=-180.0, le=180.0)
     design: DesignSpec
-    soldiers: int = Field(ge=1, le=500)
+    soldiers: int = Field(ge=1, le=200)
     fuel: Literal["kerosene", "diesel", "lpg", "wood", "electricity"] = "kerosene"
     stock_units: float | None = Field(default=None, ge=0.0)
     calibration: PostCalibration | None = None

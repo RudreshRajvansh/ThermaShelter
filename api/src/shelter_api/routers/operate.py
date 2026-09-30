@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi import Path as PathParam
 from fastapi import Query
 from pydantic import BaseModel
@@ -13,12 +13,13 @@ from shelter_engine.schema import CommanderCard
 
 from .. import operate
 from ..deps import Context, get_context
-from ..schemas import Post, PostSummary
+from ..schemas import Post, PostCalibration, PostSummary
 
 router = APIRouter()
 
 POST_ID = r"^[A-Za-z0-9_-]{1,32}$"
 STATUS_ORDER = {"red": 0, "amber": 1, "green": 2, None: 3}
+MAX_LOGGER_BYTES = 5 * 1024 * 1024
 
 
 class CardResult(BaseModel):
@@ -110,6 +111,46 @@ def new_card(post_id: str = PathParam(pattern=POST_ID),
     except (EngineError, WeatherError, SimulationFailed) as error:
         raise HTTPException(status_code=502, detail=(
             f"Tonight's card for {post_id} could not be computed: {error}")) from error
+
+
+@router.post("/posts/{post_id}/calibration", response_model=PostCalibration,
+             tags=["operate"])
+async def calibrate_post(request: Request, post_id: str = PathParam(pattern=POST_ID),
+                         context: Context = Depends(get_context)) -> PostCalibration:
+    post = context.store.load_post(post_id)
+    if post is None:
+        raise HTTPException(status_code=404, detail=f"There is no post {post_id}.")
+    body = await request.body()
+    if not body or len(body) > MAX_LOGGER_BYTES:
+        raise HTTPException(status_code=422, detail=(
+            "Send the logger CSV as the request body, at most 5 MB."))
+    try:
+        text = body.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise HTTPException(status_code=422, detail="The logger file is not UTF-8 text.") \
+            from error
+    if context.library is None:
+        raise HTTPException(status_code=503, detail="The material database is not loaded.")
+    site = context.site(post["site_id"])
+    base = context.engine(post["site_id"])
+    try:
+        result = operate.calibrate(post, site, context.library,
+                                   Path(context.settings.data_dir), text,
+                                   local_now(context, post["site_id"]).date(),
+                                   {"comfort_model_id": base.comfort_model.id,
+                                    "fuel": post.get("fuel", "kerosene"),
+                                    "references": context.references,
+                                    "catalogue": context.catalogue})
+    except (EngineError, WeatherError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except operate.site_builder.SiteUnavailable as error:
+        raise HTTPException(status_code=503, detail=(
+            f"The observed weather for the logged days could not be fetched: {error}")) \
+            from error
+    calibration = PostCalibration.model_validate(result)
+    post["calibration"] = calibration.model_dump(mode="json")
+    context.store.save_post(post_id, post)
+    return calibration
 
 
 @router.get("/posts/{post_id}/card", response_model=CommanderCard, tags=["operate"])

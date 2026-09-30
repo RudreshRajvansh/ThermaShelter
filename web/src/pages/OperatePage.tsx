@@ -59,6 +59,11 @@ const LABELS: Record<Lang, Record<string, string>> = {
     hours: "h",
     at: "at",
     forecast: "forecast",
+    calibrate: "Calibrate",
+    calibrating: "Fitting leakage and mass…",
+    calibrated: "Calibrated",
+    calibrateDetail:
+      "Upload a logger CSV with timestamp and temperature_c columns in local time, and an optional heater_on column; hours with the heater lit are left out of the fit.",
     "cached forecast": "cached forecast",
     climatology: "typical year, no forecast",
   },
@@ -108,6 +113,11 @@ const LABELS: Record<Lang, Record<string, string>> = {
     hours: "घंटे",
     at: "पर",
     forecast: "पूर्वानुमान",
+    calibrate: "कैलिब्रेट करें",
+    calibrating: "रिसाव और द्रव्यमान मिलाया जा रहा है…",
+    calibrated: "कैलिब्रेटेड",
+    calibrateDetail:
+      "timestamp और temperature_c कॉलम वाली लॉगर CSV (स्थानीय समय) अपलोड करें; heater_on कॉलम वैकल्पिक है, बुखारी वाले घंटे फिट से बाहर रहते हैं।",
     "cached forecast": "सहेजा पूर्वानुमान",
     climatology: "सामान्य वर्ष, पूर्वानुमान नहीं",
   },
@@ -282,6 +292,11 @@ export function OperatePage({ meta }: { meta: MetaResponse | undefined }) {
     mutationFn: () => api.issueAll(lang),
     onSuccess: refresh,
   });
+  const calibrate = useMutation({
+    mutationFn: async ({ id, file }: { id: string; file: File }) =>
+      api.calibratePost(id, await file.text()),
+    onSuccess: refresh,
+  });
   const remove = useMutation({
     mutationFn: (id: string) => api.deletePost(id),
     onSuccess: (_, id) => {
@@ -354,6 +369,19 @@ export function OperatePage({ meta }: { meta: MetaResponse | undefined }) {
           {posts.error && <Failure error={posts.error} />}
           {issueEvery.error && <Failure error={issueEvery.error} />}
           {issueOne.error && <Failure error={issueOne.error} />}
+          {calibrate.error && <Failure error={calibrate.error} />}
+          {calibrate.isPending && <Loading label={t.calibrating} />}
+          {calibrate.data && (
+            <p className="mb-2 text-xs text-[var(--color-good)]">
+              {t.calibrated}: {num(calibrate.data.infiltration_ach, 2)} ach,
+              mass ×{num(calibrate.data.mass_multiplier, 2)}, RMSE{" "}
+              {num(calibrate.data.rmse_before_k, 2)} K →{" "}
+              {num(calibrate.data.rmse_after_k, 2)} K ({calibrate.data.hours} h)
+            </p>
+          )}
+          <p className="mb-2 text-[11px] text-[var(--color-ink-faint)]">
+            {t.calibrateDetail}
+          </p>
           {!posts.data && !posts.error && (
             <Loading label="reading the posts…" />
           )}
@@ -368,7 +396,9 @@ export function OperatePage({ meta }: { meta: MetaResponse | undefined }) {
                   <th className="py-1 text-left font-normal">{t.post}</th>
                   <th className="py-1 text-right font-normal">{t.soldiers}</th>
                   <th className="py-1 text-right font-normal">{t.stock}</th>
-                  <th className="py-1 pl-4 text-left font-normal">{t.issued}</th>
+                  <th className="py-1 pl-4 text-left font-normal">
+                    {t.issued}
+                  </th>
                   <th className="py-1" />
                 </tr>
               </thead>
@@ -421,6 +451,24 @@ export function OperatePage({ meta }: { meta: MetaResponse | undefined }) {
                           {t.view}
                         </button>
                       )}
+                      <label className="mr-2 cursor-pointer underline">
+                        {calibrate.isPending &&
+                        calibrate.variables?.id === item.post.id
+                          ? "…"
+                          : t.calibrate}
+                        <input
+                          type="file"
+                          accept=".csv,text/csv"
+                          className="hidden"
+                          disabled={calibrate.isPending}
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            if (file)
+                              calibrate.mutate({ id: item.post.id, file });
+                            event.target.value = "";
+                          }}
+                        />
+                      </label>
                       <button
                         type="button"
                         className="underline text-[var(--color-danger-ink)]"

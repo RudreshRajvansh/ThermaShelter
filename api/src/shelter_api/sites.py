@@ -28,8 +28,11 @@ from shelter_engine.site_data import (HORIZON_FARTHEST_M, HORIZON_SAMPLES, TILE_
                                       wind_from_components, zoom_for)
 from shelter_engine.weather import load_epw
 
+from . import egress
+
 TERRAIN_URL = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
-ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
+ARCHIVE_URL = egress.endpoint("SHELTER_ARCHIVE_URL",
+                              "https://archive-api.open-meteo.com/v1/archive")
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 REVERSE_URL = "https://nominatim.openstreetmap.org/reverse"
 USER_AGENT = "EntropyZero-shelter-design/0.1"
@@ -78,6 +81,8 @@ def _retry_after_s(error: urllib.error.HTTPError, attempt: int) -> float:
 
 
 def _download(url: str, accept: str) -> bytes:
+    if egress.offline():
+        raise SiteUnavailable(egress.OFFLINE_MESSAGE)
     request = urllib.request.Request(url, headers={"Accept": accept,
                                                    "User-Agent": USER_AGENT})
     host = urllib.parse.urlparse(url).netloc
@@ -271,7 +276,8 @@ def reverse_place(latitude_deg: float, longitude_deg: float,
                   fetch: Fetcher | None = None) -> tuple[str | None, str | None]:
     try:
         payload = _fetcher(fetch)(REVERSE_URL, {
-            "format": "jsonv2", "lat": f"{latitude_deg:.5f}", "lon": f"{longitude_deg:.5f}",
+            "format": "jsonv2", "lat": egress.grid(latitude_deg),
+            "lon": egress.grid(longitude_deg),
             "zoom": 14, "accept-language": "en"})
     except SiteUnavailable:
         return None, None
@@ -308,7 +314,7 @@ def fetch_weather_year(latitude_deg: float, longitude_deg: float, elevation_m: f
                        year: int, utc_offset_h: float,
                        fetch: Fetcher | None = None) -> dict[str, Any]:
     payload = _fetcher(fetch)(ARCHIVE_URL, {
-        "latitude": f"{latitude_deg:.5f}", "longitude": f"{longitude_deg:.5f}",
+        "latitude": egress.grid(latitude_deg), "longitude": egress.grid(longitude_deg),
         "elevation": f"{elevation_m:.0f}", "start_date": f"{year - 1}-12-31",
         "end_date": f"{year + 1}-01-01", "hourly": ",".join(HOURLY),
         "wind_speed_unit": "ms", "timezone": "GMT", "models": WEATHER_MODEL})
@@ -593,7 +599,7 @@ def fetch_temperature_history(latitude_deg: float, longitude_deg: float,
     import pandas as pd
 
     payload = _fetcher(fetch)(ARCHIVE_URL, {
-        "latitude": f"{latitude_deg:.5f}", "longitude": f"{longitude_deg:.5f}",
+        "latitude": egress.grid(latitude_deg), "longitude": egress.grid(longitude_deg),
         "elevation": f"{elevation_m:.0f}",
         "start_date": f"{WEATHER_MODEL_FIRST_YEAR}-01-01",
         "end_date": end.isoformat(), "hourly": "temperature_2m",
@@ -617,7 +623,7 @@ def fetch_solar_reference(latitude_deg: float, longitude_deg: float, last_year: 
 
     payload = _fetcher(fetch)(POWER_URL, {
         "parameters": "ALLSKY_SFC_SW_DWN", "community": "RE",
-        "longitude": f"{longitude_deg:.4f}", "latitude": f"{latitude_deg:.4f}",
+        "longitude": egress.grid(longitude_deg), "latitude": egress.grid(latitude_deg),
         "start": str(POWER_FIRST_YEAR), "end": str(last_year), "format": "JSON"})
     try:
         values = payload["properties"]["parameter"]["ALLSKY_SFC_SW_DWN"]

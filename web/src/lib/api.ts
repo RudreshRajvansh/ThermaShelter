@@ -65,6 +65,7 @@ export type Post = S["Post"];
 export type PostSummary = S["PostSummary"];
 export type CommanderCard = S["CommanderCard"];
 export type CardResult = S["CardResult"];
+export type PostCalibration = S["PostCalibration"];
 export type MapdlSet = S["MapdlSet"];
 export type MapdlAbsent = S["MapdlAbsent"];
 export class ApiError extends Error {
@@ -239,6 +240,12 @@ export const api = {
   lastCard: (id: string, lang: string) =>
     get<CommanderCard>(`/api/posts/${encodeURIComponent(id)}/card?lang=${lang}`),
   issueAll: (lang: string) => post<CardResult[]>(`/api/posts/cards?lang=${lang}`, {}),
+  calibratePost: (id: string, csv: string) =>
+    request<PostCalibration>(`/api/posts/${encodeURIComponent(id)}/calibration`, {
+      method: "POST",
+      body: csv,
+      headers: { "Content-Type": "text/csv" },
+    }),
   sitingMap: (siteId: string) =>
     get<SitingMap>(`/api/sites/${encodeURIComponent(siteId)}/siting-map`),
   referee: (siteId: string) =>
