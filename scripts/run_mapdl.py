@@ -16,6 +16,7 @@ from shelter_engine.mapdl import (LEVELS, agreement, build_grid, build_report,  
                                   check_record, find_mapdl, level_summary, mapdl_version,
                                   parse_hourly, run_deck, study, write_deck, write_report)
 from shelter_engine.mapdl_verify import check_rectangle, check_step, check_wall  # noqa: E402
+from shelter_engine.evidence import mapdl_evidence  # noqa: E402
 from shelter_engine.schema import DesignSpec, RunPeriod, SiteSpec  # noqa: E402
 
 
@@ -128,6 +129,20 @@ def main() -> int:
         print(f"failed: {error}")
         return 1
     path = write_report(report, args.data / "mapdl")
+    folder = base / args.level
+    files = {"report.json": report.model_dump_json(indent=1).encode("utf-8")}
+    for name in ("shelter.inp", "mapdl_hourly.csv"):
+        if (folder / name).is_file():
+            files[name] = (folder / name).read_bytes()
+    log = folder / "shelter.out"
+    if log.is_file():
+        lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
+        files["shelter_out_tail.txt"] = "\n".join(lines[-400:]).encode("utf-8")
+    mapdl_evidence(args.data / "evidence", report.design_hash, report.label, files, {
+        "solver": report.solver, "version": report.version, "level": report.level,
+        "nodes": report.node_count, "rmse_k": report.agreement.rmse_k,
+        "meets_target": report.agreement.meets_target,
+        "checks": {check.name: check.passed for check in report.checks}})
     fit = report.agreement
     print(f"stored {path.name}: RMSE {fit.rmse_k:.2f} K against the {fit.target_rmse_k} K "
           f"target ({'met' if fit.meets_target else 'not met'})")

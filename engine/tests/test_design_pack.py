@@ -57,7 +57,7 @@ def test_extra_files_cannot_escape_or_overwrite(library):
     design = fixtures.design()
     base = dict(design=design, site=fixtures.site("leh.epw"), model=_model(design, library),
                 library=library)
-    for name in ("../outside.txt", "/root.txt", "design.json"):
+    for name in ("../outside.txt", "/root.txt", "C:/root.txt", "\\x", "design.json"):
         with pytest.raises(ValueError):
             build_design_pack(PackInputs(extra_files={name: b"x"}, **base))
     payload = build_design_pack(PackInputs(extra_files={"ansys/mapdl/a.json": b"{}"}, **base))

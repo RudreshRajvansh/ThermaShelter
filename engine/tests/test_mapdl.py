@@ -200,9 +200,11 @@ def test_negative_flows_are_refused():
 
 
 def write_rows(path: Path, rows) -> Path:
-    header = "cycle,hour,air_c," + ",".join(f"{group}_c" for group in GROUPS)
+    header = "cycle,hour,air_c,star_c," + ",".join(f"{group}_c" for group in GROUPS)
+    widened = [tuple(row[:3]) + (row[2],) + tuple(row[3:]) if len(row) == 3 + len(GROUPS)
+               else row for row in rows]
     path.write_text(header + "\n" + "\n".join(",".join(str(value) for value in row)
-                                              for row in rows) + "\n", encoding="utf-8")
+                                              for row in widened) + "\n", encoding="utf-8")
     return path
 
 
@@ -425,3 +427,92 @@ def test_the_hour_before_sets_the_first_average(tmp_path):
     fit = agreement(case, run)
     assert fit.hours == 3
     assert fit.bias_k == pytest.approx(((3 - 4) + (4.5 - 5) + (5.5 - 6)) / 3)
+
+
+def test_glazing_passes_in_only_the_absorbed_sun_it_reports():
+    import pandas as pd
+
+    from shelter_engine.mapdl import glazing_inward_solar
+
+    index = pd.date_range("2019-01-10", periods=3, freq="h")
+
+    class Output:
+        def wide(self, name):
+            values = {"Surface Window Heat Gain Energy": [0.0, 500.0, 900.0],
+                      "Surface Window Heat Loss Energy": [100.0, 0.0, 0.0]}[name]
+            return pd.DataFrame({"W1": [value * 3600.0 for value in values]}, index=index)
+
+    solar = np.array([0.0, 400.0, 1000.0])
+    ua = np.array([10.0, 10.0, 10.0])
+    air = np.array([10.0, 10.0, 10.0])
+    outdoor = np.array([0.0, 0.0, 0.0])
+    gain = glazing_inward_solar(Output(), solar, ua, air, outdoor)
+    assert gain.tolist() == [0.0, 200.0, 0.0]
+
+
+def test_prior_months_step_through_the_year_before_the_lead_in():
+    import pandas as pd
+
+    from shelter_engine.mapdl import Prior, prior_months, solve_plan
+
+    index = pd.date_range("2019-01-01", "2019-12-31 23:00", freq="h")
+    frame = pd.DataFrame({
+        "dry_bulb_c": 10.0 * np.sin(2 * np.pi * (index.dayofyear - 110) / 365.0),
+        "horizontal_infrared_wh_m2": 250.0, "wind_speed_m_s": 2.0,
+        "global_horizontal_wh_m2": 0.0}, index=index)
+    months = prior_months(frame, pd.Timestamp("2018-12-11"))
+    assert len(months) == 12
+    assert months[0][0] == 31.0 and months[-1][0] == 10.0
+    assert months[6][1] > months[0][1]
+    assert all(ground < outdoor for _, outdoor, ground in months)
+    assert prior_months(frame, pd.Timestamp("2019-03-01"))[-1][0] == 28.0
+    case = make_case(hours=24 * 4, lead_hours=24 * 3, prior=months)
+    plan = solve_plan(case, 1)
+    assert isinstance(plan.initial, Prior)
+    assert sum(1 for step in plan.steps if isinstance(step[0], Prior)) == 12
+    text = write_deck(case, build_grid(case, "coarse"), cycles=1, substeps=1).text
+    assert "NSUBST,7,7,7" in text
+    with pytest.raises(EngineError, match="prior month"):
+        build_grid(make_case(prior=((0.0, 1.0, 1.0),)), "coarse")
+
+
+def test_surfaces_reach_the_air_by_convection_and_the_star_node_by_radiation(tmp_path):
+    from shelter_engine.mapdl import INSIDE_CONVECTION, INSIDE_RADIATION
+
+    case = make_case(hours=3, radiant_gain_w=(50.0, 60.0, 70.0),
+                     energyplus_operative_c=(10.0, 10.0, 10.0))
+    deck = write_deck(case, build_grid(case, "coarse"), cycles=1, substeps=1)
+    assert "CM,IR_SOUTH,ELEM" in deck.text and "CM,IN_SOUTH,ELEM" in deck.text
+    assert f"SFE,ALL,1,CONV,0,{INSIDE_RADIATION:.8g}" in deck.text
+    assert "TSTAR" in deck.text
+    assert INSIDE_FILM["south"] == pytest.approx(1 / 0.13, rel=0.02)
+    assert INSIDE_FILM["roof"] == pytest.approx(1 / 0.10, rel=0.02)
+    assert INSIDE_FILM["floor"] == pytest.approx(1 / 0.17, rel=0.02)
+    rows = [(1, hour, 10.0, 14.0) + (12.0,) * 6 for hour in range(3)]
+    run = parse_hourly(write_rows(tmp_path / "star.csv", rows), case, deck, "coarse", 1, 1.0)
+    expected = deck.face_area_m2["north"] * (INSIDE_CONVECTION["north"] * 2.0
+                                             - INSIDE_RADIATION * 2.0)
+    assert run.face_heat_w["north"][0] == pytest.approx(expected)
+    assert run.star_c == (14.0, 14.0, 14.0)
+    fit = agreement(case, run, reference="operative")
+    assert fit.bias_k == pytest.approx(12.0 - 10.0)
+    with pytest.raises(EngineError, match="match the timestamps"):
+        build_grid(make_case(radiant_gain_w=(1.0,)), "coarse")
+
+
+def test_the_floor_keeps_its_absorbed_sun_and_the_rest_spreads_by_area():
+    from shelter_engine.mapdl import face_solar_shares, solar_shares
+
+    weights = {"floor": {1: 6.0, 2: 6.0}, "roof": {3: 12.0}, "south": {1: 2.0, 4: 8.0}}
+    shares = solar_shares(weights, 0.7)
+    assert sum(shares.values()) == pytest.approx(1.0)
+    floor = 0.7 + 0.3 * 12.0 / 34.0
+    assert shares[2] == pytest.approx(floor / 2 + 0.0)
+    assert shares[1] == pytest.approx(floor / 2 + 0.3 * 10.0 / 34.0 * 0.2)
+    assert solar_shares(weights, 1.0)[3] == 0.0
+    faces = face_solar_shares({"floor": 12.0, "roof": 12.0, "south": 10.0}, 0.7)
+    assert sum(faces.values()) == pytest.approx(1.0)
+    assert faces["floor"] == pytest.approx(floor)
+    assert face_solar_shares({}, 0.7) == {"floor": 1.0}
+    with pytest.raises(EngineError):
+        solar_shares({"roof": {1: 1.0}}, 0.7)

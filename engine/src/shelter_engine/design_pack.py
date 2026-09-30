@@ -299,7 +299,7 @@ def build_design_pack(inputs: PackInputs) -> bytes:
         files[f"energyplus/{Path(inputs.weather_path).name}"] = \
             Path(inputs.weather_path).read_bytes()
     for name, payload in inputs.extra_files.items():
-        if name in files or name.startswith("/") or ".." in Path(name).parts:
+        if name in files or not name or Path(name).anchor or ".." in Path(name).parts:
             raise ValueError(f"the pack cannot hold a second or outside file named {name}")
         files[name] = payload
     manifest = sorted(files) + ["README.txt"]

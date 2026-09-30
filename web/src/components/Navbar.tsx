@@ -152,6 +152,7 @@ export function Navbar({ meta, ready }: { meta: MetaResponse | undefined; ready:
   const steps = [
     { page: "input" as const, label: "Inputs", enabled: true },
     { page: "output" as const, label: "Results", enabled: ready },
+    { page: "operate" as const, label: "Operate", enabled: true },
   ];
 
   return (
@@ -176,7 +177,7 @@ export function Navbar({ meta, ready }: { meta: MetaResponse | undefined; ready:
                   disabled={!step.enabled}
                   aria-current={active ? "page" : undefined}
                   onClick={() =>
-                    step.page === "input" ? store.setPage("input") : store.open(store.outputTab)
+                    step.page === "output" ? store.open(store.outputTab) : store.setPage(step.page)
                   }
                   className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-[13px] transition-colors duration-150 disabled:opacity-40 ${
                     active
@@ -193,7 +194,9 @@ export function Navbar({ meta, ready }: { meta: MetaResponse | undefined; ready:
                   </span>
                   {step.label}
                 </button>
-                {index === 0 && <span className="mx-1 h-px w-4 bg-[var(--color-line)]" />}
+                {index < steps.length - 1 && (
+                  <span className="mx-1 h-px w-4 bg-[var(--color-line)]" />
+                )}
               </div>
             );
           })}

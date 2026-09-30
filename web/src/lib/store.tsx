@@ -20,7 +20,7 @@ export const OUTPUT_TABS = [
 ] as const;
 
 export type OutputTab = (typeof OUTPUT_TABS)[number];
-export type Page = "input" | "output";
+export type Page = "input" | "output" | "operate";
 export type ThemePreference = "system" | "light" | "dark";
 
 export const WINTER: Window = { start: "2019-01-10", end: "2019-01-16" };
@@ -96,6 +96,7 @@ const Context = createContext<State | null>(null);
 
 function readLocation(): { page: Page; tab: OutputTab } {
   const parts = window.location.hash.replace(/^#\/?/, "").split("/");
+  if (parts[0] === "operate") return { page: "operate", tab: "recommendation" };
   if (parts[0] === "results") {
     const tab = decodeURIComponent(parts[1] ?? "") as OutputTab;
     return { page: "output", tab: OUTPUT_TABS.includes(tab) ? tab : "recommendation" };
@@ -104,6 +105,7 @@ function readLocation(): { page: Page; tab: OutputTab } {
 }
 
 function hashFor(page: Page, tab: OutputTab): string {
+  if (page === "operate") return "#/operate";
   return page === "input" ? "#/input" : `#/results/${encodeURIComponent(tab)}`;
 }
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import date as date_type
 from datetime import timedelta
 from pathlib import Path
@@ -19,6 +20,7 @@ from shelter_engine.constructions import build_constructions
 from shelter_engine.compliance import eco_niwas_sheet
 from shelter_engine.costing import bill_of_quantities
 from shelter_engine.design_pack import PackInputs, build_design_pack
+from shelter_engine.evidence import read_manifest, simulation_evidence, zip_folder
 from shelter_engine.geometry import build_geometry
 from shelter_engine.hashing import stable_hash
 from shelter_engine.mapdl import find_reports, load_report
@@ -38,6 +40,7 @@ from ..schemas import (CFDAbsent, CFDBoundarySet, CFDFieldSet, CompareRequest,
 router = APIRouter()
 
 DESIGN_HASH_PATTERN = r"^[0-9a-f]{32}$"
+LOGGER = logging.getLogger(__name__)
 
 
 def _translate(error: Exception) -> HTTPException:
@@ -268,7 +271,41 @@ def simulate(request: SimulateRequest,
     except Exception as error:
         raise _translate(error) from error
     context.store.save_run(result)
+    try:
+        simulation_evidence(Path(context.settings.evidence_dir), result,
+                            engine.idf_text(request.design, request.to_options(),
+                                            request.conditioned_run),
+                            Path(engine.site.epw_path))
+    except (OSError, EngineError) as error:
+        LOGGER.warning("the evidence folder for run %s was not written: %s",
+                       result.design_hash, error)
     return result
+
+
+@router.get("/evidence/{run_hash}", tags=["design"])
+def evidence(run_hash: str = PathParam(pattern=DESIGN_HASH_PATTERN),
+             context: Context = Depends(get_context)) -> dict:
+    folder = Path(context.settings.evidence_dir) / run_hash
+    try:
+        return read_manifest(folder)
+    except EngineError as error:
+        raise HTTPException(status_code=404, detail=(
+            "No evidence folder is on record for this run. One is written whenever a "
+            "simulation is stored, and by scripts/run_mapdl.py for ANSYS runs.")) from error
+
+
+@router.get("/evidence/{run_hash}/zip", tags=["design"],
+            responses={200: {"content": {"application/zip": {}}}})
+def evidence_zip(run_hash: str = PathParam(pattern=DESIGN_HASH_PATTERN),
+                 context: Context = Depends(get_context)) -> Response:
+    folder = Path(context.settings.evidence_dir) / run_hash
+    try:
+        payload = zip_folder(folder)
+    except EngineError as error:
+        raise HTTPException(status_code=404, detail=(
+            "No evidence folder is on record for this run.")) from error
+    return Response(content=payload, media_type="application/zip", headers={
+        "Content-Disposition": f'attachment; filename="evidence_{run_hash}.zip"'})
 
 
 @router.post("/surface-results", response_model=SurfaceResults, tags=["design"])

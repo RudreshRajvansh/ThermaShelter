@@ -47,29 +47,55 @@ function Grid({ data }: { data: SitingMapData }) {
         );
       })}
       {(() => {
-        const { x, y } = place(cells[data.site_cell].east_m, cells[data.site_cell].north_m);
+        const { x, y } = place(
+          cells[data.site_cell].east_m,
+          cells[data.site_cell].north_m,
+        );
         return (
-          <rect x={x + 1} y={y + 1} width={side - 2} height={side - 2} fill="none"
-            stroke="var(--color-ink)" strokeWidth={2} strokeDasharray="4 3" />
+          <rect
+            x={x + 1}
+            y={y + 1}
+            width={side - 2}
+            height={side - 2}
+            fill="none"
+            stroke="var(--color-ink)"
+            strokeWidth={2}
+            strokeDasharray="4 3"
+          />
         );
       })()}
       {[...best.entries()].map(([index, rank]) => {
         const { x, y } = place(cells[index].east_m, cells[index].north_m);
         return (
           <g key={index}>
-            <circle cx={x + side / 2} cy={y + side / 2} r={Math.min(11, side / 2.4)}
-              fill="var(--color-day)" stroke="var(--color-ink)" strokeWidth={1.5} />
-            <text x={x + side / 2} y={y + side / 2 + 4} textAnchor="middle" fontSize={11}
-              fill="var(--color-ink)">{rank}</text>
+            <circle
+              cx={x + side / 2}
+              cy={y + side / 2}
+              r={Math.min(11, side / 2.4)}
+              fill="var(--color-day)"
+              stroke="var(--color-ink)"
+              strokeWidth={1.5}
+            />
+            <text
+              x={x + side / 2}
+              y={y + side / 2 + 4}
+              textAnchor="middle"
+              fontSize={11}
+              fill="var(--color-ink)"
+            >
+              {rank}
+            </text>
           </g>
         );
       })}
       <g transform={`translate(${SIZE + 30},30)`}>
         <polygon points="0,-18 6,6 0,1 -6,6" fill="var(--color-ink)" />
-        <text y={-24} textAnchor="middle" fontSize={11} fill="var(--color-ink)">N</text>
+        <text y={-24} textAnchor="middle" fontSize={11} fill="var(--color-ink)">
+          N
+        </text>
       </g>
       <text x={0} y={SIZE + 22} fontSize={11} fill="var(--color-ink-faint)">
-        {`${num(2 * half / 1000, 1)} km across, cells ${num(data.step_m, 0)} m; faint ${num(low, 1)} h to strong ${num(high, 1)} h, the dashed cell is the site`}
+        {`${num((2 * half) / 1000, 1)} km across, cells ${num(data.step_m, 0)} m; faint ${num(low, 1)} h to strong ${num(high, 1)} h, the dashed cell is the site`}
       </text>
     </svg>
   );
@@ -83,7 +109,10 @@ export function SitingMap({ siteId }: { siteId: string }) {
     retry: false,
   });
   if (map.isError) return <Failure error={map.error} />;
-  if (!map.data) return <Loading label="tracing the winter sun over the ground around the site…" />;
+  if (!map.data)
+    return (
+      <Loading label="tracing the winter sun over the ground around the site…" />
+    );
   const data = map.data;
   const site = data.cells[data.site_cell];
   const top = data.cells[data.best[0]];
@@ -106,7 +135,11 @@ export function SitingMap({ siteId }: { siteId: string }) {
               label="Best spot nearby"
               value={num(top.winter_sun_h, 1)}
               unit="h a day"
-              tone={top.winter_sun_h - site.winter_sun_h >= 0.25 ? "solar" : "neutral"}
+              tone={
+                top.winter_sun_h - site.winter_sun_h >= 0.25
+                  ? "solar"
+                  : "neutral"
+              }
               note={`${num(top.east_m, 0)} m east and ${num(top.north_m, 0)} m north, slope ${num(top.slope_deg, 1)}°${top.winter_sun_h - site.winter_sun_h < 0.25 ? "; the chosen point is within a quarter hour of it" : ""}`}
             />
           )}

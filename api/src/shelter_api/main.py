@@ -13,7 +13,8 @@ from shelter_engine.errors import (ConfigurationError, EngineError, GeometryErro
 
 from .config import get_settings
 from .deps import get_context
-from .routers import catalog, design, search, sites
+from .operate import Scheduler
+from .routers import catalog, design, operate, search, sites
 
 DESCRIPTION = """
 HTTP surface over the passive shelter simulation engine.
@@ -37,7 +38,16 @@ async def lifespan(app: FastAPI):
         logger.warning("[%s] %s", warning.code, warning.message)
     if context.ready:
         logger.info("engine ready for sites: %s", sorted(context.sites))
+    scheduler = None
+    settings = get_settings()
+    if settings.operate_at:
+        scheduler = Scheduler(settings.operate_at,
+                              lambda: operate.issue_all(context, settings.operate_lang))
+        scheduler.start()
+        logger.info("Commander Cards will be issued daily at %s", settings.operate_at)
     yield
+    if scheduler is not None:
+        scheduler.stop()
 
 
 def create_app() -> FastAPI:
@@ -61,6 +71,8 @@ def create_app() -> FastAPI:
             {"name": "validation", "description": "Evidence committed by Layer 1."},
             {"name": "history", "description": "Stored runs."},
             {"name": "projects", "description": "Saved projects."},
+            {"name": "operate",
+             "description": "Posts, tonight's forecast run and the Commander Card."},
         ])
 
     if settings.allow_origins:
@@ -75,6 +87,7 @@ def create_app() -> FastAPI:
     app.include_router(design.router, prefix="/api")
     app.include_router(search.router, prefix="/api")
     app.include_router(sites.router, prefix="/api")
+    app.include_router(operate.router, prefix="/api")
 
     @app.exception_handler(SimulationTimeout)
     async def _timeout(request: Request, error: SimulationTimeout) -> JSONResponse:

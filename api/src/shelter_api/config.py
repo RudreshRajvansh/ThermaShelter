@@ -24,6 +24,7 @@ class Settings:
     database_path: Path | None = None
     cfd_dir: Path | None = None
     mapdl_dir: Path | None = None
+    evidence_dir: Path | None = None
     validation_dir: Path | None = None
     materials_path: Path | None = None
     sites_dir: Path | None = None
@@ -39,6 +40,9 @@ class Settings:
                 "SHELTER_ALLOW_ORIGINS",
                 "http://localhost:5173,http://127.0.0.1:5173").split(",")
             if item.strip()))
+    operate_at: str = field(default_factory=lambda: os.environ.get("SHELTER_OPERATE_AT", ""))
+    operate_lang: str = field(
+        default_factory=lambda: os.environ.get("SHELTER_OPERATE_LANG", "en"))
     optimisation_workers: int = field(
         default_factory=lambda: int(os.environ.get("SHELTER_OPTIMISATION_WORKERS", "1")))
 
@@ -55,6 +59,8 @@ class Settings:
                              or self.data_dir / "cfd")
         self.mapdl_dir = _path("SHELTER_MAPDL_DIR", self.mapdl_dir
                                or self.data_dir / "mapdl")
+        self.evidence_dir = _path("SHELTER_EVIDENCE_DIR", self.evidence_dir
+                                  or self.data_dir / "evidence")
         self.designs_dir = Path(self.designs_dir
                                 or self.data_dir / "designs")
         self.validation_dir = _path("SHELTER_VALIDATION_DIR",

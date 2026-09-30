@@ -9,7 +9,12 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { api, type MapdlAbsent, type MapdlReport, type MapdlSet } from "../lib/api";
+import {
+  api,
+  type MapdlAbsent,
+  type MapdlReport,
+  type MapdlSet,
+} from "../lib/api";
 import { Empty, Failure, Loading, Stat } from "./Kit";
 import { num } from "../lib/format";
 
@@ -47,9 +52,13 @@ function Report({ report }: { report: MapdlReport }) {
   return (
     <div className="space-y-3 rounded-md border border-[var(--color-line)] bg-[var(--color-night)] p-3">
       <div className="text-xs font-medium">
-        {report.solver} {report.version} · {report.label} · {report.level} mesh of{" "}
-        {num(report.node_count, 0)} nodes · {report.cycles} passes over{" "}
-        {num(fit.hours, 0)} hours, {report.substeps} steps an hour
+        {report.solver} {report.version} · {report.label} · {report.level} mesh
+        of {num(report.node_count, 0)} nodes · {num(fit.hours, 0)} hours
+        compared at {report.substeps} {report.substeps === 1 ? "step" : "steps"}{" "}
+        an hour
+        {(report.lead_days ?? 0) > 0
+          ? ` after ${report.lead_days} days of the same weather history in both tools`
+          : `, ${report.cycles} passes over the period`}
       </div>
       <div className="grid gap-3 sm:grid-cols-4">
         <Stat
@@ -59,11 +68,24 @@ function Report({ report }: { report: MapdlReport }) {
           tone={fit.meets_target ? "good" : "bad"}
           note={`target ${num(fit.target_rmse_k, 1)} K, ${fit.meets_target ? "met" : "not met"}`}
         />
-        <Stat label="Mean bias" value={num(fit.bias_k, 2)} unit="K" note="MAPDL minus EnergyPlus" />
-        <Stat label="Largest hourly gap" value={num(fit.max_abs_k, 2)} unit="K" />
+        <Stat
+          label="Mean bias"
+          value={num(fit.bias_k, 2)}
+          unit="K"
+          note="MAPDL minus EnergyPlus"
+        />
+        <Stat
+          label="Largest hourly gap"
+          value={num(fit.max_abs_k, 2)}
+          unit="K"
+        />
         <Stat
           label="Mesh uncertainty"
-          value={convergence?.gci_fine_k != null ? num(convergence.gci_fine_k, 2) : "not run"}
+          value={
+            convergence?.gci_fine_k != null
+              ? num(convergence.gci_fine_k, 2)
+              : "not run"
+          }
           unit={convergence?.gci_fine_k != null ? "K" : undefined}
           note={
             convergence
@@ -80,22 +102,53 @@ function Report({ report }: { report: MapdlReport }) {
       </div>
       <div className="h-56">
         <ResponsiveContainer>
-          <ComposedChart data={hours} margin={{ top: 4, right: 8, bottom: 0, left: -12 }}>
+          <ComposedChart
+            data={hours}
+            margin={{ top: 4, right: 8, bottom: 0, left: -12 }}
+          >
             <CartesianGrid stroke="var(--color-line-soft)" />
-            <XAxis dataKey="name" tick={axis} stroke="var(--color-line)" minTickGap={40} />
+            <XAxis
+              dataKey="name"
+              tick={axis}
+              stroke="var(--color-line)"
+              minTickGap={40}
+            />
             <YAxis tick={axis} stroke="var(--color-line)" />
-            <Tooltip contentStyle={tooltip} formatter={(value: number) => `${num(value, 1)} °C`} />
+            <Tooltip
+              contentStyle={tooltip}
+              formatter={(value: number) => `${num(value, 1)} °C`}
+            />
             <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Line dataKey="energyplus" name="EnergyPlus room air" stroke="var(--color-cold)" strokeWidth={2} dot={false} />
-            <Line dataKey="mapdl" name="MAPDL room air" stroke="var(--color-solar)" strokeWidth={2} dot={false} />
-            <Line dataKey="outdoor" name="outdoor" stroke="var(--color-ink-faint)" strokeWidth={1} dot={false} />
+            <Line
+              dataKey="energyplus"
+              name="EnergyPlus room air"
+              stroke="var(--color-cold)"
+              strokeWidth={2}
+              dot={false}
+            />
+            <Line
+              dataKey="mapdl"
+              name="MAPDL room air"
+              stroke="var(--color-solar)"
+              strokeWidth={2}
+              dot={false}
+            />
+            <Line
+              dataKey="outdoor"
+              name="outdoor"
+              stroke="var(--color-ink-faint)"
+              strokeWidth={1}
+              dot={false}
+            />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
       <table className="w-full text-xs">
         <thead className="text-[var(--color-ink-faint)]">
           <tr>
-            <th className="py-1 text-left font-normal">Heat through the inside face</th>
+            <th className="py-1 text-left font-normal">
+              Heat through the inside face
+            </th>
             <th className="py-1 text-right font-normal">MAPDL, kWh</th>
             <th className="py-1 text-right font-normal">EnergyPlus, kWh</th>
             <th className="py-1 text-right font-normal">Difference</th>
@@ -103,14 +156,21 @@ function Report({ report }: { report: MapdlReport }) {
         </thead>
         <tbody className="tnum">
           {fit.faces?.map((face) => (
-            <tr key={face.group} className="border-t border-[var(--color-line-soft)]">
+            <tr
+              key={face.group}
+              className="border-t border-[var(--color-line-soft)]"
+            >
               <td className="py-1">{FACE_NAME[face.group] ?? face.group}</td>
               <td className="py-1 text-right">{num(face.mapdl_kwh, 1)}</td>
               <td className="py-1 text-right">
-                {face.energyplus_kwh != null ? num(face.energyplus_kwh, 1) : "not reported"}
+                {face.energyplus_kwh != null
+                  ? num(face.energyplus_kwh, 1)
+                  : "not reported"}
               </td>
               <td className="py-1 text-right">
-                {face.difference_percent != null ? `${num(face.difference_percent, 0)} %` : "n/a"}
+                {face.difference_percent != null
+                  ? `${num(face.difference_percent, 0)} %`
+                  : "n/a"}
               </td>
             </tr>
           ))}
@@ -120,13 +180,18 @@ function Report({ report }: { report: MapdlReport }) {
         <div className="text-xs">
           <p className="mb-1 font-medium">
             Analytic checks of the element types{" "}
-            {failedChecks.length === 0 ? "(all passed)" : `(${failedChecks.length} failed)`}
+            {failedChecks.length === 0
+              ? "(all passed)"
+              : `(${failedChecks.length} failed)`}
           </p>
           <ul className="space-y-1">
             {report.checks!.map((check) => (
-              <li key={check.name} className={check.passed ? "" : "text-[var(--color-danger-ink)]"}>
-                {check.description}: largest error {num(check.max_abs_k, 3)} K against{" "}
-                {num(check.tolerance_k, 2)} K
+              <li
+                key={check.name}
+                className={check.passed ? "" : "text-[var(--color-danger-ink)]"}
+              >
+                {check.description}: largest error {num(check.max_abs_k, 3)} K
+                against {num(check.tolerance_k, 2)} K
               </li>
             ))}
           </ul>
@@ -146,12 +211,17 @@ function Report({ report }: { report: MapdlReport }) {
           </thead>
           <tbody className="tnum">
             {report.levels!.map((level) => (
-              <tr key={`${level.level}-${level.substeps}`} className="border-t border-[var(--color-line-soft)]">
+              <tr
+                key={`${level.level}-${level.substeps}`}
+                className="border-t border-[var(--color-line-soft)]"
+              >
                 <td className="py-1">{level.level}</td>
                 <td className="py-1 text-right">{num(level.node_count, 0)}</td>
                 <td className="py-1 text-right">{level.substeps}</td>
                 <td className="py-1 text-right">{num(level.mean_air_c, 2)}</td>
-                <td className="py-1 text-right">{num(level.minimum_air_c, 2)}</td>
+                <td className="py-1 text-right">
+                  {num(level.minimum_air_c, 2)}
+                </td>
                 <td className="py-1 text-right">{num(level.rmse_k, 2)}</td>
               </tr>
             ))}
@@ -159,7 +229,10 @@ function Report({ report }: { report: MapdlReport }) {
         </table>
       )}
       {(report.notes ?? []).map((note) => (
-        <p key={note} className="text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
+        <p
+          key={note}
+          className="text-[11px] leading-relaxed text-[var(--color-ink-faint)]"
+        >
           {note}
         </p>
       ))}
@@ -167,7 +240,13 @@ function Report({ report }: { report: MapdlReport }) {
   );
 }
 
-export function MapdlAgreement({ designHash, siteId }: { designHash: string; siteId: string }) {
+export function MapdlAgreement({
+  designHash,
+  siteId,
+}: {
+  designHash: string;
+  siteId: string;
+}) {
   const mapdl = useQuery({
     queryKey: ["mapdl", designHash, siteId],
     queryFn: () => api.mapdl(designHash, siteId),
@@ -175,15 +254,21 @@ export function MapdlAgreement({ designHash, siteId }: { designHash: string; sit
     retry: false,
   });
   if (mapdl.isError) return <Failure error={mapdl.error} />;
-  if (!mapdl.data) return <Loading label="checking for an ANSYS Mechanical APDL run…" />;
+  if (!mapdl.data)
+    return <Loading label="checking for an ANSYS Mechanical APDL run…" />;
   const data = mapdl.data;
   const rejected = data.rejected ?? [];
   return (
     <div className="space-y-2">
       {isAbsent(data) ? (
-        <Empty title="No ANSYS Mechanical APDL check for this design" detail={data.reason} />
+        <Empty
+          title="No ANSYS Mechanical APDL check for this design"
+          detail={data.reason}
+        />
       ) : (
-        data.reports.map((report) => <Report key={report.label} report={report} />)
+        data.reports.map((report) => (
+          <Report key={report.label} report={report} />
+        ))
       )}
       {rejected.map((item) => (
         <p key={item} className="text-[11px] text-[var(--color-danger-ink)]">

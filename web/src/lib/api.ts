@@ -61,6 +61,10 @@ export type MapdlReport = S["MapdlReport"];
 export type BillOfQuantities = S["BillOfQuantities"];
 export type ComplianceSheet = S["ComplianceSheet"];
 export type SitingMap = S["SitingMap"];
+export type Post = S["Post"];
+export type PostSummary = S["PostSummary"];
+export type CommanderCard = S["CommanderCard"];
+export type CardResult = S["CardResult"];
 export type MapdlSet = S["MapdlSet"];
 export type MapdlAbsent = S["MapdlAbsent"];
 export class ApiError extends Error {
@@ -113,6 +117,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 const get = <T,>(path: string) => request<T>(path);
 const post = <T,>(path: string, payload: unknown) =>
   request<T>(path, { method: "POST", body: JSON.stringify(payload) });
+
+export function evidenceUrl(runHash: string): string {
+  return `${BASE}/api/evidence/${runHash}/zip`;
+}
 
 export async function designPack(payload: {
   design: DesignSpec;
@@ -218,6 +226,19 @@ export const api = {
     post<LeverPayload[]>("/api/search-levers", { design, site_id: siteId ?? null }),
   designNight: (siteId: string) =>
     get<DesignNightPayload>(`/api/sites/${encodeURIComponent(siteId)}/design-night`),
+  posts: (lang: string) => get<PostSummary[]>(`/api/posts?lang=${lang}`),
+  savePost: (post: Post) =>
+    request<Post>(`/api/posts/${encodeURIComponent(post.id)}`, {
+      method: "PUT",
+      body: JSON.stringify(post),
+    }),
+  deletePost: (id: string) =>
+    request<void>(`/api/posts/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  issueCard: (id: string, lang: string) =>
+    post<CommanderCard>(`/api/posts/${encodeURIComponent(id)}/card?lang=${lang}`, {}),
+  lastCard: (id: string, lang: string) =>
+    get<CommanderCard>(`/api/posts/${encodeURIComponent(id)}/card?lang=${lang}`),
+  issueAll: (lang: string) => post<CardResult[]>(`/api/posts/cards?lang=${lang}`, {}),
   sitingMap: (siteId: string) =>
     get<SitingMap>(`/api/sites/${encodeURIComponent(siteId)}/siting-map`),
   referee: (siteId: string) =>

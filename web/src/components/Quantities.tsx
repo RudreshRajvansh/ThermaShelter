@@ -89,7 +89,11 @@ export function Quantities({ result }: { result: SimulationResult }) {
       {data && (
         <>
           <div className="grid gap-3 sm:grid-cols-3">
-            <Stat label="Envelope weight" value={num(data.total_mass_kg / 1000, 1)} unit="t" />
+            <Stat
+              label="Envelope weight"
+              value={num(data.total_mass_kg / 1000, 1)}
+              unit="t"
+            />
             <Stat
               label="Brought in from outside"
               value={num(data.imported_mass_kg / 1000, 1)}
@@ -97,7 +101,11 @@ export function Quantities({ result }: { result: SimulationResult }) {
               tone={data.imported_mass_kg > 0 ? "solar" : "good"}
               note="materials not available locally"
             />
-            <Stat label="Delivered material cost" value={num(data.total_cost_inr / 100000, 2)} unit="lakh ₹" />
+            <Stat
+              label="Delivered material cost"
+              value={num(data.total_cost_inr / 100000, 2)}
+              unit="lakh ₹"
+            />
           </div>
           <table className="mt-4 w-full text-xs">
             <thead className="text-[var(--color-ink-faint)]">
@@ -112,7 +120,10 @@ export function Quantities({ result }: { result: SimulationResult }) {
             </thead>
             <tbody className="tnum">
               {data.lines.map((line) => (
-                <tr key={`${line.kind}-${line.item_id}`} className="border-t border-[var(--color-line-soft)]">
+                <tr
+                  key={`${line.kind}-${line.item_id}`}
+                  className="border-t border-[var(--color-line-soft)]"
+                >
                   <td className="py-1">
                     {line.name}
                     <span className="ml-1 text-[var(--color-ink-faint)]">
@@ -122,9 +133,13 @@ export function Quantities({ result }: { result: SimulationResult }) {
                   </td>
                   <td className="py-1">{line.used_in.join(", ")}</td>
                   <td className="py-1 text-right">{num(line.area_m2, 1)}</td>
-                  <td className="py-1 text-right">{line.volume_m3 != null ? num(line.volume_m3, 2) : "—"}</td>
                   <td className="py-1 text-right">
-                    {line.mass_kg != null ? num(line.mass_kg, 0) : "not weighed"}
+                    {line.volume_m3 != null ? num(line.volume_m3, 2) : "—"}
+                  </td>
+                  <td className="py-1 text-right">
+                    {line.mass_kg != null
+                      ? num(line.mass_kg, 0)
+                      : "not weighed"}
                   </td>
                   <td className="py-1 text-right">{num(line.cost_inr, 0)}</td>
                 </tr>
@@ -133,12 +148,15 @@ export function Quantities({ result }: { result: SimulationResult }) {
           </table>
           {(data.unweighed ?? []).length > 0 && (
             <p className="mt-2 text-[11px] text-[var(--color-ink-faint)]">
-              Not in the weight: {data.unweighed!.join(", ")}. Their records carry no thickness
-              or density to weigh them by.
+              Not in the weight: {data.unweighed!.join(", ")}. Their records
+              carry no thickness or density to weigh them by.
             </p>
           )}
           {(data.notes ?? []).map((note) => (
-            <p key={note} className="mt-1 text-[11px] text-[var(--color-ink-faint)]">
+            <p
+              key={note}
+              className="mt-1 text-[11px] text-[var(--color-ink-faint)]"
+            >
               {note}
             </p>
           ))}

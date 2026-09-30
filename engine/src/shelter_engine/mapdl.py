@@ -25,10 +25,14 @@ DRY_AIR_R = 287.05
 STANDARD_AIR_K = 293.15
 SKY_VIEW = {"south": 0.5, "north": 0.5, "east": 0.5, "west": 0.5, "roof": 1.0,
             "ground": 1.0}
-INSIDE_FILM = {"south": 1 / 0.13, "north": 1 / 0.13, "east": 1 / 0.13, "west": 1 / 0.13,
-               "roof": 1 / 0.10, "floor": 1 / 0.17}
+INSIDE_RADIATION = 0.9 * 5.7
+INSIDE_CONVECTION = {"south": 2.5, "north": 2.5, "east": 2.5, "west": 2.5, "roof": 5.0,
+                     "floor": 0.7}
+INSIDE_FILM = {group: value + INSIDE_RADIATION for group, value in INSIDE_CONVECTION.items()}
 LINK_BITS = 10
 LEAD_SUBSTEP_S = 6 * 3600
+PRIOR_SUBSTEP_S = 5 * 86400
+PRIOR_MONTHS = 11
 LINK_BANKS = (("V", "outdoor_air_w_k", 20), ("G", "window_ua_w_k", 40))
 MESH_GROWTH = 1.35
 LEVELS = {
@@ -45,15 +49,14 @@ GCI_SOURCE = SourceRef(
     note="Grid convergence index on three meshes with unequal refinement ratios.")
 
 FILM_SOURCE = SourceRef(
-    citation=("Surface resistances of ISO 6946: inside 0.13 m2K/W for walls, 0.10 for "
-              "heat flowing up through the roof and 0.17 down through the floor; outside "
-              "convection 4 + 4v W/m2K with v the wind speed, and linearised long wave "
-              "radiation 4 sigma epsilon T3 to the sky"),
+    citation=("Inside surface coefficients of ISO 6946 Annex C: convection 2.5 W/m2K on "
+              "walls, 5.0 for heat flowing up through the roof and 0.7 down through the "
+              "floor, and long wave radiation 0.9 x 5.7 W/m2K; outside convection 4 + 4v "
+              "W/m2K with v the wind speed and linearised long wave radiation to the sky"),
     status=SourceStatus.DERIVED,
-    note=("The inside film joins every surface to one air node, the combined convective "
-          "and radiative model ISO 6946 uses, rather than EnergyPlus's separate surface "
-          "to surface radiation. It is one of the differences the agreement check "
-          "measures."))
+    note=("Convection joins each surface to the room air and radiation joins it to a "
+          "radiant star node, the two node room model of ISO 52016, in place of "
+          "EnergyPlus's view factor exchange between every pair of surfaces."))
 SOLAIR_SOURCE = SourceRef(
     citation=("Sun and sky on the outside faces applied as a sol-air temperature: outdoor "
               "air plus absorbed sun over the outside film, less the long wave loss to a "
@@ -108,7 +111,10 @@ class MapdlCase:
     energyplus_air_c: tuple[float, ...]
     energyplus_face_w: Mapping[str, tuple[float, ...]]
     energyplus_operative_c: tuple[float, ...] = ()
+    radiant_gain_w: tuple[float, ...] = ()
+    floor_solar_absorptance: float = 1.0
     lead_hours: int = 0
+    prior: tuple[tuple[float, float, float], ...] = ()
     notes: tuple[str, ...] = ()
 
     @property
@@ -137,6 +143,8 @@ class MapdlCase:
         series = [self.outdoor_c, self.internal_gain_w, self.transmitted_solar_w,
                   self.outdoor_air_w_k, self.window_ua_w_k, self.energyplus_air_c]
         series += list(self.solair_c.values()) + list(self.outside_film_w_m2k.values())
+        if self.radiant_gain_w:
+            series.append(self.radiant_gain_w)
         for values in series:
             if len(values) != self.hours:
                 raise EngineError("every hourly series must match the timestamps")
@@ -145,6 +153,9 @@ class MapdlCase:
         for name in ("outdoor_air_w_k", "window_ua_w_k", "transmitted_solar_w"):
             if min(getattr(self, name), default=0.0) < 0.0:
                 raise EngineError(f"{name} cannot be negative")
+        for days, outdoor, ground in self.prior:
+            if days <= 0.0 or not (math.isfinite(outdoor) and math.isfinite(ground)):
+                raise EngineError("a prior month needs a positive length and finite loads")
         if not 0 <= self.lead_hours <= self.hours - 2:
             raise EngineError("the lead in must leave at least two hours to compare")
         if self.hours < 2:
@@ -359,6 +370,33 @@ class Deck:
     notes: list[str] = field(default_factory=list)
 
 
+def face_solar_shares(areas: Mapping[str, float],
+                      floor_absorptance: float) -> dict[str, float]:
+    if not areas:
+        return {"floor": 1.0}
+    total = sum(areas.values())
+    absorbed = min(1.0, max(0.0, floor_absorptance))
+    return {group: (1.0 - absorbed) * area / total + (absorbed if group == "floor" else 0.0)
+            for group, area in areas.items()}
+
+
+def solar_shares(weights: Mapping[str, Mapping[int, float]],
+                 floor_absorptance: float) -> dict[int, float]:
+    areas = {group: sum(nodes.values()) for group, nodes in weights.items()}
+    total = sum(areas.values())
+    if total <= 0.0 or areas.get("floor", 0.0) <= 0.0:
+        raise EngineError("the room has no inside surface to take the sun")
+    absorbed = min(1.0, max(0.0, floor_absorptance))
+    shares: dict[int, float] = {}
+    for group, nodes in weights.items():
+        part = (1.0 - absorbed) * areas[group] / total
+        if group == "floor":
+            part += absorbed
+        for node, area in nodes.items():
+            shares[node] = shares.get(node, 0.0) + part * area / areas[group]
+    return shares
+
+
 def _inner_weights(grid: Grid, case: MapdlCase) -> tuple[dict[str, dict[int, float]],
                                                          dict[str, float]]:
     xs, ys, zs = grid.xs, grid.ys, grid.zs
@@ -443,8 +481,11 @@ def write_deck(case: MapdlCase, grid: Grid, cycles: int = 3, substeps: int = 4) 
     air = last_node + 1
     outdoor = {name: air + 1 + index for index, name in enumerate(OUTER_GROUPS)}
     outdoor_air = air + 1 + len(OUTER_GROUPS)
+    star = outdoor_air + 1
     cx = 0.5 * (grid.xs[:-1] + grid.xs[1:])
     lines.append(f"N,{air},{_fmt(case.width_m / 2)},{_fmt(case.depth_m / 2)},"
+                 f"{_fmt(case.height_m / 2)}")
+    lines.append(f"N,{star},{_fmt(case.width_m / 2)},{_fmt(case.depth_m / 4)},"
                  f"{_fmt(case.height_m / 2)}")
     for index, node in enumerate(list(outdoor.values()) + [outdoor_air]):
         lines.append(f"N,{node},{_fmt(cx[-1] + 5.0 + index)},0,{_fmt(case.height_m)}")
@@ -508,7 +549,11 @@ def write_deck(case: MapdlCase, grid: Grid, cycles: int = 3, substeps: int = 4) 
         lines += ["ALLSEL", "*GET,EBEFORE,ELEM,0,NUM,MAXD"] + selection + [
             "ESLN,S,0", "ESEL,R,TYPE,,1", f"ESURF,{air}", "*GET,EAFTER,ELEM,0,NUM,MAXD",
             "ESEL,S,ELEM,,EBEFORE+1,EAFTER", f"CM,IN_{group.upper()},ELEM",
-            f"SFE,ALL,1,CONV,0,{_fmt(INSIDE_FILM[group])}"]
+            f"SFE,ALL,1,CONV,0,{_fmt(INSIDE_CONVECTION[group])}"]
+        lines += ["ALLSEL", "*GET,EBEFORE,ELEM,0,NUM,MAXD"] + selection + [
+            "ESLN,S,0", "ESEL,R,TYPE,,1", f"ESURF,{star}", "*GET,EAFTER,ELEM,0,NUM,MAXD",
+            "ESEL,S,ELEM,,EBEFORE+1,EAFTER", f"CM,IR_{group.upper()},ELEM",
+            f"SFE,ALL,1,CONV,0,{_fmt(INSIDE_RADIATION)}"]
     for group, selection in outer_select.items():
         lines += ["ALLSEL", "*GET,EBEFORE,ELEM,0,NUM,MAXD"] + selection + [
             "ESLN,S,0", "ESEL,R,TYPE,,1", f"ESURF,{outdoor[group]}",
@@ -529,20 +574,18 @@ def write_deck(case: MapdlCase, grid: Grid, cycles: int = 3, substeps: int = 4) 
                       f"REAL,{base + bit}", f"E,{air},{outdoor_air}"]
         lines.append(f"{prefix}FIRST={prefix}FIRST+1")
     weights, inner_area = _inner_weights(grid, case)
-    floor_nodes = weights["floor"]
     lines.append("ALLSEL")
     classes: dict[float, list[int]] = {}
-    for node, area in floor_nodes.items():
-        classes.setdefault(round(area, 9), []).append(node)
-    floor_total = sum(floor_nodes.values()) or 1.0
+    for node, share in solar_shares(weights, case.floor_solar_absorptance).items():
+        classes.setdefault(round(share, 12), []).append(node)
     solar_classes = []
-    for index, (area, nodes) in enumerate(sorted(classes.items())):
+    for index, (share, nodes) in enumerate(sorted(classes.items())):
         name = f"FS{index}"
         lines.append(f"NSEL,S,NODE,,{nodes[0]}")
         for node in nodes[1:]:
             lines.append(f"NSEL,A,NODE,,{node}")
         lines.append(f"CM,{name},NODE")
-        solar_classes.append((name, area / floor_total))
+        solar_classes.append((name, share))
     lines.append("ALLSEL")
     lines.append(f"*DIM,TT,ARRAY,{outdoor_air}")
     lines.append(f"*DIM,WP,ARRAY,{outdoor_air}")
@@ -557,7 +600,8 @@ def write_deck(case: MapdlCase, grid: Grid, cycles: int = 3, substeps: int = 4) 
     plan = solve_plan(case, cycles)
     lines += ["/SOLU", "ANTYPE,TRANS", "TRNOPT,FULL", "EQSLV,SPARSE", "OUTRES,ALL,NONE",
               "KBC,1", "TIMINT,OFF"]
-    lines += _step_loads(case, plan.initial, outdoor, outdoor_air, air, solar_classes)
+    lines += _step_loads(case, plan.initial, outdoor, outdoor_air, air, star,
+                         solar_classes)
     lines += ["TIME,1", "NSUBST,1,1,1", "SOLVE", "TIMINT,ON", "/NOPR"]
     moment = 1.0
     written = False
@@ -566,13 +610,15 @@ def write_deck(case: MapdlCase, grid: Grid, cycles: int = 3, substeps: int = 4) 
         if index is not None and not written:
             lines.append("OUTRES,NSOL,LAST")
             written = True
-        lines += _step_loads(case, selector, outdoor, outdoor_air, air, solar_classes)
+        lines += _step_loads(case, selector, outdoor, outdoor_air, air, star,
+                             solar_classes)
         moment += seconds
-        count = substeps if seconds <= 3600 else max(substeps, int(seconds // LEAD_SUBSTEP_S))
+        chunk = PRIOR_SUBSTEP_S if isinstance(selector, Prior) else LEAD_SUBSTEP_S
+        count = substeps if seconds <= 3600 else max(substeps, math.ceil(seconds / chunk))
         lines += [f"TIME,{_fmt(moment)}", f"NSUBST,{count},{count},{count}", "SOLVE"]
         if index is not None:
             outputs.append((moment, cycle, index))
-    header = "cycle,hour,air_c," + ",".join(f"{group}_c" for group in GROUPS)
+    header = "cycle,hour,air_c,star_c," + ",".join(f"{group}_c" for group in GROUPS)
     names = ",".join(f"M_{group.upper()}" for group in GROUPS)
     lines += ["/GOPR", "FINISH", "/POST1", f"*DIM,TOUT,ARRAY,{len(outputs)}",
               f"*DIM,COUT,ARRAY,{len(outputs)}", f"*DIM,HOUT,ARRAY,{len(outputs)}"]
@@ -581,23 +627,31 @@ def write_deck(case: MapdlCase, grid: Grid, cycles: int = 3, substeps: int = 4) 
                   f"HOUT({position})={index}"]
     lines += ["*CFOPEN,mapdl_hourly,csv", "*VWRITE", f"('{header}')",
               f"*DO,STEP,1,{len(outputs)}", "SET,,,,,TOUT(STEP)",
-              f"*GET,TAIR,NODE,{air},TEMP", "*VGET,TT(1),NODE,1,TEMP"]
+              f"*GET,TAIR,NODE,{air},TEMP", f"*GET,TSTAR,NODE,{star},TEMP",
+              "*VGET,TT(1),NODE,1,TEMP"]
     for group in GROUPS:
         lines += [f"*VOPER,WP(1),TT(1),MULT,W_{group.upper()}(1)",
                   f"*VSCFUN,M_{group.upper()},SUM,WP(1)"]
-    lines += ["CYC=COUT(STEP)", "HR=HOUT(STEP)", f"*VWRITE,CYC,HR,TAIR,{names}",
+    lines += ["CYC=COUT(STEP)", "HR=HOUT(STEP)", f"*VWRITE,CYC,HR,TAIR,TSTAR,{names}",
               "(F4.0,',',F6.0,',',F10.5,',',F10.5,',',F10.5,',',F10.5,',',F10.5,"
-              "',',F10.5,',',F10.5)", "*ENDDO", "*CFCLOS", "FINISH"]
+              "',',F10.5,',',F10.5,',',F10.5)", "*ENDDO", "*CFCLOS", "FINISH"]
     outer_area = {group: 0.0 for group in OUTER_GROUPS}
-    return Deck(text="\n".join(lines) + "\n", node_count=node_count + 1 + len(outdoor) + 1,
+    return Deck(text="\n".join(lines) + "\n", node_count=node_count + len(outdoor) + 3,
                 element_count=elements, air_node=air, face_area_m2=inner_area,
                 outer_area_m2=outer_area)
 
 
 @dataclass(frozen=True)
+class Prior:
+    outdoor_c: float
+    ground_c: float
+    inside: slice
+
+
+@dataclass(frozen=True)
 class SolvePlan:
-    initial: slice
-    steps: tuple[tuple[int | slice, float, int, int | None], ...]
+    initial: slice | Prior
+    steps: tuple[tuple[int | slice | Prior, float, int, int | None], ...]
 
 
 def solve_plan(case: MapdlCase, cycles: int) -> SolvePlan:
@@ -618,28 +672,48 @@ def solve_plan(case: MapdlCase, cycles: int) -> SolvePlan:
     if cycles != 1:
         raise EngineError("a case with a lead in runs once through its history")
     daily = max(0, lead // 24 - 2)
-    steps = [(slice(24 * day, 24 * day + 24), 86400.0, 1, None) for day in range(daily)]
+    first_day = slice(0, min(24, hours))
+    steps = [(Prior(outdoor, ground, first_day), days * 86400.0, 1, None)
+             for days, outdoor, ground in case.prior]
+    steps += [(slice(24 * day, 24 * day + 24), 86400.0, 1, None) for day in range(daily)]
     for hour in range(24 * daily, hours):
         index = hour - lead
         steps.append((hour, 3600.0, 1, index if index >= -1 else None))
-    return SolvePlan(initial=slice(0, min(24, hours)), steps=tuple(steps))
+    initial: slice | Prior = first_day
+    if case.prior:
+        weights = np.array([days for days, _, _ in case.prior])
+        initial = Prior(float(np.average([item[1] for item in case.prior], weights=weights)),
+                        float(np.average([item[2] for item in case.prior], weights=weights)),
+                        first_day)
+    return SolvePlan(initial=initial, steps=tuple(steps))
 
 
-def _step_loads(case: MapdlCase, selector: int | slice, outdoor: Mapping[str, int],
-                outdoor_air: int, air: int, solar_classes) -> list[str]:
+def _step_loads(case: MapdlCase, selector: int | slice | Prior, outdoor: Mapping[str, int],
+                outdoor_air: int, air: int, star: int, solar_classes) -> list[str]:
+    prior = selector if isinstance(selector, Prior) else None
+    window = prior.inside if prior is not None else selector
+
     def pick(values):
-        if isinstance(selector, slice):
-            return float(np.mean(np.asarray(values, dtype=float)[selector]))
-        return float(values[selector])
+        if isinstance(window, slice):
+            return float(np.mean(np.asarray(values, dtype=float)[window]))
+        return float(values[window])
+
+    def boundary(group: str) -> float:
+        if prior is None:
+            return pick(case.solair_c[group])
+        return prior.ground_c if group == "ground" else prior.outdoor_c
 
     lines = []
     for group, node in outdoor.items():
-        lines.append(f"D,{node},TEMP,{_fmt(pick(case.solair_c[group]))}")
+        lines.append(f"D,{node},TEMP,{_fmt(boundary(group))}")
         lines += [f"CMSEL,S,OUT_{group.upper()}",
                   f"SFE,ALL,1,CONV,0,{_fmt(pick(case.outside_film_w_m2k[group]))}",
                   "ALLSEL"]
-    lines.append(f"D,{outdoor_air},TEMP,{_fmt(pick(case.outdoor_c))}")
+    outdoor_now = prior.outdoor_c if prior is not None else pick(case.outdoor_c)
+    lines.append(f"D,{outdoor_air},TEMP,{_fmt(outdoor_now)}")
     lines.append(f"F,{air},HEAT,{_fmt(pick(case.internal_gain_w))}")
+    radiant = pick(case.radiant_gain_w) if case.radiant_gain_w else 0.0
+    lines.append(f"F,{star},HEAT,{_fmt(radiant)}")
     solar = pick(case.transmitted_solar_w)
     for name, share in solar_classes:
         lines.append(f"F,{name},HEAT,{_fmt(solar * share)}")
@@ -687,6 +761,9 @@ class MapdlRun:
     cycles: int
     air_before_c: float | None = None
     face_heat_before_w: Mapping[str, float] | None = None
+    star_c: tuple[float, ...] = ()
+    star_before_c: float | None = None
+    face_area_m2: Mapping[str, float] = field(default_factory=dict)
 
 
 def parse_hourly(path: Path, case: MapdlCase, deck: Deck, level: str, cycles: int,
@@ -696,7 +773,7 @@ def parse_hourly(path: Path, case: MapdlCase, deck: Deck, level: str, cycles: in
     rows = []
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines()[1:]:
         parts = [item.strip() for item in line.split(",")]
-        if len(parts) != 3 + len(GROUPS):
+        if len(parts) != 4 + len(GROUPS):
             continue
         try:
             rows.append([float(item) for item in parts])
@@ -713,11 +790,12 @@ def parse_hourly(path: Path, case: MapdlCase, deck: Deck, level: str, cycles: in
         raise EngineError(f"MAPDL reported {found} of the {compared} compared hours")
 
     def unpack(row):
-        air = row[2]
-        surfaces = {group: row[3 + index] for index, group in enumerate(GROUPS)}
-        heat = {group: INSIDE_FILM[group] * deck.face_area_m2[group]
-                * (surfaces[group] - air) for group in GROUPS}
-        return air, surfaces, heat
+        air, star = row[2], row[3]
+        surfaces = {group: row[4 + index] for index, group in enumerate(GROUPS)}
+        heat = {group: deck.face_area_m2[group]
+                * (INSIDE_CONVECTION[group] * (surfaces[group] - air)
+                   + INSIDE_RADIATION * (surfaces[group] - star)) for group in GROUPS}
+        return air, surfaces, heat, star
 
     table = [unpack(by_hour[hour]) for hour in range(compared)]
     before = unpack(by_hour[-1]) if -1 in by_hour else None
@@ -727,7 +805,9 @@ def parse_hourly(path: Path, case: MapdlCase, deck: Deck, level: str, cycles: in
         face_heat_w={group: tuple(item[2][group] for item in table) for group in GROUPS},
         node_count=deck.node_count, element_count=deck.element_count, runtime_s=runtime,
         cycles=cycles, air_before_c=None if before is None else before[0],
-        face_heat_before_w=None if before is None else before[2])
+        face_heat_before_w=None if before is None else before[2],
+        star_c=tuple(item[3] for item in table), face_area_m2=dict(deck.face_area_m2),
+        star_before_c=None if before is None else before[3])
 
 
 def find_mapdl(root: Path | None = None) -> Path:
@@ -817,6 +897,11 @@ def agreement(case: MapdlCase, run: MapdlRun, target_rmse_k: float = 1.0,
               reference: str = "air") -> Agreement:
     mapdl = hourly_means(run.air_c, run.air_before_c)
     if reference == "operative" and case.energyplus_operative_c:
+        if run.star_c:
+            operative = 0.5 * (np.asarray(run.air_c) + np.asarray(run.star_c))
+            before = None if run.air_before_c is None or run.star_before_c is None \
+                else 0.5 * (run.air_before_c + run.star_before_c)
+            mapdl = hourly_means(operative, before)
         energyplus = case.compared(case.energyplus_operative_c)
     elif reference in ("air", "operative"):
         energyplus = case.compared(case.energyplus_air_c)
@@ -830,7 +915,9 @@ def agreement(case: MapdlCase, run: MapdlRun, target_rmse_k: float = 1.0,
     face_mapdl = {group: float(np.sum(hourly_means(run.face_heat_w[group],
                                                    before.get(group)))) / 1000.0
                   for group in GROUPS}
-    face_mapdl["floor"] -= float(np.sum(case.compared(case.transmitted_solar_w))) / 1000.0
+    sun_kwh = float(np.sum(case.compared(case.transmitted_solar_w))) / 1000.0
+    for group, share in face_solar_shares(run.face_area_m2, case.floor_solar_absorptance).items():
+        face_mapdl[group] -= sun_kwh * share
     face_plus = {group: float(np.sum(case.compared(case.energyplus_face_w[group]))) / 1000.0
                  for group in GROUPS if group in case.energyplus_face_w}
     percent = {}
@@ -894,6 +981,49 @@ def glazing_u_hourly(u_value: float, shutter, hours_of_day: np.ndarray) -> np.nd
     return values
 
 
+def prior_months(frame, lead_start, months: int = PRIOR_MONTHS
+                 ) -> tuple[tuple[float, float, float], ...]:
+    import pandas as pd
+
+    if not months:
+        return ()
+    radiation = np.clip(frame["horizontal_infrared_wh_m2"].to_numpy(dtype=float), 1.0, None)
+    sky = (radiation / STEFAN_BOLTZMANN) ** 0.25 - 273.15
+    outdoor = frame["dry_bulb_c"].to_numpy(dtype=float)
+    ground, _ = solair_c(outdoor, sky, frame["wind_speed_m_s"].to_numpy(dtype=float),
+                         frame["global_horizontal_wh_m2"].to_numpy(dtype=float), 0.9, 0.9,
+                         SKY_VIEW["ground"])
+    table = pd.DataFrame({"outdoor": outdoor, "ground": ground}, index=frame.index)
+    means = table.groupby(table.index.month).mean()
+    hours = table.groupby(table.index.month).size()
+    if len(means) != 12 or means.isna().any().any():
+        raise EngineError("the weather file does not hold twelve complete months")
+    start = pd.Timestamp(lead_start)
+    result = []
+    for back in range(months, 0, -1):
+        month = (start.month - 1 - back) % 12 + 1
+        result.append((float(hours[month] / 24.0), float(means.loc[month, "outdoor"]),
+                       float(means.loc[month, "ground"])))
+    if start.day > 1:
+        result.append((float(start.day - 1), float(means.loc[start.month, "outdoor"]),
+                       float(means.loc[start.month, "ground"])))
+    return tuple(result)
+
+
+def glazing_inward_solar(output, solar_w: np.ndarray, window_ua: np.ndarray,
+                         air: np.ndarray, outdoor: np.ndarray) -> np.ndarray:
+    gained = output.wide("Surface Window Heat Gain Energy")
+    lost = output.wide("Surface Window Heat Loss Energy")
+    if gained.empty or lost.empty:
+        return np.zeros(len(solar_w))
+    net = ((gained.resample("1h").sum().sum(axis=1)
+            - lost.resample("1h").sum().sum(axis=1)) / 3600.0).to_numpy(dtype=float)
+    if len(net) != len(solar_w):
+        raise EngineError("the EnergyPlus window series do not line up with the hours")
+    absorbed = net - solar_w + window_ua * (air - outdoor)
+    return np.where(solar_w > 0.0, np.clip(absorbed, 0.0, None), 0.0)
+
+
 def _hourly_mean(series) -> np.ndarray:
     return series.resample("1h").mean().to_numpy(dtype=float)
 
@@ -911,6 +1041,11 @@ def _solid_layers(construction, library) -> tuple[list[Layer], list[str]]:
                           density_kg_m3=material.density_kg_m3,
                           specific_heat_j_kgk=material.specific_heat_j_kgk))
     return kept, dropped
+
+
+def _inside_absorptance(construction, library) -> float:
+    inner = library.material(construction.layers[-1].material_id)
+    return inner.solar_absorptance if inner.solar_absorptance is not None else 0.7
 
 
 def _optics(construction, library) -> tuple[float, float]:
@@ -1010,12 +1145,16 @@ def case_from_run(label: str, design_hash: str, design, site, library, weather, 
         solar_w = (transmitted.resample("1h").sum().sum(axis=1) / 3600.0).to_numpy(
             dtype=float)
     gains = np.zeros(len(index))
+    radiant = np.zeros(len(index))
     for name in ("Zone Total Internal Convective Heating Rate",
                  "Zone Total Internal Radiant Heating Rate",
                  "Zone Total Internal Visible Radiation Heating Rate"):
         series = output.series(name, "ROOM", required=False)
         if series is not None and not series.empty:
-            gains = gains + _hourly_mean(series)
+            if "Convective" in name:
+                gains = gains + _hourly_mean(series)
+            else:
+                radiant = radiant + _hourly_mean(series)
     flows = np.zeros(len(index))
     for name in ("Zone Infiltration Standard Density Volume Flow Rate",
                  "Zone Ventilation Standard Density Volume Flow Rate"):
@@ -1025,7 +1164,15 @@ def case_from_run(label: str, design_hash: str, design, site, library, weather, 
     conductance = flows * energyplus_standard_density(site.elevation_m) * AIR_CP_J_KGK
     air = _hourly_mean(output.series("Zone Mean Air Temperature", "ROOM"))
     operative_series = output.series("Zone Operative Temperature", "ROOM", required=False)
-    operative = air if operative_series is None or operative_series.empty         else _hourly_mean(operative_series)
+    operative = air if operative_series is None or operative_series.empty \
+        else _hourly_mean(operative_series)
+    glazing = glazing_inward_solar(output, solar_w, window_ua, air, outdoor)
+    if glazing.any():
+        gains = gains + glazing
+        notes.append(f"Sun absorbed in the glass and passed into the room, "
+                     f"{glazing.sum() / 1000.0:.0f} kWh, is taken from EnergyPlus's window "
+                     "heat balance and added at the air node; MAPDL computes the window's "
+                     "conduction itself.")
     faces: dict[str, tuple[float, ...]] = {}
     conduction = output.wide("Surface Inside Face Conduction Heat Transfer Rate")
     if not conduction.empty:
@@ -1050,10 +1197,14 @@ def case_from_run(label: str, design_hash: str, design, site, library, weather, 
         openings=tuple(openings),
         timestamps=tuple(stamp.isoformat() for stamp in index),
         outdoor_c=tuple(outdoor.tolist()), solair_c=solair, outside_film_w_m2k=films,
-        internal_gain_w=tuple(gains.tolist()), transmitted_solar_w=tuple(solar_w.tolist()),
+        internal_gain_w=tuple(gains.tolist()), radiant_gain_w=tuple(radiant.tolist()),
+        floor_solar_absorptance=_inside_absorptance(design.floor, library),
+        transmitted_solar_w=tuple(solar_w.tolist()),
         outdoor_air_w_k=tuple(conductance.tolist()), window_ua_w_k=tuple(window_ua.tolist()),
         energyplus_air_c=tuple(air.tolist()), energyplus_operative_c=tuple(operative.tolist()),
-        lead_hours=0 if compare_from is None else int((index < compare_from).sum()), energyplus_face_w=faces, notes=tuple(notes))
+        lead_hours=0 if compare_from is None else int((index < compare_from).sum()),
+        prior=prior_months(weather.frame, index[0]) if compare_from is not None else (),
+        energyplus_face_w=faces, notes=tuple(notes))
 
 
 REPORT_SUFFIX = "_mapdl.json"

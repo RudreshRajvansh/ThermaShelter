@@ -378,6 +378,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/evidence/{run_hash}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Evidence */
+        get: operations["evidence_api_evidence__run_hash__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/evidence/{run_hash}/zip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Evidence Zip */
+        get: operations["evidence_zip_api_evidence__run_hash__zip_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/surface-results": {
         parameters: {
             query?: never;
@@ -789,6 +823,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/posts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Posts */
+        get: operations["list_posts_api_posts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/posts/{post_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save Post */
+        put: operations["save_post_api_posts__post_id__put"];
+        post?: never;
+        /** Delete Post */
+        delete: operations["delete_post_api_posts__post_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/posts/cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cards For Every Post */
+        post: operations["cards_for_every_post_api_posts_cards_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/posts/{post_id}/card": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Last Card */
+        get: operations["last_card_api_posts__post_id__card_get"];
+        put?: never;
+        /** New Card */
+        post: operations["new_card_api_posts__post_id__card_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1169,6 +1273,23 @@ export interface components {
             /** Averaging S */
             averaging_s?: number | null;
         };
+        /** CardOrder */
+        CardOrder: {
+            /** Time */
+            time: string;
+            /** Key */
+            key: string;
+            /** Action */
+            action: string;
+        };
+        /** CardResult */
+        CardResult: {
+            /** Post Id */
+            post_id: string;
+            card?: components["schemas"]["CommanderCard"] | null;
+            /** Error */
+            error?: string | null;
+        };
         /** ClimateMonth */
         ClimateMonth: {
             /** Month */
@@ -1411,6 +1532,78 @@ export interface components {
             /** Absolute Upper Bound C */
             absolute_upper_bound_c?: number | null;
             source: components["schemas"]["SourceRef"];
+        };
+        /** CommanderCard */
+        CommanderCard: {
+            /** Post Id */
+            post_id: string;
+            /** Post Name */
+            post_name: string;
+            /**
+             * Night Of
+             * Format: date
+             */
+            night_of: string;
+            /**
+             * Issued At
+             * Format: date-time
+             */
+            issued_at: string;
+            /**
+             * Lang
+             * @enum {string}
+             */
+            lang: "en" | "hi";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "red" | "amber" | "green";
+            /** Outside Min C */
+            outside_min_c?: number | null;
+            /** Inside Min C */
+            inside_min_c: number;
+            /** Inside Min At */
+            inside_min_at: string;
+            /** Hours Below Target */
+            hours_below_target: number;
+            /** Target C */
+            target_c: number;
+            /** Sunset */
+            sunset?: string | null;
+            /** Orders */
+            orders: components["schemas"]["CardOrder"][];
+            /** Fuel */
+            fuel: string;
+            /** Fuel Unit */
+            fuel_unit: string;
+            /** Fuel Tonight Units */
+            fuel_tonight_units: number;
+            /** Stock Units */
+            stock_units?: number | null;
+            /** Fuel Out Hours */
+            fuel_out_hours?: number | null;
+            /** Fresh Air L S */
+            fresh_air_l_s: number;
+            /** Model Error K */
+            model_error_k?: number | null;
+            /** Calibrated On */
+            calibrated_on?: string | null;
+            /**
+             * Forecast Source
+             * @enum {string}
+             */
+            forecast_source: "forecast" | "cached forecast" | "climatology";
+            /** Forecast Age H */
+            forecast_age_h?: number | null;
+            /** Safety */
+            safety: string[];
+            /**
+             * Notes
+             * @default []
+             */
+            notes: string[];
+            target_source: components["schemas"]["SourceRef"];
         };
         /** CompareRequest */
         CompareRequest: {
@@ -2947,6 +3140,59 @@ export interface components {
              * @default 180
              */
             azimuth_deg: number;
+        };
+        /** Post */
+        Post: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Site Id */
+            site_id: string;
+            /** Latitude Deg */
+            latitude_deg: number;
+            /** Longitude Deg */
+            longitude_deg: number;
+            design: components["schemas"]["DesignSpec"];
+            /** Soldiers */
+            soldiers: number;
+            /**
+             * Fuel
+             * @default kerosene
+             * @enum {string}
+             */
+            fuel: "kerosene" | "diesel" | "lpg" | "wood" | "electricity";
+            /** Stock Units */
+            stock_units?: number | null;
+            calibration?: components["schemas"]["PostCalibration"] | null;
+        };
+        /** PostCalibration */
+        PostCalibration: {
+            /** Infiltration Ach */
+            infiltration_ach: number;
+            /**
+             * Mass Multiplier
+             * @default 1
+             */
+            mass_multiplier: number;
+            /** Rmse Before K */
+            rmse_before_k?: number | null;
+            /** Rmse After K */
+            rmse_after_k?: number | null;
+            /** Calibrated On */
+            calibrated_on?: string | null;
+            /** Hours */
+            hours?: number | null;
+        };
+        /** PostSummary */
+        PostSummary: {
+            post: components["schemas"]["Post"];
+            /** Status */
+            status?: ("red" | "amber" | "green") | null;
+            /** Night Of */
+            night_of?: string | null;
+            /** Issued At */
+            issued_at?: string | null;
         };
         /** ProjectRequest */
         ProjectRequest: {
@@ -4491,6 +4737,71 @@ export interface operations {
             };
         };
     };
+    evidence_api_evidence__run_hash__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_hash: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    evidence_zip_api_evidence__run_hash__zip_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_hash: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "application/zip": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     surface_results_api_surface_results_post: {
         parameters: {
             query?: never;
@@ -5348,6 +5659,198 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RefereePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_posts_api_posts_get: {
+        parameters: {
+            query?: {
+                lang?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostSummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_post_api_posts__post_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Post"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_post_api_posts__post_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cards_for_every_post_api_posts_cards_post: {
+        parameters: {
+            query?: {
+                lang?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardResult"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    last_card_api_posts__post_id__card_get: {
+        parameters: {
+            query?: {
+                lang?: string;
+            };
+            header?: never;
+            path: {
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommanderCard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    new_card_api_posts__post_id__card_post: {
+        parameters: {
+            query?: {
+                lang?: string;
+            };
+            header?: never;
+            path: {
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommanderCard"];
                 };
             };
             /** @description Validation Error */

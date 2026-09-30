@@ -3,13 +3,22 @@ import { api, type DesignSpec } from "../lib/api";
 import { Empty, Failure, Loading, Panel } from "./Kit";
 import { num } from "../lib/format";
 
-function verdict(passes: boolean | null | undefined, mandatory: boolean): string {
+function verdict(
+  passes: boolean | null | undefined,
+  mandatory: boolean,
+): string {
   if (passes === true) return "meets";
   if (passes === false) return mandatory ? "fails" : "below";
   return "not assessed";
 }
 
-export function ByeLawSheet({ design, siteId }: { design: DesignSpec; siteId: string | null }) {
+export function ByeLawSheet({
+  design,
+  siteId,
+}: {
+  design: DesignSpec;
+  siteId: string | null;
+}) {
   const sheet = useQuery({
     queryKey: ["bye-law-sheet", design, siteId],
     queryFn: () => api.byeLawSheet(design, siteId),
@@ -20,11 +29,19 @@ export function ByeLawSheet({ design, siteId }: { design: DesignSpec; siteId: st
   return (
     <Panel
       title="Bye-law sheet"
-      subtitle={data ? `${data.code}${data.climate_zone ? `, ${data.climate_zone} zone` : ""}` : "Eco-Niwas Samhita envelope checks"}
+      subtitle={
+        data
+          ? `${data.code}${data.climate_zone ? `, ${data.climate_zone} zone` : ""}`
+          : "Eco-Niwas Samhita envelope checks"
+      }
     >
       {sheet.error && <Failure error={sheet.error} />}
-      {!data && !sheet.error && <Loading label="checking the envelope against the code…" />}
-      {data && !data.assessed && <Empty title="Not assessed for this site" detail={data.zone_basis} />}
+      {!data && !sheet.error && (
+        <Loading label="checking the envelope against the code…" />
+      )}
+      {data && !data.assessed && (
+        <Empty title="Not assessed for this site" detail={data.zone_basis} />
+      )}
       {data && data.assessed && (
         <>
           <p
@@ -52,15 +69,28 @@ export function ByeLawSheet({ design, siteId }: { design: DesignSpec; siteId: st
             </thead>
             <tbody className="tnum">
               {data.items?.map((item) => (
-                <tr key={item.clause + item.title} className="border-t border-[var(--color-line-soft)] align-top">
+                <tr
+                  key={item.clause + item.title}
+                  className="border-t border-[var(--color-line-soft)] align-top"
+                >
                   <td className="py-1 pr-2">{item.clause}</td>
                   <td className="py-1 pr-2">
                     {item.title}
-                    {!item.mandatory && <span className="ml-1 text-[var(--color-ink-faint)]">(advisory)</span>}
-                    {item.note && <div className="text-[11px] text-[var(--color-ink-faint)]">{item.note}</div>}
+                    {!item.mandatory && (
+                      <span className="ml-1 text-[var(--color-ink-faint)]">
+                        (advisory)
+                      </span>
+                    )}
+                    {item.note && (
+                      <div className="text-[11px] text-[var(--color-ink-faint)]">
+                        {item.note}
+                      </div>
+                    )}
                   </td>
                   <td className="py-1 text-right">
-                    {item.value != null ? `${num(item.value, 2)} ${item.unit}` : "—"}
+                    {item.value != null
+                      ? `${num(item.value, 2)} ${item.unit}`
+                      : "—"}
                   </td>
                   <td className="py-1 text-right">
                     {item.limit != null
@@ -69,7 +99,11 @@ export function ByeLawSheet({ design, siteId }: { design: DesignSpec; siteId: st
                   </td>
                   <td
                     className={`py-1 text-right ${
-                      item.passes === false ? "text-[var(--color-danger-ink)]" : item.passes ? "text-[var(--color-good)]" : ""
+                      item.passes === false
+                        ? "text-[var(--color-danger-ink)]"
+                        : item.passes
+                          ? "text-[var(--color-good)]"
+                          : ""
                     }`}
                   >
                     {verdict(item.passes, item.mandatory)}
@@ -78,13 +112,20 @@ export function ByeLawSheet({ design, siteId }: { design: DesignSpec; siteId: st
               ))}
             </tbody>
           </table>
-          <p className="mt-2 text-[11px] text-[var(--color-ink-faint)]">{data.zone_basis}</p>
+          <p className="mt-2 text-[11px] text-[var(--color-ink-faint)]">
+            {data.zone_basis}
+          </p>
           {(data.notes ?? []).map((note) => (
-            <p key={note} className="mt-1 text-[11px] text-[var(--color-ink-faint)]">
+            <p
+              key={note}
+              className="mt-1 text-[11px] text-[var(--color-ink-faint)]"
+            >
               {note}
             </p>
           ))}
-          <p className="mt-1 text-[11px] text-[var(--color-ink-faint)]">Source: {data.source.citation}</p>
+          <p className="mt-1 text-[11px] text-[var(--color-ink-faint)]">
+            Source: {data.source.citation}
+          </p>
         </>
       )}
     </Panel>

@@ -1168,6 +1168,41 @@ class SitingMap(Frozen):
         return self
 
 
+class CardOrder(Frozen):
+    time: str = Field(min_length=1)
+    key: str = Field(min_length=1)
+    action: str = Field(min_length=1)
+
+
+class CommanderCard(Frozen):
+    post_id: str = Field(min_length=1)
+    post_name: str
+    night_of: date
+    issued_at: datetime
+    lang: Literal["en", "hi"]
+    status: Literal["red", "amber", "green"]
+    outside_min_c: float | None = None
+    inside_min_c: float
+    inside_min_at: str
+    hours_below_target: float = Field(ge=0.0)
+    target_c: float
+    sunset: str | None = None
+    orders: tuple[CardOrder, ...]
+    fuel: str
+    fuel_unit: str
+    fuel_tonight_units: float = Field(ge=0.0)
+    stock_units: float | None = Field(default=None, ge=0.0)
+    fuel_out_hours: float | None = Field(default=None, ge=0.0)
+    fresh_air_l_s: float = Field(ge=0.0)
+    model_error_k: float | None = Field(default=None, ge=0.0)
+    calibrated_on: date | None = None
+    forecast_source: Literal["forecast", "cached forecast", "climatology"]
+    forecast_age_h: float | None = Field(default=None, ge=0.0)
+    safety: tuple[str, ...]
+    notes: tuple[str, ...] = ()
+    target_source: SourceRef
+
+
 class BuildabilityMetrics(Frozen):
     wall_thickness_m: float
     surface_to_volume: float

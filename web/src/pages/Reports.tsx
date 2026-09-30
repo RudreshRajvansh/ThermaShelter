@@ -1,6 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { api, designPack, type MetaResponse, type SimulationResult } from "../lib/api";
+import {
+  api,
+  designPack,
+  evidenceUrl,
+  type MetaResponse,
+  type SimulationResult,
+} from "../lib/api";
 import { AssumptionTable, Empty, Loading, Panel, Warnings } from "../components/Kit";
 import { PerformanceChart } from "../components/PerformanceChart";
 import { ByeLawSheet } from "../components/ByeLawSheet";
@@ -90,6 +96,13 @@ export function Reports({
           {packError && (
             <span className="text-xs text-[var(--color-danger-ink)]">{packError}</span>
           )}
+          <a
+            href={evidenceUrl(simulation.design_hash)}
+            download
+            className="rounded-md border border-[var(--color-line)] bg-[var(--color-night-2)] px-3 py-1.5 text-xs font-medium"
+          >
+            Evidence folder
+          </a>
           <button
             type="button"
             disabled={packing}

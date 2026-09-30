@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -73,6 +73,35 @@ class DesignSummary(Body):
     floor_area_m2: float
     occupants: int
     is_reference: bool
+
+
+class PostCalibration(Body):
+    infiltration_ach: float = Field(gt=0.0, le=20.0)
+    mass_multiplier: float = Field(default=1.0, gt=0.2, le=5.0)
+    rmse_before_k: float | None = Field(default=None, ge=0.0)
+    rmse_after_k: float | None = Field(default=None, ge=0.0)
+    calibrated_on: date | None = None
+    hours: int | None = Field(default=None, ge=1)
+
+
+class Post(Body):
+    id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,32}$")
+    name: str = Field(min_length=1, max_length=80)
+    site_id: str = Field(min_length=1)
+    latitude_deg: float = Field(ge=-90.0, le=90.0)
+    longitude_deg: float = Field(ge=-180.0, le=180.0)
+    design: DesignSpec
+    soldiers: int = Field(ge=1, le=500)
+    fuel: Literal["kerosene", "diesel", "lpg", "wood", "electricity"] = "kerosene"
+    stock_units: float | None = Field(default=None, ge=0.0)
+    calibration: PostCalibration | None = None
+
+
+class PostSummary(Body):
+    post: Post
+    status: Literal["red", "amber", "green"] | None = None
+    night_of: date | None = None
+    issued_at: datetime | None = None
 
 
 class DesignPackRequest(Body):

@@ -34,6 +34,7 @@ def mapdl_dir(tmp_path_factory) -> Path:
 @pytest.fixture(scope="module")
 def client(tmp_path_factory, cfd_dir, mapdl_dir) -> TestClient:
     import os
+    os.environ["SHELTER_EVIDENCE_DIR"] = str(tmp_path_factory.mktemp("evidence"))
     os.environ["SHELTER_DATA_DIR"] = str(DATA)
     os.environ["SHELTER_DB"] = str(tmp_path_factory.mktemp("store") / "runs.db")
     os.environ["SHELTER_CFD_DIR"] = str(cfd_dir)
@@ -180,6 +181,16 @@ def test_the_comfort_model_can_be_chosen_per_request(client, design, meta):
         pytest.skip("EnergyPlus is not available")
     assert response.status_code == 200
     assert response.json()["comfort"]["comfort_model_id"] == other
+    run_hash = response.json()["design_hash"]
+    manifest = client.get(f"/api/evidence/{run_hash}").json()
+    files = {item["file"] for item in manifest["files"]}
+    assert {"design.json", "result.json", "warnings.json", "plots/temperatures.svg",
+            "energyplus/in.idf"} <= files
+    assert manifest["solvers"]["energyplus"]
+    assert manifest["weather"]["sha256"]
+    archive = client.get(f"/api/evidence/{run_hash}/zip")
+    assert archive.status_code == 200
+    assert archive.headers["content-type"] == "application/zip"
 
 
 def test_geometry_rejects_an_impossible_design(client, design):
@@ -697,3 +708,11 @@ def test_design_pack_is_a_zip_with_drawings_quantities_and_the_sheet(client, map
         assert "No EnergyPlus input file is included" in readme
     bad = client.post("/api/design-pack", json={"design": design, "run_hash": "nothex"})
     assert bad.status_code == 422
+
+
+def test_missing_evidence_is_a_clear_404(client):
+    response = client.get("/api/evidence/" + "0" * 32)
+    assert response.status_code == 404
+    assert "No evidence folder" in response.json()["detail"]
+    assert client.get("/api/evidence/" + "0" * 32 + "/zip").status_code == 404
+    assert client.get("/api/evidence/not-a-hash").status_code == 422

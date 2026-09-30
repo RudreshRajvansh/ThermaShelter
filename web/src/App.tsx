@@ -7,6 +7,7 @@ import { Navbar } from "./components/Navbar";
 import { SearchRunner } from "./components/SearchRunner";
 import { InputPage } from "./pages/InputPage";
 import { OutputPage } from "./pages/OutputPage";
+import { OperatePage } from "./pages/OperatePage";
 
 export default function App() {
   const store = useStore();
@@ -126,7 +127,9 @@ export default function App() {
       <SearchRunner />
       <main className="mx-auto max-w-[1360px] space-y-4 px-4 py-6 pb-16">
         {blocking.length > 0 && <Warnings warnings={blocking} />}
-        {store.page === "input" ? (
+        {store.page === "operate" ? (
+          <OperatePage meta={meta.data} />
+        ) : store.page === "input" ? (
           <InputPage meta={meta.data} catalogue={catalogue.data} summaries={summaries.data} />
         ) : (
           <OutputPage
