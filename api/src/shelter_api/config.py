@@ -40,6 +40,7 @@ class Settings:
                 "SHELTER_ALLOW_ORIGINS",
                 "http://localhost:5173,http://127.0.0.1:5173").split(",")
             if item.strip()))
+    web_dir: Path | None = field(default_factory=lambda: _path("SHELTER_WEB_DIR", None))
     operate_at: str = field(default_factory=lambda: os.environ.get("SHELTER_OPERATE_AT", ""))
     operate_lang: str = field(
         default_factory=lambda: os.environ.get("SHELTER_OPERATE_LANG", "en"))

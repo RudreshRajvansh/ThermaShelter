@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from shelter_engine.errors import (ConfigurationError, EngineError, GeometryError,
                                    MaterialError, ResultsUnavailable,
@@ -122,6 +123,9 @@ def create_app() -> FastAPI:
     @app.exception_handler(EngineError)
     async def _engine(request: Request, error: EngineError) -> JSONResponse:
         return JSONResponse(status_code=422, content={"detail": str(error)})
+
+    if settings.web_dir is not None and (settings.web_dir / "index.html").is_file():
+        app.mount("/", StaticFiles(directory=settings.web_dir, html=True), name="web")
 
     return app
 
