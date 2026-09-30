@@ -216,3 +216,21 @@ def test_outside_calls_carry_only_the_grid_and_stop_when_offline(tmp_path, monke
     assert egress.endpoint("SHELTER_FORECAST_URL", "x") == "http://forecast.local/v1/forecast"
     monkeypatch.delenv("SHELTER_OFFLINE")
     assert not egress.offline()
+
+
+def test_search_workers_follow_the_container_limits(tmp_path, monkeypatch):
+    from shelter_api.routers import search
+
+    monkeypatch.setattr(search, "CGROUP", tmp_path)
+    (tmp_path / "cpu.max").write_text("200000 100000\n", encoding="utf-8")
+    (tmp_path / "memory.max").write_text(str(512 * 1024 * 1024), encoding="utf-8")
+    assert search.container_cpus() == 2.0
+    assert search.default_workers() == 1
+    (tmp_path / "memory.max").write_text(str(4 * 1024 ** 3), encoding="utf-8")
+    assert search.default_workers() == 1
+    (tmp_path / "cpu.max").write_text("400000 100000\n", encoding="utf-8")
+    assert search.default_workers() == 3
+    (tmp_path / "cpu.max").write_text("max 100000\n", encoding="utf-8")
+    (tmp_path / "memory.max").write_text("max\n", encoding="utf-8")
+    assert search.container_cpus() is None and search.container_memory() is None
+    assert search.default_workers() >= 1

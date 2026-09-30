@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import threading
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 
@@ -18,8 +19,45 @@ _running = threading.Semaphore(2)
 MAX_DEFAULT_WORKERS = 8
 
 
+MEMORY_PER_WORKER = 700 * 1024 * 1024
+CGROUP = Path("/sys/fs/cgroup")
+
+
+def _read(path: Path) -> str | None:
+    try:
+        return path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+
+
+def container_cpus() -> float | None:
+    quota = _read(CGROUP / "cpu.max")
+    if quota:
+        limit, _, period = quota.partition(" ")
+        if limit != "max" and period:
+            return int(limit) / int(period)
+    old_quota = _read(CGROUP / "cpu" / "cpu.cfs_quota_us")
+    old_period = _read(CGROUP / "cpu" / "cpu.cfs_period_us")
+    if old_quota and old_period and int(old_quota) > 0:
+        return int(old_quota) / int(old_period)
+    return None
+
+
+def container_memory() -> int | None:
+    for path in (CGROUP / "memory.max", CGROUP / "memory" / "memory.limit_in_bytes"):
+        value = _read(path)
+        if value and value != "max" and int(value) < 1 << 50:
+            return int(value)
+    return None
+
+
 def default_workers() -> int:
-    return max(1, min(MAX_DEFAULT_WORKERS, (os.cpu_count() or 2) - 1))
+    cpus = container_cpus() or float(os.cpu_count() or 2)
+    workers = min(MAX_DEFAULT_WORKERS, int(cpus) - 1)
+    memory = container_memory()
+    if memory is not None:
+        workers = min(workers, memory // MEMORY_PER_WORKER - 1)
+    return max(1, workers)
 
 
 def _run_optimisation(context: Context, job_id: str, site_id: str,
