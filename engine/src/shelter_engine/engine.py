@@ -26,6 +26,7 @@ from .errors import EngineError, SimulationFailed
 from .geometry import GeometryModel, ROOM, build_geometry
 from .hashing import stable_hash
 from .idf import IdfBundle, build_idf
+from .mapdl import Layer as MapdlLayer, MapdlCase, case_from_run
 from .materials import MaterialLibrary
 from .mesh import build_mesh
 from .metrics import (HEATING_CANDIDATES as HEATING_ENERGY_CANDIDATES,
@@ -51,7 +52,8 @@ from .schema import (Arrangement, Assumption, BuildabilityMetrics, CFDExport,
                      RunOptions, RunPeriod, Severity, SimulationResult, SiteSpec,
                      SourceRef, SourceStatus, SunPath, SurfaceResults,
                      SurfaceSeries, TerrainMesh, ThermalBridge, UncertaintyBand)
-from .uncertainty import select_parameters, uncertainty_band
+from .uncertainty import (UncertainParameter, select_parameters, uncertainty_band,
+                          weather_parameter)
 from .weather import WeatherFile, load_epw
 
 DEFAULT_COMFORT_MODEL = "drdo_tot_band"
@@ -89,7 +91,8 @@ class Engine:
                  cache: Cache | None = None,
                  settings: EngineSettings | None = None,
                  install: EnergyPlusInstall | None = None,
-                 weather: WeatherFile | None = None):
+                 weather: WeatherFile | None = None,
+                 alternate_weather: tuple[str, str] | None = None):
         self.site = site
         self.library = library
         self.settings = settings or SETTINGS
@@ -109,6 +112,8 @@ class Engine:
         self._metric_cache: Cache = LRUCache(maxsize=4096)
         self.weather = weather or load_epw(site.epw_path, site)
         self._nominal_year = int(self.weather.frame.index[0].year)
+        self.alternate_weather = alternate_weather
+        self._alternate: WeatherFile | None = None
 
     @property
     def install(self) -> EnergyPlusInstall:
@@ -135,6 +140,12 @@ class Engine:
         self._cache.set(key, payload)
         return payload
 
+    def idf_text(self, design: DesignSpec, options: RunOptions,
+                 conditioned: bool = True) -> str:
+        constructions, model = self._prepare(design)
+        return build_idf(design, self.site, model, constructions, options,
+                         conditioned=conditioned, install=self.install).text
+
     def _prepare(self, design: DesignSpec) -> tuple[ConstructionSet, GeometryModel]:
         constructions = build_constructions(design, self.library)
         model = build_geometry(design, constructions.names,
@@ -143,7 +154,7 @@ class Engine:
         return constructions, model
 
     def _run(self, design: DesignSpec, options: RunOptions,
-             conditioned: bool) -> _RunProducts:
+             conditioned: bool, clip: bool = True) -> _RunProducts:
         constructions, model = self._prepare(design)
         label = f"{design.name}_{'conditioned' if conditioned else 'free'}"
         started = time.perf_counter()
@@ -173,6 +184,12 @@ class Engine:
                                        nominal_year=self._nominal_year,
                                        settings=self.settings, install=self.install)
         runtime = time.perf_counter() - started
+        start = pd.Timestamp(self._in_nominal_year(options.period.start))
+        output = output.since(start) if clip else output
+        if output.since(start).is_empty:
+            raise SimulationFailed(
+                f"EnergyPlus ran {label} but reported nothing inside the requested period "
+                f"from {options.period.start}.")
         warnings: list[EngineWarning] = []
         series = zone_series(output, ROOM, warnings)
         bundle.warnings.extend(warnings)
@@ -417,7 +434,7 @@ class Engine:
         start = pd.Timestamp(date(self._nominal_year, window.start.month,
                                   window.start.day))
         end = pd.Timestamp(date(self._nominal_year, window.end.month,
-                                window.end.day)) + pd.Timedelta(1, unit="D")
+                                window.end.day)) + pd.to_timedelta(1, unit="D")
         clipped = {name: frame.loc[(frame.index >= start) & (frame.index < end)]
                    for name, frame in frames.items()}
         clipped = {name: frame for name, frame in clipped.items() if not frame.empty}
@@ -449,9 +466,35 @@ class Engine:
         return SurfaceResults(timestamps=stamps, period=window,
                               surfaces=tuple(series))
 
+    def _weather_parameter(self) -> UncertainParameter | None:
+        if self.alternate_weather is None:
+            return None
+        label, path = self.alternate_weather
+        if Path(path).resolve() == Path(self.site.epw_path).resolve():
+            return None
+        return weather_parameter(label, path)
+
+    def _probe(self, library: MaterialLibrary, weather_path: str | None) -> "Engine":
+        site, weather = self.site, self.weather
+        if weather_path is not None:
+            site = self.site.model_copy(update={"epw_path": weather_path})
+            if self._alternate is None:
+                self._alternate = load_epw(weather_path, site)
+            weather = self._alternate
+        probe = Engine(site, library,
+                       comfort_model_id=self.comfort_model.id,
+                       fixed_target_id=self.fixed_target.id if self.fixed_target else None,
+                       fuel=self.fuel, thermal_bridges=self.thermal_bridges,
+                       references=self.references, catalogue=self.catalogue,
+                       cache=self._cache, settings=self.settings,
+                       install=self.install, weather=weather)
+        probe._metric_cache = self._metric_cache
+        return probe
+
     def _uncertainty(self, design: DesignSpec, options: RunOptions,
                      comfort) -> list[UncertaintyBand]:
-        parameters = select_parameters(design, self.library)
+        parameters = select_parameters(design, self.library,
+                                       weather=self._weather_parameter())
         if not parameters:
             return []
         light = options.model_copy(update={"surface_output": False,
@@ -463,17 +506,8 @@ class Engine:
                 continue
 
             def evaluate(variant: DesignSpec, library: MaterialLibrary,
-                         _metric: str = metric) -> float:
-                probe = Engine(self.site, library,
-                               comfort_model_id=self.comfort_model.id,
-                               fixed_target_id=self.fixed_target.id
-                               if self.fixed_target else None,
-                               fuel=self.fuel, thermal_bridges=self.thermal_bridges,
-                               references=self.references, catalogue=self.catalogue,
-                               cache=self._cache, settings=self.settings,
-                               install=self.install, weather=self.weather)
-                probe._metric_cache = self._metric_cache
-                metrics = probe.metrics_for(variant, light)
+                         weather_path: str | None = None, _metric: str = metric) -> float:
+                metrics = self._probe(library, weather_path).metrics_for(variant, light)
                 value = metrics.get(_metric)
                 if value is None:
                     raise EngineError(
@@ -489,19 +523,12 @@ class Engine:
                      unit: str, nominal: float | None = None) -> UncertaintyBand:
         light = options.model_copy(update={"surface_output": False,
                                            "conditioned_run": False})
-        parameters = select_parameters(design, self.library)
+        parameters = select_parameters(design, self.library,
+                                       weather=self._weather_parameter())
 
-        def evaluate(variant: DesignSpec, library: MaterialLibrary) -> float:
-            probe = Engine(self.site, library,
-                           comfort_model_id=self.comfort_model.id,
-                           fixed_target_id=self.fixed_target.id
-                           if self.fixed_target else None,
-                           fuel=self.fuel, thermal_bridges=self.thermal_bridges,
-                           references=self.references, catalogue=self.catalogue,
-                           cache=self._cache, settings=self.settings,
-                           install=self.install, weather=self.weather)
-            probe._metric_cache = self._metric_cache
-            value = probe.metrics_for(variant, light).get(metric)
+        def evaluate(variant: DesignSpec, library: MaterialLibrary,
+                     weather_path: str | None = None) -> float:
+            value = self._probe(library, weather_path).metrics_for(variant, light).get(metric)
             if value is None:
                 raise EngineError(f"the corner run produced no {metric}")
             return float(value)
@@ -647,6 +674,18 @@ class Engine:
             fuel=self.fuel.fuel if self.fuel else None)
         self._cache.set(key, result)
         return result
+
+    def mapdl_case(self, design: DesignSpec, period: RunPeriod,
+                   label: str = "week") -> MapdlCase:
+        from .idf import KIVA_SOIL
+
+        options = RunOptions(period=period, surface_output=True, conditioned_run=False)
+        products = self._run(design, options, conditioned=False, clip=False)
+        soil = MapdlLayer("soil", 1.0, KIVA_SOIL["conductivity_w_mk"],
+                          KIVA_SOIL["density_kg_m3"], KIVA_SOIL["specific_heat_j_kgk"])
+        return case_from_run(label, stable_hash(design), design, self.site, self.library,
+                             self.weather, products.output, products.model, soil,
+                             compare_from=pd.Timestamp(self._in_nominal_year(period.start)))
 
     def _in_nominal_year(self, day: date) -> date:
         if day.month == 2 and day.day == 29:

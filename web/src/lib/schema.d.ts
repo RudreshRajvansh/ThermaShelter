@@ -310,6 +310,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/bill-of-quantities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Quantities */
+        post: operations["quantities_api_bill_of_quantities_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bye-law-sheet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Bye Law Sheet */
+        post: operations["bye_law_sheet_api_bye_law_sheet_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/design-pack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Design Pack */
+        post: operations["design_pack_api_design_pack_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/simulate": {
         parameters: {
             query?: never;
@@ -489,6 +540,40 @@ export interface paths {
         };
         /** Cfd */
         get: operations["cfd_api_cfd__design_hash__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mapdl": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mapdl For Design */
+        post: operations["mapdl_for_design_api_mapdl_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mapdl/{design_hash}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mapdl */
+        get: operations["mapdl_api_mapdl__design_hash__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -830,6 +915,27 @@ export interface components {
             source: components["schemas"]["SourceRef"];
             /** @default derived */
             provenance: components["schemas"]["Provenance"];
+        };
+        /** BillOfQuantities */
+        BillOfQuantities: {
+            /** Lines */
+            lines: components["schemas"]["QuantityLine"][];
+            /** Total Mass Kg */
+            total_mass_kg: number;
+            /** Imported Mass Kg */
+            imported_mass_kg: number;
+            /** Total Cost Inr */
+            total_cost_inr: number;
+            /**
+             * Unweighed
+             * @default []
+             */
+            unweighed: string[];
+            /**
+             * Notes
+             * @default []
+             */
+            notes: string[];
         };
         /** BuildabilityMetrics */
         BuildabilityMetrics: {
@@ -1366,6 +1472,54 @@ export interface components {
              */
             warnings: components["schemas"]["EngineWarning"][];
         };
+        /** ComplianceItem */
+        ComplianceItem: {
+            /** Clause */
+            clause: string;
+            /** Title */
+            title: string;
+            /** Value */
+            value?: number | null;
+            /** Unit */
+            unit: string;
+            /** Limit */
+            limit?: number | null;
+            /**
+             * Comparison
+             * @enum {string}
+             */
+            comparison: "max" | "min" | "info";
+            /** Mandatory */
+            mandatory: boolean;
+            /** Passes */
+            passes?: boolean | null;
+            /** Note */
+            note?: string | null;
+        };
+        /** ComplianceSheet */
+        ComplianceSheet: {
+            /** Code */
+            code: string;
+            /** Climate Zone */
+            climate_zone?: string | null;
+            /** Zone Basis */
+            zone_basis: string;
+            /** Assessed */
+            assessed: boolean;
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["ComplianceItem"][];
+            /** Mandatory Pass */
+            mandatory_pass?: boolean | null;
+            /**
+             * Notes
+             * @default []
+             */
+            notes: string[];
+            source: components["schemas"]["SourceRef"];
+        };
         /** CondensationMetrics */
         CondensationMetrics: {
             /**
@@ -1468,6 +1622,19 @@ export interface components {
             run_end: string;
             /** Notes */
             notes?: string[];
+        };
+        /** DesignPackRequest */
+        DesignPackRequest: {
+            design: components["schemas"]["DesignSpec"];
+            /** Site Id */
+            site_id?: string | null;
+            /** @default {
+             *       "start": "2019-01-01",
+             *       "end": "2019-01-31"
+             *     } */
+            period: components["schemas"]["Window"];
+            /** Run Hash */
+            run_hash?: string | null;
         };
         /** DesignSpec */
         DesignSpec: {
@@ -2055,6 +2222,193 @@ export interface components {
             /** Note */
             note: string;
         };
+        /** MapdlAbsent */
+        MapdlAbsent: {
+            /**
+             * Available
+             * @default false
+             * @constant
+             */
+            available: false;
+            /** Design Hash */
+            design_hash: string;
+            /** Reason */
+            reason: string;
+            /** Rejected */
+            rejected?: string[];
+        };
+        /** MapdlAgreement */
+        MapdlAgreement: {
+            /** Hours */
+            hours: number;
+            /** Mae K */
+            mae_k: number;
+            /** Rmse K */
+            rmse_k: number;
+            /** Bias K */
+            bias_k: number;
+            /** Max Abs K */
+            max_abs_k: number;
+            /** Target Rmse K */
+            target_rmse_k: number;
+            /** Meets Target */
+            meets_target: boolean;
+            /**
+             * Faces
+             * @default []
+             */
+            faces: components["schemas"]["MapdlFace"][];
+        };
+        /** MapdlCheck */
+        MapdlCheck: {
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
+            /** Points */
+            points: number;
+            /** Max Abs K */
+            max_abs_k: number;
+            /** Tolerance K */
+            tolerance_k: number;
+            /** Passed */
+            passed: boolean;
+            /** Runtime S */
+            runtime_s: number;
+        };
+        /** MapdlConvergence */
+        MapdlConvergence: {
+            /** Metric */
+            metric: string;
+            /** Refinement Ratio */
+            refinement_ratio: number;
+            /** Order */
+            order?: number | null;
+            /** Gci Fine K */
+            gci_fine_k?: number | null;
+            /** Extrapolated */
+            extrapolated?: number | null;
+            /** Time Step Difference K */
+            time_step_difference_k?: number | null;
+        };
+        /** MapdlFace */
+        MapdlFace: {
+            /** Group */
+            group: string;
+            /** Mapdl Kwh */
+            mapdl_kwh: number;
+            /** Energyplus Kwh */
+            energyplus_kwh?: number | null;
+            /** Difference Percent */
+            difference_percent?: number | null;
+        };
+        /** MapdlLevel */
+        MapdlLevel: {
+            /** Level */
+            level: string;
+            /** Node Count */
+            node_count: number;
+            /** Element Count */
+            element_count: number;
+            /** Substeps */
+            substeps: number;
+            /** Runtime S */
+            runtime_s: number;
+            /** Mean Air C */
+            mean_air_c: number;
+            /** Minimum Air C */
+            minimum_air_c: number;
+            /** Rmse K */
+            rmse_k: number;
+        };
+        /** MapdlReport */
+        MapdlReport: {
+            /** Design Hash */
+            design_hash: string;
+            /** Label */
+            label: string;
+            /** Site Id */
+            site_id: string;
+            /** Engine Version */
+            engine_version: string;
+            /** Solver */
+            solver: string;
+            /** Version */
+            version: string;
+            /** Level */
+            level: string;
+            /** Cycles */
+            cycles: number;
+            /**
+             * Lead Days
+             * @default 0
+             */
+            lead_days: number;
+            /** Substeps */
+            substeps: number;
+            /** Node Count */
+            node_count: number;
+            /** Element Count */
+            element_count: number;
+            /** Runtime S */
+            runtime_s: number;
+            /** Timestamps */
+            timestamps: string[];
+            /** Outdoor C */
+            outdoor_c: number[];
+            /** Mapdl Air C */
+            mapdl_air_c: number[];
+            /** Energyplus Air C */
+            energyplus_air_c: number[];
+            agreement: components["schemas"]["MapdlAgreement"];
+            /**
+             * Levels
+             * @default []
+             */
+            levels: components["schemas"]["MapdlLevel"][];
+            convergence?: components["schemas"]["MapdlConvergence"] | null;
+            /**
+             * Checks
+             * @default []
+             */
+            checks: components["schemas"]["MapdlCheck"][];
+            /**
+             * Notes
+             * @default []
+             */
+            notes: string[];
+            /**
+             * Sources
+             * @default []
+             */
+            sources: components["schemas"]["SourceRef"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /**
+             * Provenance
+             * @default fea
+             * @constant
+             */
+            provenance: "fea";
+        };
+        /** MapdlSet */
+        MapdlSet: {
+            /**
+             * Available
+             * @default true
+             * @constant
+             */
+            available: true;
+            /** Design Hash */
+            design_hash: string;
+            /** Reports */
+            reports: components["schemas"]["MapdlReport"][];
+            /** Rejected */
+            rejected?: string[];
+        };
         /** Material */
         Material: {
             /** Id */
@@ -2598,7 +2952,33 @@ export interface components {
          * Provenance
          * @enum {string}
          */
-        Provenance: "simulated" | "surrogate" | "cfd" | "measured" | "derived" | "literature" | "assumed";
+        Provenance: "simulated" | "surrogate" | "cfd" | "fea" | "measured" | "derived" | "literature" | "assumed";
+        /** QuantityLine */
+        QuantityLine: {
+            /** Item Id */
+            item_id: string;
+            /** Name */
+            name: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "material" | "glazing" | "shutter" | "pcm";
+            /** Used In */
+            used_in: string[];
+            /** Area M2 */
+            area_m2: number;
+            /** Volume M3 */
+            volume_m3?: number | null;
+            /** Mass Kg */
+            mass_kg?: number | null;
+            /** Locally Available */
+            locally_available?: boolean | null;
+            /** Cost Inr */
+            cost_inr: number;
+            /** Note */
+            note?: string | null;
+        };
         /** Recommendation */
         Recommendation: {
             /** Code */
@@ -3906,6 +4286,106 @@ export interface operations {
             };
         };
     };
+    quantities_api_bill_of_quantities_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GeometryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillOfQuantities"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bye_law_sheet_api_bye_law_sheet_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GeometryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplianceSheet"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    design_pack_api_design_pack_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DesignPackRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "application/zip": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     simulate_api_simulate_post: {
         parameters: {
             query?: never;
@@ -4252,6 +4732,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CFDFieldSet"] | components["schemas"]["CFDAbsent"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mapdl_for_design_api_mapdl_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GeometryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapdlSet"] | components["schemas"]["MapdlAbsent"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mapdl_api_mapdl__design_hash__get: {
+        parameters: {
+            query?: {
+                site_id?: string | null;
+            };
+            header?: never;
+            path: {
+                design_hash: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapdlSet"] | components["schemas"]["MapdlAbsent"];
                 };
             };
             /** @description Validation Error */

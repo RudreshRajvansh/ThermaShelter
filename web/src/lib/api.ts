@@ -57,6 +57,11 @@ export type EndurancePayload = S["EndurancePayload"];
 export type LeftoverHeatPayload = S["LeftoverHeatPayload"];
 export type HorizonValuePayload = S["HorizonValuePayload"];
 export type AirQualityMetrics = S["AirQualityMetrics"];
+export type MapdlReport = S["MapdlReport"];
+export type BillOfQuantities = S["BillOfQuantities"];
+export type ComplianceSheet = S["ComplianceSheet"];
+export type MapdlSet = S["MapdlSet"];
+export type MapdlAbsent = S["MapdlAbsent"];
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -108,6 +113,31 @@ const get = <T,>(path: string) => request<T>(path);
 const post = <T,>(path: string, payload: unknown) =>
   request<T>(path, { method: "POST", body: JSON.stringify(payload) });
 
+export async function designPack(payload: {
+  design: DesignSpec;
+  site_id?: string | null;
+  period?: Window;
+  run_hash?: string | null;
+}): Promise<Blob> {
+  const response = await fetch(`${BASE}/api/design-pack`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    let detail = `${response.status} ${response.statusText}`;
+    try {
+      const body = JSON.parse(text);
+      if (body && typeof body === "object" && "detail" in body) detail = String(body.detail);
+    } catch {
+      if (text) detail = text;
+    }
+    throw new ApiError(response.status, detail, "/api/design-pack");
+  }
+  return response.blob();
+}
+
 export const api = {
   meta: () => get<MetaResponse>("/api/meta"),
   materials: () => get<Material[]>("/api/materials"),
@@ -151,6 +181,14 @@ export const api = {
   }) => post<ComparisonTable>("/api/compare", payload),
   cfd: (designHash: string) =>
     get<CFDFieldSet | CFDAbsent>(`/api/cfd/${designHash}`),
+  billOfQuantities: (design: DesignSpec, siteId?: string | null) =>
+    post<BillOfQuantities>("/api/bill-of-quantities", { design, site_id: siteId ?? null }),
+  byeLawSheet: (design: DesignSpec, siteId?: string | null) =>
+    post<ComplianceSheet>("/api/bye-law-sheet", { design, site_id: siteId ?? null }),
+  mapdl: (designHash: string, siteId?: string | null) =>
+    get<MapdlSet | MapdlAbsent>(
+      `/api/mapdl/${designHash}${siteId ? `?site_id=${encodeURIComponent(siteId)}` : ""}`,
+    ),
   cfdBoundaryConditions: (designHash: string) =>
     get<CFDBoundarySet>(`/api/cfd/${designHash}/boundary-conditions`),
   sunPath: (siteId: string | null | undefined, day: string) =>

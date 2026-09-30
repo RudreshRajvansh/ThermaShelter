@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 import threading
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
@@ -87,6 +87,8 @@ ZONE_VARIABLES = (
     "Enclosure Windows Total Transmitted Solar Radiation Energy",
     "Zone Total Internal Total Heating Energy",
     "Zone Total Internal Convective Heating Rate",
+    "Zone Total Internal Radiant Heating Rate",
+    "Zone Total Internal Visible Radiation Heating Rate",
     "Zone Infiltration Air Change Rate",
     "Zone Infiltration Standard Density Volume Flow Rate",
     "Zone Ventilation Air Change Rate",
@@ -102,6 +104,7 @@ SITE_VARIABLES = (
     "Site Wind Speed",
     "Site Direct Solar Radiation Rate per Area",
     "Site Diffuse Solar Radiation Rate per Area",
+    "Site Sky Temperature",
 )
 IDEAL_LOADS_VARIABLES = (
     "Zone Ideal Loads Supply Air Total Heating Energy",
@@ -310,8 +313,15 @@ def _all_days_schedule(idf, name: str, active_hours: Sequence[int],
                                                            off_value))])
 
 
+def spin_up_start(options: RunOptions) -> date:
+    period = options.period
+    days = min(options.spin_up_days, max(0, 365 - period.days))
+    return period.start - timedelta(days=days)
+
+
 def _heating_schedule(idf, name: str, active_hours: Sequence[int], on_value: float,
-                      off_value: float, cutoff: datetime | None) -> str:
+                      off_value: float, cutoff: datetime | None,
+                      lead_start: date | None = None) -> str:
     if cutoff is None:
         return _all_days_schedule(idf, name, active_hours, on_value, off_value,
                                   TEMPERATURE_LIMITS)
@@ -337,7 +347,13 @@ def _heating_schedule(idf, name: str, active_hours: Sequence[int], on_value: flo
               _hour_profile(active_hours, on_value, off_value))
     last_hours = [hour for hour in active_hours if hour < cutoff.hour]
     block(f"{day.month}/{day.day}", _hour_profile(last_hours, on_value, off_value))
-    if day.month != 12 or day.day != 31:
+    wraps = lead_start is not None and lead_start.year < day.year
+    if wraps:
+        eve = lead_start - timedelta(days=1)
+        if (eve.month, eve.day) > (day.month, day.day):
+            block(f"{eve.month}/{eve.day}", [(24, off_value)])
+        block("12/31", _hour_profile(active_hours, on_value, off_value))
+    elif day.month != 12 or day.day != 31:
         block("12/31", [(24, off_value)])
     _append_extensible(obj, fields)
     return name
@@ -977,8 +993,9 @@ def _build_idf(design: DesignSpec, site: SiteSpec, model: GeometryModel,
                      "Layer 0 must supply this before any reported result.")))
 
     period = options.period
+    begin = spin_up_start(options)
     _new(idf, "RunPeriod", Name=period.label,
-         Begin_Month=period.start.month, Begin_Day_of_Month=period.start.day,
+         Begin_Month=begin.month, Begin_Day_of_Month=begin.day,
          End_Month=period.end.month, End_Day_of_Month=period.end.day,
          Day_of_Week_for_Start_Day="Monday",
          Use_Weather_File_Holidays_and_Special_Days="Yes",
@@ -1018,7 +1035,7 @@ def _build_idf(design: DesignSpec, site: SiteSpec, model: GeometryModel,
         heating_hours = () if occupancy.unoccupied else options.heating_hours
         _heating_schedule(idf, HEATING_SETPOINT_SCHEDULE, heating_hours,
                           options.heating_setpoint_c, HEATING_OFF_C,
-                          options.heating_cutoff)
+                          options.heating_cutoff, spin_up_start(options))
         _constant_schedule(idf, COOLING_SETPOINT_SCHEDULE,
                            options.cooling_setpoint_c, TEMPERATURE_LIMITS)
         _constant_schedule(idf, CONTROL_TYPE_SCHEDULE, 4, CONTROL_LIMITS)

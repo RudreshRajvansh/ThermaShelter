@@ -81,6 +81,11 @@ class SimulationOutput:
         subset = self.frame[self.frame["name"] == name]
         return tuple(sorted(subset["key"].unique()))
 
+    def since(self, moment: pd.Timestamp) -> "SimulationOutput":
+        kept = self.frame[self.frame["timestamp"] >= moment]
+        return SimulationOutput(sql_path=self.sql_path, frame=kept.reset_index(drop=True),
+                                units=self.units, warnings=self.warnings)
+
     def series(self, name: str, key: str | None = None,
                required: bool = True) -> pd.Series | None:
         subset = self.frame[self.frame["name"] == name]
@@ -122,8 +127,22 @@ class SimulationOutput:
         return ""
 
 
+def _year_turn(frame: pd.DataFrame) -> int | None:
+    if "TimeIndex" not in frame:
+        return None
+    steps = frame[["TimeIndex", "Month"]].drop_duplicates("TimeIndex").sort_values("TimeIndex")
+    months = steps["Month"].astype(int).to_numpy()
+    turns = np.flatnonzero(np.diff(months) < 0)
+    if len(turns) == 0:
+        return None
+    return int(steps["TimeIndex"].to_numpy()[turns[0] + 1])
+
+
 def _build_timestamps(frame: pd.DataFrame, nominal_year: int) -> pd.Series:
     years = pd.Series(np.full(len(frame), nominal_year), index=frame.index)
+    turn = _year_turn(frame)
+    if turn is not None:
+        years = years.where(frame["TimeIndex"] >= turn, nominal_year - 1)
     months = frame["Month"].astype(int)
     days = frame["Day"].astype(int)
     hours = frame["Hour"].astype(int)
@@ -159,7 +178,7 @@ def read_sql(sql_path: str | Path, nominal_year: int = 2019,
                     "as reporting results")
         placeholders = ",".join("?" for _ in frequencies)
         query = (
-            "SELECT t.Year, t.Month, t.Day, t.Hour, t.Minute, "
+            "SELECT t.TimeIndex, t.Year, t.Month, t.Day, t.Hour, t.Minute, "
             "       d.KeyValue, d.Name, d.Units, rd.Value "
             "FROM ReportData rd "
             "JOIN Time t ON t.TimeIndex = rd.TimeIndex "

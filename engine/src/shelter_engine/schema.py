@@ -75,6 +75,7 @@ class Provenance(str, Enum):
     SIMULATED = "simulated"
     SURROGATE = "surrogate"
     CFD = "cfd"
+    FEA = "fea"
     MEASURED = "measured"
     DERIVED = "derived"
     LITERATURE = "literature"
@@ -653,6 +654,7 @@ class RunOptions(Frozen):
     heating_from_hour: int = Field(default=18, ge=0, le=23)
     heating_until_hour: int = Field(default=6, ge=0, le=23)
     heating_cutoff: datetime | None = None
+    spin_up_days: int = Field(default=30, ge=0, le=60)
     cooling_setpoint_c: float = Field(default=29.0, ge=5.0, le=45.0)
     surface_output: bool = True
     surface_output_period: RunPeriod | None = None
@@ -1085,6 +1087,51 @@ class CostBreakdown(Frozen):
     assumptions: tuple[Assumption, ...] = ()
 
 
+class QuantityLine(Frozen):
+    item_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    kind: Literal["material", "glazing", "shutter", "pcm"]
+    used_in: tuple[str, ...]
+    area_m2: float = Field(ge=0.0)
+    volume_m3: float | None = Field(default=None, ge=0.0)
+    mass_kg: float | None = Field(default=None, ge=0.0)
+    locally_available: bool | None = None
+    cost_inr: float = Field(ge=0.0)
+    note: str | None = None
+
+
+class BillOfQuantities(Frozen):
+    lines: tuple[QuantityLine, ...]
+    total_mass_kg: float = Field(ge=0.0)
+    imported_mass_kg: float = Field(ge=0.0)
+    total_cost_inr: float = Field(ge=0.0)
+    unweighed: tuple[str, ...] = ()
+    notes: tuple[str, ...] = ()
+
+
+class ComplianceItem(Frozen):
+    clause: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    value: float | None = None
+    unit: str
+    limit: float | None = None
+    comparison: Literal["max", "min", "info"]
+    mandatory: bool
+    passes: bool | None = None
+    note: str | None = None
+
+
+class ComplianceSheet(Frozen):
+    code: str = Field(min_length=1)
+    climate_zone: str | None = None
+    zone_basis: str
+    assessed: bool
+    items: tuple[ComplianceItem, ...] = ()
+    mandatory_pass: bool | None = None
+    notes: tuple[str, ...] = ()
+    source: SourceRef
+
+
 class BuildabilityMetrics(Frozen):
     wall_thickness_m: float
     surface_to_volume: float
@@ -1450,4 +1497,109 @@ class CFDField(Frozen):
                 raise ValueError("max_speed_m_s must match the sampled speeds")
         elif self.max_speed_m_s is not None:
             raise ValueError("max_speed_m_s needs sampled speeds")
+        return self
+
+
+class MapdlFace(Frozen):
+    group: str = Field(min_length=1)
+    mapdl_kwh: float
+    energyplus_kwh: float | None = None
+    difference_percent: float | None = None
+
+
+class MapdlAgreement(Frozen):
+    hours: int = Field(gt=0)
+    mae_k: float = Field(ge=0.0)
+    rmse_k: float = Field(ge=0.0)
+    bias_k: float
+    max_abs_k: float = Field(ge=0.0)
+    target_rmse_k: float = Field(gt=0.0)
+    meets_target: bool
+    faces: tuple[MapdlFace, ...] = ()
+
+    @model_validator(mode="after")
+    def _consistent(self) -> "MapdlAgreement":
+        if self.meets_target != (self.rmse_k <= self.target_rmse_k):
+            raise ValueError("meets_target must follow from the RMSE and its target")
+        if self.mae_k > self.rmse_k + 1e-9 or self.rmse_k > self.max_abs_k + 1e-9:
+            raise ValueError("the errors must satisfy MAE <= RMSE <= max")
+        return self
+
+
+class MapdlLevel(Frozen):
+    level: str = Field(min_length=1)
+    node_count: int = Field(gt=0)
+    element_count: int = Field(gt=0)
+    substeps: int = Field(ge=1)
+    runtime_s: float = Field(ge=0.0)
+    mean_air_c: float
+    minimum_air_c: float
+    rmse_k: float = Field(ge=0.0)
+
+
+class MapdlConvergence(Frozen):
+    metric: str = Field(min_length=1)
+    refinement_ratio: float = Field(gt=1.0)
+    order: float | None = None
+    gci_fine_k: float | None = Field(default=None, ge=0.0)
+    extrapolated: float | None = None
+    time_step_difference_k: float | None = None
+
+
+class MapdlCheck(Frozen):
+    name: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    points: int = Field(gt=0)
+    max_abs_k: float = Field(ge=0.0)
+    tolerance_k: float = Field(gt=0.0)
+    passed: bool
+    runtime_s: float = Field(ge=0.0)
+
+    @model_validator(mode="after")
+    def _verdict(self) -> "MapdlCheck":
+        if self.passed != (self.max_abs_k <= self.tolerance_k):
+            raise ValueError("passed must follow from the error and its tolerance")
+        return self
+
+
+class MapdlReport(Frozen):
+    design_hash: str = Field(min_length=1)
+    label: str = Field(min_length=1)
+    site_id: str = Field(min_length=1)
+    engine_version: str = Field(min_length=1)
+    solver: str = Field(min_length=1)
+    version: str = Field(min_length=1)
+    level: str = Field(min_length=1)
+    cycles: int = Field(ge=1)
+    lead_days: int = Field(default=0, ge=0)
+    substeps: int = Field(ge=1)
+    node_count: int = Field(gt=0)
+    element_count: int = Field(gt=0)
+    runtime_s: float = Field(ge=0.0)
+    timestamps: tuple[str, ...]
+    outdoor_c: tuple[float, ...]
+    mapdl_air_c: tuple[float, ...]
+    energyplus_air_c: tuple[float, ...]
+    agreement: MapdlAgreement
+    levels: tuple[MapdlLevel, ...] = ()
+    convergence: MapdlConvergence | None = None
+    checks: tuple[MapdlCheck, ...] = ()
+    notes: tuple[str, ...] = ()
+    sources: tuple[SourceRef, ...] = ()
+    generated_at: datetime
+    provenance: Literal[Provenance.FEA] = Provenance.FEA
+
+    @model_validator(mode="after")
+    def _aligned(self) -> "MapdlReport":
+        count = len(self.timestamps)
+        if count == 0:
+            raise ValueError("a MAPDL report needs at least one hour")
+        for name in ("outdoor_c", "mapdl_air_c", "energyplus_air_c"):
+            values = getattr(self, name)
+            if len(values) != count:
+                raise ValueError(f"{name} holds {len(values)} values for {count} hours")
+            if not all(math.isfinite(value) for value in values):
+                raise ValueError(f"{name} holds a non finite value")
+        if self.agreement.hours != count:
+            raise ValueError("the agreement must cover the reported hours")
         return self

@@ -235,6 +235,18 @@ def test_the_heater_cutoff_schedule_turns_heating_off_for_good(site, library):
     block = next(b for b in text.split("\n\n")
                  if b.startswith("SCHEDULE:COMPACT,") and "HEATING_SETPOINT" in b)
     assert "Through: 1/15" in block and "Through: 1/16" in block
-    assert "Through: 12/31" in block
+    off = block.split("Through: 12/10")[1].split("Through: 12/31")[0]
+    assert "-60" in off and "14" not in off
+    lead = block.split("Through: 12/31")[1]
+    assert "14" in lead
+    run_period = next(b for b in text.split("\n\n") if b.startswith("RUNPERIOD,"))
+    fields = [line.split(",")[0].split(";")[0].strip()
+              for line in run_period.splitlines()[1:]]
+    assert fields[1:3] == ["12", "11"]
+    assert fields[4:6] == ["1", "18"]
+    bare = options.model_copy(update={"spin_up_days": 0})
+    text = build_idf(design, site, model, constructions, bare, conditioned=True).text
+    block = next(b for b in text.split("\n\n")
+                 if b.startswith("SCHEDULE:COMPACT,") and "HEATING_SETPOINT" in b)
     tail = block.split("Through: 12/31")[1]
     assert "-60" in tail and "14" not in tail

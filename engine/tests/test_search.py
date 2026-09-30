@@ -5,7 +5,7 @@ import math
 import pytest
 
 import fixtures
-from shelter_engine.errors import OptimisationError
+from shelter_engine.errors import EngineError, OptimisationError
 from shelter_engine.geometry import build_geometry
 from shelter_engine.constructions import build_constructions
 from shelter_engine.costing import cost_breakdown
@@ -562,3 +562,32 @@ def test_every_random_candidate_from_the_levers_is_a_valid_design(library):
             else:
                 assignment[variable.name] = rng.random() < 0.5
         materialise(base, assignment)
+
+
+def test_weather_source_is_a_factor_of_the_band(library):
+    from shelter_engine.uncertainty import weather_parameter
+
+    design = fixtures.design()
+    weather = weather_parameter("typical year against ECMWF IFS 2025", "ifs.epw")
+    parameters = select_parameters(design, library, weather=weather)
+    assert parameters[0] is weather
+    assert len(parameters) == 3
+    seen = []
+
+    def evaluate(variant, lib, weather_path=None):
+        seen.append(weather_path)
+        base = analytic_metrics(variant, lib)["minimum_overnight_operative_c"]
+        return base - (4.0 if weather_path == "ifs.epw" else 0.0)
+
+    band = uncertainty_band(evaluate, design, library, parameters,
+                            "minimum_overnight_operative_c", "C",
+                            nominal_value=evaluate(design, library))
+    assert seen.count("ifs.epw") == 4 and seen.count(None) == 5
+    assert band.dominant_parameter == weather.label
+    top = band.contributions[0]
+    assert top.parameter == weather.label
+    assert top.effect_on_metric == pytest.approx(-4.0)
+    assert band.high - band.low >= 4.0
+    with pytest.raises(EngineError):
+        weather_parameter("x", "")
+    assert select_parameters(design, library, limit=0, weather=weather) == []

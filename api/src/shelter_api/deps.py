@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import threading
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -89,11 +90,32 @@ class Context:
                                 fuel=self.settings.fuel,
                                 references=self.references,
                                 catalogue=self.catalogue,
-                                cfd_directory=self.settings.cfd_dir)
+                                cfd_directory=self.settings.cfd_dir,
+                                alternate_weather=self.alternate_weather(site))
             except (EngineError, WeatherError) as error:
                 raise HTTPException(status_code=503, detail=str(error)) from error
             self._engines[key] = engine
             return engine
+
+    def alternate_weather(self, site: SiteSpec) -> tuple[str, str] | None:
+        record = Path(self.settings.data_dir) / "design_nights" / f"{site.id}.json"
+        if not record.is_file():
+            return None
+        try:
+            payload = json.loads(record.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        epw = payload.get("epw_path") if isinstance(payload, dict) else None
+        if not epw:
+            return None
+        path = Path(epw)
+        if not path.is_absolute():
+            path = Path(self.settings.data_dir) / path
+        if not path.is_file():
+            return None
+        year = str(payload.get("night_of", ""))[:4]
+        model = "ECMWF IFS" if payload.get("source_model") == "ecmwf_ifs" else "reanalysis"
+        return f"typical year against {model} {year}".strip(), str(path.resolve())
 
     def design_night_engine(self, site_id: str | None, fuel: str,
                             night: dict) -> Engine:

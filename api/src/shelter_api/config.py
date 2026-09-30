@@ -23,6 +23,7 @@ class Settings:
                                                          DEFAULT_DATA_DIR))
     database_path: Path | None = None
     cfd_dir: Path | None = None
+    mapdl_dir: Path | None = None
     validation_dir: Path | None = None
     materials_path: Path | None = None
     sites_dir: Path | None = None
@@ -52,6 +53,8 @@ class Settings:
                                    or self.data_dir / "runs.db")
         self.cfd_dir = _path("SHELTER_CFD_DIR", self.cfd_dir
                              or self.data_dir / "cfd")
+        self.mapdl_dir = _path("SHELTER_MAPDL_DIR", self.mapdl_dir
+                               or self.data_dir / "mapdl")
         self.designs_dir = Path(self.designs_dir
                                 or self.data_dir / "designs")
         self.validation_dir = _path("SHELTER_VALIDATION_DIR",

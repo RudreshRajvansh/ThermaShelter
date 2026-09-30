@@ -87,3 +87,38 @@ def test_robustness_ranks_by_the_worst_corner_and_keeps_the_best(site, library):
     for row in rows:
         assert row.best <= row.nominal <= row.worst
         assert row.corner_runs >= 1
+
+
+def test_the_alternate_weather_year_joins_the_band_only_when_it_differs(site, library, epw,
+                                                                       tmp_path):
+    import shutil
+
+    from shelter_engine import Engine
+
+    other = tmp_path / "ifs_year.epw"
+    shutil.copy2(epw, other)
+    engine = Engine(site, library, alternate_weather=("typical year against IFS", str(other)))
+    parameter = engine._weather_parameter()
+    assert parameter is not None and parameter.target == str(other)
+    probe = engine._probe(library, str(other))
+    assert probe.site.epw_path == str(other)
+    assert engine._probe(library, None).site.epw_path == site.epw_path
+    same = Engine(site, library, alternate_weather=("same", site.epw_path))
+    assert same._weather_parameter() is None
+    assert Engine(site, library)._weather_parameter() is None
+
+
+@requires_energyplus
+def test_the_weather_factor_widens_the_simulated_band(site, library, epw, tmp_path):
+    from shelter_engine import Engine
+    from synthetic_epw import write_synthetic_epw
+
+    colder = write_synthetic_epw(tmp_path / "colder.epw", annual_mean_c=-4.0)
+    engine = Engine(site, library, alternate_weather=("typical year against a colder one",
+                                                      str(colder)))
+    options = RunOptions(period=SHORT, surface_output=False)
+    band = engine._corner_band(fixtures.design(), options,
+                               "minimum_overnight_operative_c", "C")
+    weather = [item for item in band.contributions if item.parameter.startswith("Weather")]
+    assert weather and weather[0].effect_on_metric < 0.0
+    assert band.runs == 2 ** 3 + 1

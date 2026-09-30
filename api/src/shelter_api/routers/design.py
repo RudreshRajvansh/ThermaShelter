@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import Path as PathParam
 from fastapi import Query
+from fastapi.responses import Response
 from pydantic import ValidationError
 
 from shelter_engine.cfd import (find_boundary_conditions, find_cfd_fields, label_of,
@@ -14,8 +15,16 @@ from shelter_engine.cfd import (find_boundary_conditions, find_cfd_fields, label
 from shelter_engine.errors import (EngineError, GeometryError, MaterialError,
                                    ResultsUnavailable, SimulationFailed,
                                    SimulationTimeout)
+from shelter_engine.constructions import build_constructions
+from shelter_engine.compliance import eco_niwas_sheet
+from shelter_engine.costing import bill_of_quantities
+from shelter_engine.design_pack import PackInputs, build_design_pack
+from shelter_engine.geometry import build_geometry
 from shelter_engine.hashing import stable_hash
-from shelter_engine.schema import (ClimateSummary, ComparisonTable, GeometryPayload,
+from shelter_engine.mapdl import find_reports, load_report
+from shelter_engine import __version__ as engine_version
+from shelter_engine.schema import (BillOfQuantities, ClimateSummary, ComparisonTable,
+                                   ComplianceSheet, GeometryPayload, RunOptions,
                                    SimulationResult, SunPath, SurfaceResults,
                                    TerrainMesh)
 
@@ -23,6 +32,7 @@ from ..deps import Context, get_context
 from ..schemas import (CFDAbsent, CFDBoundarySet, CFDFieldSet, CompareRequest,
                        EndurancePayload, EnduranceRequest, GeometryRequest,
                        HorizonCase, HorizonValuePayload, LeftoverHeatPayload,
+                       MapdlAbsent, MapdlSet, DesignPackRequest,
                        SimulateRequest, SurfaceRequest)
 
 router = APIRouter()
@@ -159,6 +169,93 @@ def geometry(request: GeometryRequest,
         raise _translate(error) from error
 
 
+@router.post("/bill-of-quantities", response_model=BillOfQuantities, tags=["design"])
+def quantities(request: GeometryRequest,
+               context: Context = Depends(get_context)) -> BillOfQuantities:
+    site = context.site(request.site_id)
+    if context.library is None:
+        raise HTTPException(status_code=503, detail=(
+            "The material database is not loaded, so there is nothing to weigh. Expected "
+            f"it at {context.settings.materials_path}."))
+    try:
+        constructions = build_constructions(request.design, context.library)
+        model = build_geometry(request.design, constructions.names,
+                               design_hash=stable_hash(request.design), horizon=site.horizon)
+        return bill_of_quantities(request.design, model, context.library)
+    except Exception as error:
+        raise _translate(error) from error
+
+
+@router.post("/bye-law-sheet", response_model=ComplianceSheet, tags=["design"])
+def bye_law_sheet(request: GeometryRequest,
+                  context: Context = Depends(get_context)) -> ComplianceSheet:
+    site = context.site(request.site_id)
+    if context.library is None:
+        raise HTTPException(status_code=503, detail=(
+            "The material database is not loaded, so no U-value can be computed. Expected "
+            f"it at {context.settings.materials_path}."))
+    try:
+        constructions = build_constructions(request.design, context.library)
+        model = build_geometry(request.design, constructions.names,
+                               design_hash=stable_hash(request.design), horizon=site.horizon)
+        return eco_niwas_sheet(request.design, model, context.library, site)
+    except Exception as error:
+        raise _translate(error) from error
+
+
+@router.post("/design-pack", tags=["design"],
+             responses={200: {"content": {"application/zip": {}}}})
+def design_pack(request: DesignPackRequest,
+                context: Context = Depends(get_context)) -> Response:
+    site = context.site(request.site_id)
+    if context.library is None:
+        raise HTTPException(status_code=503, detail=(
+            "The material database is not loaded, so the pack cannot be built. Expected "
+            f"it at {context.settings.materials_path}."))
+    design = request.design
+    fingerprint = stable_hash(design)
+    notes: list[str] = []
+    idf_text = None
+    weather = None
+    try:
+        engine = context.engine(request.site_id)
+        options = RunOptions(period=request.period.to_period(), conditioned_run=True,
+                             surface_output=False)
+        idf_text = engine.idf_text(design, options)
+        weather = Path(site.epw_path)
+    except HTTPException as error:
+        notes.append(f"No EnergyPlus input file is included: {error.detail}")
+    extra: dict[str, bytes] = {}
+    for path in find_reports(context.settings.mapdl_dir, fingerprint):
+        extra[f"ansys/mapdl/{path.name}"] = path.read_bytes()
+    cfd_dir = Path(context.settings.cfd_dir)
+    for path in find_boundary_conditions(cfd_dir, fingerprint) + find_cfd_fields(
+            cfd_dir, fingerprint):
+        extra[f"ansys/fluent/{path.name}"] = path.read_bytes()
+    if not any(name.startswith("ansys/") for name in extra):
+        notes.append("No ANSYS run is on record for this design, so the pack holds no "
+                     "MAPDL or Fluent files.")
+    if request.run_hash:
+        stored = context.store.load_run(request.run_hash, with_surfaces=False)
+        if stored is None or stored.design_fingerprint != fingerprint:
+            notes.append("The simulation named in the request is not stored for this "
+                         "design, so its result is not included.")
+        else:
+            extra["evidence/simulation_result.json"] = stored.model_dump_json(
+                indent=2).encode("utf-8")
+    try:
+        model = build_geometry(design, build_constructions(design, context.library).names,
+                               design_hash=fingerprint, horizon=site.horizon)
+        payload = build_design_pack(PackInputs(
+            design=design, site=site, model=model, library=context.library,
+            idf_text=idf_text, weather_path=weather, extra_files=extra, notes=notes))
+    except Exception as error:
+        raise _translate(error) from error
+    name = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in design.name)
+    return Response(content=payload, media_type="application/zip", headers={
+        "Content-Disposition": f'attachment; filename="{name}_design_pack.zip"'})
+
+
 @router.post("/simulate", response_model=SimulationResult, tags=["design"])
 def simulate(request: SimulateRequest,
              context: Context = Depends(get_context)) -> SimulationResult:
@@ -292,6 +389,54 @@ def cfd_for_design(request: GeometryRequest,
 def cfd(design_hash: str = PathParam(pattern=DESIGN_HASH_PATTERN),
         context: Context = Depends(get_context)):
     return _cfd_payload(context, design_hash)
+
+
+@router.post("/mapdl", response_model=MapdlSet | MapdlAbsent, tags=["ansys"])
+def mapdl_for_design(request: GeometryRequest,
+                     context: Context = Depends(get_context)) -> MapdlSet | MapdlAbsent:
+    return _mapdl_payload(context, stable_hash(request.design), request.site_id)
+
+
+@router.get("/mapdl/{design_hash}", response_model=MapdlSet | MapdlAbsent, tags=["ansys"])
+def mapdl(design_hash: str = PathParam(pattern=DESIGN_HASH_PATTERN),
+          site_id: str | None = None,
+          context: Context = Depends(get_context)) -> MapdlSet | MapdlAbsent:
+    return _mapdl_payload(context, design_hash, site_id)
+
+
+def _mapdl_payload(context: Context, design_hash: str,
+                   site_id: str | None) -> MapdlSet | MapdlAbsent:
+    site = context.site(site_id)
+    reports = []
+    rejected = []
+    for path in find_reports(context.settings.mapdl_dir, design_hash):
+        try:
+            report = load_report(path)
+        except (ValidationError, ValueError, EngineError) as error:
+            rejected.append(f"{path.name} could not be read: {str(error)[:200]}")
+            continue
+        if report.design_hash != design_hash:
+            rejected.append(f"{path.name} belongs to design {report.design_hash}")
+            continue
+        if report.site_id != site.id:
+            rejected.append(f"{path.name} was solved for {report.site_id}, not {site.id}")
+            continue
+        if report.engine_version != engine_version:
+            rejected.append(
+                f"{path.name} compares MAPDL with EnergyPlus as engine "
+                f"{report.engine_version} modelled it; this is engine {engine_version}, "
+                "so the comparison has to be run again")
+            continue
+        reports.append(report)
+    if reports:
+        return MapdlSet(design_hash=design_hash, reports=reports, rejected=rejected)
+    return MapdlAbsent(
+        design_hash=design_hash, rejected=rejected,
+        reason=("ANSYS Mechanical APDL has not been run on this design. It solves the walls, "
+                "roof, floor and the ground under them as a 3D transient finite element "
+                "model on the loads EnergyPlus computed, and runs offline with "
+                "scripts/run_mapdl.py. Until it has, the envelope rests on EnergyPlus "
+                "alone and there is no independent check to show."))
 
 
 @router.get("/cfd/{design_hash}/boundary-conditions", response_model=CFDBoundarySet,

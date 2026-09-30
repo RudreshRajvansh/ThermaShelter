@@ -24,7 +24,13 @@ COMPLIANCE_SOURCE = SourceRef(
              "for reliable operation and for realistic partial compliance",
     status=SourceStatus.ASSUMED)
 
-Evaluator = Callable[[DesignSpec, MaterialLibrary], float]
+WEATHER_SOURCE = SourceRef(
+    citation="The site's typical weather year against a real year of the ECMWF IFS "
+             "archive at the site. The two disagree on how cold the nights run and how "
+             "much sun reaches the ground, so both are carried through the model",
+    status=SourceStatus.DERIVED)
+
+Evaluator = Callable[..., float]
 
 
 @dataclass(frozen=True)
@@ -94,6 +100,8 @@ def apply_parameter(design: DesignSpec, library: MaterialLibrary,
         return _set_infiltration(design, value), library
     if parameter.kind == "shutter_compliance":
         return _set_compliance(design, value), library
+    if parameter.kind == "weather_file":
+        return design, library
     raise EngineError(f"unknown uncertain parameter kind {parameter.kind}")
 
 
@@ -109,8 +117,17 @@ def _construction_materials(design: DesignSpec) -> dict[str, float]:
     return weights
 
 
+def weather_parameter(label: str, path: str) -> UncertainParameter:
+    if not path:
+        raise EngineError("the alternative weather file needs a path")
+    return UncertainParameter(name="weather_file", label=f"Weather source ({label})",
+                              nominal=0.0, low=0.0, high=1.0, source=WEATHER_SOURCE,
+                              kind="weather_file", target=path)
+
+
 def select_parameters(design: DesignSpec, library: MaterialLibrary,
-                      limit: int = MAX_PARAMETERS) -> list[UncertainParameter]:
+                      limit: int = MAX_PARAMETERS,
+                      weather: UncertainParameter | None = None) -> list[UncertainParameter]:
     candidates: list[tuple[float, UncertainParameter]] = []
     weights = _construction_materials(design)
     for material in library.uncertain_materials():
@@ -154,7 +171,10 @@ def select_parameters(design: DesignSpec, library: MaterialLibrary,
                 candidates.append((parameter.relative_width * 0.8, parameter))
 
     candidates.sort(key=lambda item: item[0], reverse=True)
-    return [parameter for _, parameter in candidates[:max(0, limit)]]
+    chosen = [parameter for _, parameter in candidates]
+    if weather is not None:
+        chosen.insert(0, weather)
+    return chosen[:max(0, limit)]
 
 
 def uncertainty_band(evaluate: Evaluator, design: DesignSpec,
@@ -171,13 +191,20 @@ def uncertainty_band(evaluate: Evaluator, design: DesignSpec,
 
     corners = list(itertools.product(*[(parameter.low, parameter.high)
                                        for parameter in parameters]))
+    weather = next((index for index, parameter in enumerate(parameters)
+                    if parameter.kind == "weather_file"), None)
     values: list[float] = []
     for corner in corners:
         variant_design, variant_library = design, library
         for parameter, value in zip(parameters, corner):
             variant_design, variant_library = apply_parameter(
                 variant_design, variant_library, parameter, value)
-        values.append(evaluate(variant_design, variant_library))
+        if weather is None:
+            values.append(evaluate(variant_design, variant_library))
+        else:
+            chosen = parameters[weather]
+            path = chosen.target if corner[weather] == chosen.high else None
+            values.append(evaluate(variant_design, variant_library, path))
 
     array = np.asarray(values, dtype=float)
     if not np.isfinite(array).all():

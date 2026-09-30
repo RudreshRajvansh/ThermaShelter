@@ -27,11 +27,17 @@ def cfd_dir(tmp_path_factory) -> Path:
 
 
 @pytest.fixture(scope="module")
-def client(tmp_path_factory, cfd_dir) -> TestClient:
+def mapdl_dir(tmp_path_factory) -> Path:
+    return tmp_path_factory.mktemp("mapdl")
+
+
+@pytest.fixture(scope="module")
+def client(tmp_path_factory, cfd_dir, mapdl_dir) -> TestClient:
     import os
     os.environ["SHELTER_DATA_DIR"] = str(DATA)
     os.environ["SHELTER_DB"] = str(tmp_path_factory.mktemp("store") / "runs.db")
     os.environ["SHELTER_CFD_DIR"] = str(cfd_dir)
+    os.environ["SHELTER_MAPDL_DIR"] = str(mapdl_dir)
     from shelter_api.config import get_settings
     from shelter_api.deps import get_context
     get_settings.cache_clear()
@@ -559,3 +565,135 @@ def test_horizon_value_compares_the_real_skyline_with_a_flat_one(client, design)
         body["flat"]["windows_solar_gain_kwh"] + 1e-6
     assert body["heating_difference_kwh"] == pytest.approx(
         body["with_horizon"]["heating_kwh"] - body["flat"]["heating_kwh"], abs=1e-3)
+
+
+def _mapdl_report(design_hash: str, site_id: str = "leh", engine_version: str | None = None):
+    from test_mapdl import make_case
+    from shelter_engine.mapdl import MapdlRun, build_report
+
+    case = make_case(hours=4, design_hash=design_hash, label="week",
+                     energyplus_air_c=(5.0, 6.0, 7.0, 6.0))
+    run = MapdlRun(level="coarse", hours=4, air_c=(5.5, 6.5, 6.5, 5.5),
+                   surface_c={group: (5.0,) * 4 for group in ("south", "north", "east",
+                                                             "west", "roof", "floor")},
+                   face_heat_w={group: (-10.0,) * 4 for group in ("south", "north", "east",
+                                                                 "west", "roof", "floor")},
+                   node_count=100, element_count=80, runtime_s=3.0, cycles=2)
+    report = build_report(case, run, site_id, "2026 R1", 2)
+    if engine_version is not None:
+        report = report.model_copy(update={"engine_version": engine_version})
+    return report
+
+
+def test_mapdl_absence_is_stated_not_errored(client):
+    body = client.get("/api/mapdl/" + "a" * 32).json()
+    assert body["available"] is False
+    assert "run_mapdl.py" in body["reason"]
+    assert client.get("/api/mapdl/not-a-hash").status_code == 422
+
+
+def test_a_stored_mapdl_report_is_served_and_stale_ones_are_refused(client, mapdl_dir):
+    from shelter_engine.mapdl import write_report
+
+    good = "b" * 32
+    write_report(_mapdl_report(good), mapdl_dir)
+    body = client.get(f"/api/mapdl/{good}").json()
+    assert body["available"] is True
+    report = body["reports"][0]
+    assert report["solver"] == "ANSYS Mechanical APDL"
+    assert report["provenance"] == "fea"
+    assert report["agreement"]["hours"] == 4
+    assert len(report["mapdl_air_c"]) == 4
+
+    old = "c" * 32
+    write_report(_mapdl_report(old, engine_version="0.0.1"), mapdl_dir)
+    body = client.get(f"/api/mapdl/{old}").json()
+    assert body["available"] is False
+    assert "run again" in body["rejected"][0]
+
+    elsewhere = "d" * 32
+    write_report(_mapdl_report(elsewhere, site_id="diskit"), mapdl_dir)
+    body = client.get(f"/api/mapdl/{elsewhere}").json()
+    assert body["available"] is False and "solved for diskit" in body["rejected"][0]
+
+    broken = "e" * 32
+    (mapdl_dir / f"{broken}_week_mapdl.json").write_text("{}", encoding="utf-8")
+    body = client.get(f"/api/mapdl/{broken}").json()
+    assert body["available"] is False and "could not be read" in body["rejected"][0]
+
+
+def test_bill_of_quantities_lists_every_material_by_weight(client):
+    design = json.loads((DATA / "designs" / "barrack_single_room.json").read_text(
+        encoding="utf-8"))
+    response = client.post("/api/bill-of-quantities", json={"design": design})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    materials = [line for line in body["lines"] if line["kind"] == "material"]
+    layer_ids = {layer["material_id"] for key in ("wall", "roof", "floor")
+                 for layer in design[key]["layers"]}
+    assert layer_ids <= {line["item_id"] for line in materials}
+    assert body["total_mass_kg"] == pytest.approx(
+        sum(line["mass_kg"] for line in body["lines"] if line["mass_kg"] is not None))
+    assert all(line["mass_kg"] is None for line in body["lines"] if line["kind"] == "glazing")
+
+
+def test_the_cached_design_year_becomes_the_alternate_weather(client, tmp_path):
+    from shelter_api.deps import get_context
+
+    context = get_context()
+    site = context.site("leh")
+    record = DATA / "design_nights" / "leh.json"
+    found = context.alternate_weather(site)
+    if record.is_file() and (DATA / json.loads(record.read_text(encoding="utf-8"))[
+            "epw_path"]).is_file():
+        label, path = found
+        assert "ECMWF IFS" in label and path.endswith(".epw")
+    else:
+        assert found is None
+    elsewhere = site.model_copy(update={"id": "nowhere_at_all"})
+    assert context.alternate_weather(elsewhere) is None
+
+
+def test_bye_law_sheet_reports_the_cold_zone_checks(client):
+    design = json.loads((DATA / "designs" / "barrack_single_room.json").read_text(
+        encoding="utf-8"))
+    body = client.post("/api/bye-law-sheet", json={"design": design}).json()
+    assert body["assessed"] is True and body["climate_zone"] == "Cold"
+    clauses = {item["clause"] for item in body["items"]}
+    assert {"5.2.1.3, 9.4", "5.2.1.5, 9.7"} <= clauses
+    assert body["source"]["status"] == "verified"
+
+
+def test_design_pack_is_a_zip_with_drawings_quantities_and_the_sheet(client, mapdl_dir):
+    import io
+    import zipfile
+
+    from shelter_engine.hashing import stable_hash
+    from shelter_engine.mapdl import write_report
+    from shelter_engine.schema import DesignSpec
+
+    design = json.loads((DATA / "designs" / "barrack_single_room.json").read_text(
+        encoding="utf-8"))
+    fingerprint = stable_hash(DesignSpec.model_validate(design))
+    write_report(_mapdl_report(fingerprint), mapdl_dir)
+    response = client.post("/api/design-pack", json={"design": design,
+                                                    "run_hash": "f" * 32})
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"] == "application/zip"
+    assert "attachment" in response.headers["content-disposition"]
+    archive = zipfile.ZipFile(io.BytesIO(response.content))
+    names = set(archive.namelist())
+    for expected in ("README.txt", "design.json", "bill_of_quantities.csv",
+                     "bye_law_sheet.json", "construction_layers.csv", "drawings/plan.svg",
+                     "drawings/elevation_south.svg", "drawings/section_wall.svg",
+                     f"ansys/mapdl/{fingerprint}_week_mapdl.json"):
+        assert expected in names
+    assert archive.read("drawings/plan.svg").startswith(b"<svg")
+    readme = archive.read("README.txt").decode("utf-8")
+    assert "not stored for this design" in readme
+    if any(name.startswith("energyplus/") for name in names):
+        assert "energyplus/shelter.idf" in names
+    else:
+        assert "No EnergyPlus input file is included" in readme
+    bad = client.post("/api/design-pack", json={"design": design, "run_hash": "nothex"})
+    assert bad.status_code == 422

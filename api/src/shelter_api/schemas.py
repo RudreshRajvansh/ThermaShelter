@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from shelter_engine.schema import (Assumption, CFDExport, CFDField, ClimateObjective,
                                    DesignSpec, DesignVariable, EngineWarning,
+                                   MapdlReport,
                                    OptimisationConstraints, ParetoResult,
                                    OccupancySpec, PlanSpec, RunOptions,
                                    RunPeriod, ShelterUse, SiteSpec, SourceRef)
@@ -72,6 +73,13 @@ class DesignSummary(Body):
     floor_area_m2: float
     occupants: int
     is_reference: bool
+
+
+class DesignPackRequest(Body):
+    design: DesignSpec
+    site_id: str | None = None
+    period: Window = Window()
+    run_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
 
 
 class SimulateRequest(Body):
@@ -227,6 +235,20 @@ class CFDAbsent(Body):
     design_hash: str
     reason: str
     boundary_labels: list[str] = Field(default_factory=list)
+    rejected: list[str] = Field(default_factory=list)
+
+
+class MapdlAbsent(Body):
+    available: Literal[False] = False
+    design_hash: str
+    reason: str
+    rejected: list[str] = Field(default_factory=list)
+
+
+class MapdlSet(Body):
+    available: Literal[True] = True
+    design_hash: str
+    reports: list[MapdlReport]
     rejected: list[str] = Field(default_factory=list)
 
 

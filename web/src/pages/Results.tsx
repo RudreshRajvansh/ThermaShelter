@@ -13,6 +13,8 @@ import {
 } from "../components/Kit";
 import { PerformanceChart } from "../components/PerformanceChart";
 import { BreatheSafe, DrdoOutputs, FuelOut, SkylineValue } from "../components/DrdoOutputs";
+import { MapdlAgreement } from "../components/MapdlAgreement";
+import { Quantities } from "../components/Quantities";
 import { activeDesign, useStore } from "../lib/store";
 import { num, rupees, signed } from "../lib/format";
 
@@ -254,6 +256,7 @@ export function Results({
       <BreatheSafe result={simulation} />
       {!cooling && <FuelOut result={simulation} />}
       <SkylineValue result={simulation} />
+      <Quantities result={simulation} />
 
       <Panel
         title="Performance over time"
@@ -481,6 +484,10 @@ export function Results({
 
           {tab === "detailed analysis" && (
             <div className="space-y-3">
+              <MapdlAgreement
+                designHash={simulation.design_fingerprint}
+                siteId={simulation.site_id}
+              />
               {cfd.error ? (
                 <Failure error={cfd.error} />
               ) : !cfd.data ? (

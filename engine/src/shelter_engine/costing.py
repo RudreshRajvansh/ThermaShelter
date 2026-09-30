@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from .geometry import GeometryModel
 from .materials import MaterialLibrary
-from .schema import (Assumption, BuildabilityMetrics, ConstructionSpec, CostBreakdown,
+from .schema import (Assumption, BillOfQuantities, BuildabilityMetrics, ConstructionSpec,
+                     CostBreakdown, QuantityLine,
                      DesignSpec, Facade, OptimisationConstraints, Provenance,
                      SourceRef, SourceStatus, SurfaceKind)
 
@@ -109,21 +110,116 @@ def cost_breakdown(design: DesignSpec, model: GeometryModel,
         assumptions=tuple(assumptions))
 
 
-def material_mass_kg(design: DesignSpec, model: GeometryModel,
-                     library: MaterialLibrary) -> tuple[float, float]:
-    imported = 0.0
-    total = 0.0
+def _element(polygon_kind: SurfaceKind, outside_boundary: str) -> str:
+    if polygon_kind is SurfaceKind.PARTITION or outside_boundary == "Surface":
+        return "partition"
+    if polygon_kind in (SurfaceKind.ROOF, SurfaceKind.CEILING):
+        return "roof"
+    return polygon_kind.value
+
+
+def bill_of_quantities(design: DesignSpec, model: GeometryModel,
+                       library: MaterialLibrary) -> BillOfQuantities:
+    materials: dict[str, dict] = {}
     for polygon in model.polygons:
         construction = _construction_for(polygon.kind, design, polygon.outside_boundary)
         if construction is None:
             continue
         share = 0.5 if polygon.outside_boundary == "Surface" else 1.0
+        element = _element(polygon.kind, polygon.outside_boundary)
         for layer in library.layers(construction):
-            mass = polygon.area_m2 * share * layer.thickness_m * layer.material.density_kg_m3
-            total += mass
-            if not layer.material.locally_available:
-                imported += mass
-    return imported, total
+            material = layer.material
+            entry = materials.setdefault(material.id, {
+                "material": material, "area": 0.0, "volume": 0.0, "used": set()})
+            area = polygon.area_m2 * share
+            entry["area"] += area
+            entry["volume"] += area * layer.thickness_m
+            entry["used"].add(element)
+    lines = []
+    for identifier, entry in sorted(materials.items()):
+        material = entry["material"]
+        lines.append(QuantityLine(
+            item_id=identifier, name=material.name, kind="material",
+            used_in=tuple(sorted(entry["used"])), area_m2=entry["area"],
+            volume_m3=entry["volume"], mass_kg=entry["volume"] * material.density_kg_m3,
+            locally_available=material.locally_available,
+            cost_inr=entry["volume"] * material.delivered_cost_inr_m3))
+
+    glazing: dict[str, dict] = {}
+    shutters = 0.0
+    shutter_cost = 0.0
+    counted: set[str] = set()
+    for polygon in model.windows:
+        if polygon.name in counted:
+            continue
+        counted.add(polygon.name)
+        share = 0.5 if polygon.outside_boundary == "Surface" else 1.0
+        facade = polygon.facade
+        spec = design.windows.get(facade) if facade is not None else None
+        glazing_id = spec.glazing_id if spec is not None else None
+        if glazing_id is None:
+            params = design.arrangement_params
+            glazing_id = params.sunspace_glazing_id or params.trombe_glazing_id
+        if glazing_id is None:
+            continue
+        system = library.glazing(glazing_id)
+        entry = glazing.setdefault(glazing_id, {"system": system, "area": 0.0,
+                                                "used": set()})
+        entry["area"] += polygon.area_m2 * share
+        entry["used"].add(facade.value if facade is not None else "buffer")
+        if spec is not None and spec.shutter.present:
+            shutters += polygon.area_m2 * share
+            shutter_cost += polygon.area_m2 * share * spec.shutter.cost_inr_m2
+    unweighed = []
+    for identifier, entry in sorted(glazing.items()):
+        system = entry["system"]
+        unweighed.append(system.name)
+        lines.append(QuantityLine(
+            item_id=identifier, name=system.name, kind="glazing",
+            used_in=tuple(sorted(entry["used"])), area_m2=entry["area"],
+            locally_available=system.locally_available,
+            cost_inr=entry["area"] * system.cost_inr_m2
+            * (1.0 + system.frame_fraction * FRAME_COST_FACTOR),
+            note="The glazing record carries no pane thickness, so its weight is not "
+                 "computed."))
+    if shutters > 0.0:
+        unweighed.append("night shutters")
+        lines.append(QuantityLine(
+            item_id="night_shutter", name="Insulated night shutter", kind="shutter",
+            used_in=("windows",), area_m2=shutters, cost_inr=shutter_cost,
+            note="Shutters are specified by thermal resistance and cost only, so their "
+                 "weight is not computed."))
+    if design.pcm.present and design.pcm.pcm_id:
+        pcm = library.pcm(design.pcm.pcm_id)
+        target = {
+            "mass_wall_inner": (SurfaceKind.WALL, SurfaceKind.PARTITION),
+            "ceiling_inner": (SurfaceKind.ROOF, SurfaceKind.CEILING),
+            "floor_inner": (SurfaceKind.FLOOR,),
+        }[design.pcm.applied_to]
+        area = sum(polygon.area_m2 for polygon in model.polygons
+                   if polygon.kind in target and polygon.zone == "ROOM")
+        volume = area * design.pcm.thickness_m
+        lines.append(QuantityLine(
+            item_id=pcm.id, name=pcm.name, kind="pcm", used_in=(design.pcm.applied_to,),
+            area_m2=area, volume_m3=volume, mass_kg=volume * pcm.density_kg_m3,
+            cost_inr=volume * pcm.cost_inr_m3))
+    weighed = [line for line in lines if line.mass_kg is not None]
+    return BillOfQuantities(
+        lines=tuple(lines), total_mass_kg=sum(line.mass_kg for line in weighed),
+        imported_mass_kg=sum(line.mass_kg for line in weighed
+                             if line.kind == "material" and not line.locally_available),
+        total_cost_inr=sum(line.cost_inr for line in lines), unweighed=tuple(unweighed),
+        notes=("Areas and volumes come from the generated geometry; a wall shared by two "
+               "zones is counted half on each side. Costs are delivered material only, "
+               "without labour, foundations or margin.",))
+
+
+def material_mass_kg(design: DesignSpec, model: GeometryModel,
+                     library: MaterialLibrary) -> tuple[float, float]:
+    bill = bill_of_quantities(design, model, library)
+    materials = [line for line in bill.lines if line.kind == "material"]
+    return (sum(line.mass_kg for line in materials if not line.locally_available),
+            sum(line.mass_kg for line in materials))
 
 
 def buildability(design: DesignSpec, model: GeometryModel, library: MaterialLibrary,
