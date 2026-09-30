@@ -63,6 +63,18 @@ CREATE TABLE IF NOT EXISTS optimisations (
     spec_json TEXT NOT NULL,
     result_json TEXT
 );
+CREATE TABLE IF NOT EXISTS posts (
+    id TEXT PRIMARY KEY,
+    updated_at TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS cards (
+    post_id TEXT NOT NULL,
+    lang TEXT NOT NULL,
+    issued_at TEXT NOT NULL,
+    card_json TEXT NOT NULL,
+    PRIMARY KEY (post_id, lang)
+);
 """
 
 
@@ -234,6 +246,44 @@ class Store:
             cursor = connection.execute("DELETE FROM projects WHERE id = ?",
                                         (identifier,))
             return cursor.rowcount > 0
+
+    def save_post(self, identifier: str, payload: dict[str, Any]) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT OR REPLACE INTO posts (id, updated_at, payload_json) VALUES (?,?,?)",
+                (identifier, _now(), json.dumps(payload, separators=(",", ":"))))
+
+    def load_post(self, identifier: str) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute("SELECT payload_json FROM posts WHERE id = ?",
+                                     (identifier,)).fetchone()
+        return None if row is None else json.loads(row["payload_json"])
+
+    def list_posts(self) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT payload_json FROM posts ORDER BY id").fetchall()
+        return [json.loads(row["payload_json"]) for row in rows]
+
+    def delete_post(self, identifier: str) -> bool:
+        with self._connect() as connection:
+            connection.execute("DELETE FROM cards WHERE post_id = ?", (identifier,))
+            cursor = connection.execute("DELETE FROM posts WHERE id = ?", (identifier,))
+            return cursor.rowcount > 0
+
+    def save_card(self, post_id: str, lang: str, issued_at: str, card: dict[str, Any]) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT OR REPLACE INTO cards (post_id, lang, issued_at, card_json) "
+                "VALUES (?,?,?,?)",
+                (post_id, lang, issued_at, json.dumps(card, separators=(",", ":"))))
+
+    def load_card(self, post_id: str, lang: str) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT card_json FROM cards WHERE post_id = ? AND lang = ?",
+                (post_id, lang)).fetchone()
+        return None if row is None else json.loads(row["card_json"])
 
     def create_optimisation(self, job_id: str, site_id: str,
                             spec: dict[str, Any]) -> None:

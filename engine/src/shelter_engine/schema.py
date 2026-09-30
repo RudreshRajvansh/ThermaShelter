@@ -75,6 +75,7 @@ class Provenance(str, Enum):
     SIMULATED = "simulated"
     SURROGATE = "surrogate"
     CFD = "cfd"
+    FEA = "fea"
     MEASURED = "measured"
     DERIVED = "derived"
     LITERATURE = "literature"
@@ -317,7 +318,9 @@ class OccupancySpec(Frozen):
 
 class VentilationSpec(Frozen):
     infiltration_ach: float = Field(default=0.60, ge=0.0, le=15.0)
-    minimum_fresh_air_ach: float = Field(default=0.35, ge=0.0, le=15.0)
+    minimum_fresh_air_ach: float = Field(default=0.0, ge=0.0, le=15.0)
+    co2_limit_ppm: float = Field(default=1000.0, ge=500.0, le=5000.0)
+    fresh_air_l_s_per_person: float | None = Field(default=None, gt=0.0, le=100.0)
     night_ventilation: bool = False
     night_ventilation_ach: float = Field(default=0.0, ge=0.0, le=20.0)
     night_ventilation_from_hour: int = Field(default=21, ge=0, le=23)
@@ -398,6 +401,7 @@ class ArrangementParams(Frozen):
     vestibule_depth_m: float = Field(default=1.20, ge=0.6, le=3.0)
     vestibule_facade: Facade = Facade.NORTH
     coupling_ach: float = Field(default=2.0, ge=0.0, le=30.0)
+    coupling_delta_t_k: float = Field(default=1.0, ge=0.0, le=10.0)
     coupling_from_hour: int = Field(default=10, ge=0, le=23)
     coupling_until_hour: int = Field(default=17, ge=0, le=23)
     coupling_source: SourceRef | None = None
@@ -574,10 +578,19 @@ class ComfortModel(Frozen):
     slope: float
     band_half_width_k: float = Field(gt=0.0, le=10.0)
     running_mean_alpha: float = Field(default=0.80, gt=0.0, lt=1.0)
+    running_mean_days: int | None = Field(default=None, ge=1, le=90)
     outdoor_applicability_c: UncertainRange
     absolute_lower_bound_c: float | None = None
     absolute_upper_bound_c: float | None = None
     source: SourceRef
+
+    @property
+    def is_fixed_band(self) -> bool:
+        return self.slope == 0.0
+
+    def outside_applicability(self, outdoor_running_mean_c: float) -> bool:
+        return not (self.outdoor_applicability_c.low <= outdoor_running_mean_c
+                    <= self.outdoor_applicability_c.high)
 
     def neutral_temperature(self, outdoor_running_mean_c: float) -> float:
         clamped = min(max(outdoor_running_mean_c, self.outdoor_applicability_c.low),
@@ -637,11 +650,16 @@ class RunOptions(Frozen):
     period: RunPeriod
     timestep_per_hour: int = Field(default=6, ge=1, le=60)
     conditioned_run: bool = True
-    heating_setpoint_c: float = Field(default=20.0, ge=0.0, le=35.0)
+    heating_setpoint_c: float = Field(default=14.0, ge=0.0, le=35.0)
+    heating_from_hour: int = Field(default=18, ge=0, le=23)
+    heating_until_hour: int = Field(default=6, ge=0, le=23)
+    heating_cutoff: datetime | None = None
+    spin_up_days: int = Field(default=30, ge=0, le=60)
     cooling_setpoint_c: float = Field(default=29.0, ge=5.0, le=45.0)
     surface_output: bool = True
     surface_output_period: RunPeriod | None = None
     include_horizon_shading: bool = True
+    ground_model: Literal["kiva", "monthly"] = "kiva"
     shutter_compliance_override: float | None = Field(default=None, ge=0.0, le=1.0)
     solar_distribution: Literal[
         "FullExterior", "FullInteriorAndExterior",
@@ -663,11 +681,23 @@ class RunOptions(Frozen):
         if window is not None and not (
                 window.start >= self.period.start and window.end <= self.period.end):
             raise ValueError("surface_output_period must lie inside period")
+        cutoff = self.heating_cutoff
+        if cutoff is not None and not self.period.contains(cutoff):
+            raise ValueError("heating_cutoff must fall inside the run period")
         return self
 
     @property
     def effective_surface_period(self) -> RunPeriod:
         return self.surface_output_period or self.period
+
+    @property
+    def heating_hours(self) -> tuple[int, ...]:
+        start, end = self.heating_from_hour, self.heating_until_hour
+        if start == end:
+            return tuple(range(24))
+        if start > end:
+            return tuple(range(start, 24)) + tuple(range(0, end))
+        return tuple(range(start, end))
 
 
 class SunPosition(Frozen):
@@ -955,8 +985,14 @@ class ComfortMetrics(Frozen):
     degree_hours_total_kh: float = 0.0
     occupied_hours_outside_band: float = 0.0
     fixed_target_hours_below: float | None = None
+    fixed_target_degree_hours_below_kh: float | None = None
     fixed_target_id: str | None = None
     worst_night_margin_k: float | None = None
+    band_lower_c: float | None = None
+    band_upper_c: float | None = None
+    running_mean_min_c: float | None = None
+    running_mean_max_c: float | None = None
+    hours_outside_applicability: float = 0.0
     mean_operative_c: float | None = None
     mean_daily_swing_k: float | None = None
     decrement_factor: float | None = None
@@ -1000,6 +1036,27 @@ class HeatBalanceBreakdown(Frozen):
         return {key: value / total for key, value in parts.items() if value > 0.0}
 
 
+class AirQualityMetrics(Frozen):
+    co2_limit_ppm: float
+    outdoor_co2_ppm: float
+    site_pressure_kpa: float
+    fresh_air_l_s_per_person: float
+    sea_level_fresh_air_l_s_per_person: float
+    fresh_air_sized_from_limit: bool = True
+    ventilation_design_l_s: float = 0.0
+    infiltration_design_l_s: float = 0.0
+    peak_night_co2_ppm: float | None = None
+    mean_night_co2_ppm: float | None = None
+    night_hours_above_limit: float = 0.0
+    hours_above_limit: float = 0.0
+    ventilation_heat_loss_kwh: float = 0.0
+    provenance: Provenance = Provenance.SIMULATED
+
+    @property
+    def breathe_safe(self) -> bool:
+        return self.night_hours_above_limit <= 0.0
+
+
 class CondensationMetrics(Frozen):
     hours: float = 0.0
     worst_surface: str | None = None
@@ -1028,6 +1085,122 @@ class CostBreakdown(Frozen):
     max_mason_skill: str = "unskilled"
     non_local_material_fraction: float = 0.0
     assumptions: tuple[Assumption, ...] = ()
+
+
+class QuantityLine(Frozen):
+    item_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    kind: Literal["material", "glazing", "shutter", "pcm"]
+    used_in: tuple[str, ...]
+    area_m2: float = Field(ge=0.0)
+    volume_m3: float | None = Field(default=None, ge=0.0)
+    mass_kg: float | None = Field(default=None, ge=0.0)
+    locally_available: bool | None = None
+    cost_inr: float = Field(ge=0.0)
+    note: str | None = None
+
+
+class BillOfQuantities(Frozen):
+    lines: tuple[QuantityLine, ...]
+    total_mass_kg: float = Field(ge=0.0)
+    imported_mass_kg: float = Field(ge=0.0)
+    total_cost_inr: float = Field(ge=0.0)
+    unweighed: tuple[str, ...] = ()
+    notes: tuple[str, ...] = ()
+
+
+class ComplianceItem(Frozen):
+    clause: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    value: float | None = None
+    unit: str
+    limit: float | None = None
+    comparison: Literal["max", "min", "info"]
+    mandatory: bool
+    passes: bool | None = None
+    note: str | None = None
+
+
+class ComplianceSheet(Frozen):
+    code: str = Field(min_length=1)
+    climate_zone: str | None = None
+    zone_basis: str
+    assessed: bool
+    items: tuple[ComplianceItem, ...] = ()
+    mandatory_pass: bool | None = None
+    notes: tuple[str, ...] = ()
+    source: SourceRef
+
+
+class SitingCell(Frozen):
+    east_m: float
+    north_m: float
+    latitude_deg: float
+    longitude_deg: float
+    elevation_m: float
+    slope_deg: float = Field(ge=0.0, le=90.0)
+    aspect_deg: float = Field(ge=0.0, le=360.0)
+    solstice_sun_h: float = Field(ge=0.0, le=24.0)
+    winter_sun_h: float = Field(ge=0.0, le=24.0)
+    lost_to_terrain_h: float
+
+
+class SitingMap(Frozen):
+    site_id: str = Field(min_length=1)
+    half_width_m: float = Field(gt=0.0)
+    step_m: float = Field(gt=0.0)
+    columns: int = Field(ge=1)
+    cells: tuple[SitingCell, ...]
+    best: tuple[int, ...]
+    site_cell: int = Field(ge=0)
+    winter_from: date
+    winter_to: date
+    days_sampled: int = Field(ge=1)
+    flat_winter_sun_h: float = Field(ge=0.0)
+    source: SourceRef
+
+    @model_validator(mode="after")
+    def _grid(self) -> "SitingMap":
+        if len(self.cells) != self.columns * self.columns:
+            raise ValueError("the siting cells must fill a square grid")
+        if any(not 0 <= index < len(self.cells) for index in (*self.best, self.site_cell)):
+            raise ValueError("best spots and the site must be cells of the grid")
+        return self
+
+
+class CardOrder(Frozen):
+    time: str = Field(min_length=1)
+    key: str = Field(min_length=1)
+    action: str = Field(min_length=1)
+
+
+class CommanderCard(Frozen):
+    post_id: str = Field(min_length=1)
+    post_name: str
+    night_of: date
+    issued_at: datetime
+    lang: Literal["en", "hi"]
+    status: Literal["red", "amber", "green"]
+    outside_min_c: float | None = None
+    inside_min_c: float
+    inside_min_at: str
+    hours_below_target: float = Field(ge=0.0)
+    target_c: float
+    sunset: str | None = None
+    orders: tuple[CardOrder, ...]
+    fuel: str
+    fuel_unit: str
+    fuel_tonight_units: float = Field(ge=0.0)
+    stock_units: float | None = Field(default=None, ge=0.0)
+    fuel_out_hours: float | None = Field(default=None, ge=0.0)
+    fresh_air_l_s: float = Field(ge=0.0)
+    model_error_k: float | None = Field(default=None, ge=0.0)
+    calibrated_on: date | None = None
+    forecast_source: Literal["forecast", "cached forecast", "climatology"]
+    forecast_age_h: float | None = Field(default=None, ge=0.0)
+    safety: tuple[str, ...]
+    notes: tuple[str, ...] = ()
+    target_source: SourceRef
 
 
 class BuildabilityMetrics(Frozen):
@@ -1079,7 +1252,9 @@ class ReferenceComparison(Frozen):
     reference_hash: str
     citation: SourceRef | None = None
     delta_minimum_overnight_k: float | None = None
+    delta_maximum_daytime_k: float | None = None
     delta_degree_hours_kh: float | None = None
+    delta_hours_below_band_h: float | None = None
     delta_heating_demand_kwh: float | None = None
     fuel_saved_units: float | None = None
     fuel_unit_name: str | None = None
@@ -1129,6 +1304,7 @@ class SimulationResult(Frozen):
     condensation: CondensationMetrics
     cost: CostBreakdown
     buildability: BuildabilityMetrics
+    air_quality: AirQualityMetrics | None = None
     hourly: tuple[HourlySeries, ...] = ()
     airflow: AirflowSummary | None = None
     surfaces: SurfaceResults | None = None
@@ -1197,7 +1373,9 @@ class DesignVariable(Frozen):
 
 
 class OptimisationConstraints(Frozen):
-    minimum_fresh_air_ach: float = Field(default=0.35, ge=0.0, le=10.0)
+    minimum_fresh_air_ach: float = Field(default=0.0, ge=0.0, le=10.0)
+    enforce_co2_limit: bool = True
+    co2_tolerance_fraction: float = Field(default=0.05, ge=0.0, le=0.5)
     max_wall_thickness_m: float = Field(default=0.60, gt=0.0, le=2.0)
     max_condensation_hours: float = Field(default=50.0, ge=0.0)
     max_total_cost_inr: float | None = Field(default=None, ge=0.0)
@@ -1213,8 +1391,11 @@ class OptimisationSpec(Frozen):
     population_size: int = Field(default=40, ge=8, le=400)
     generations: int = Field(default=25, ge=1, le=500)
     seed: int = 1
-    objectives: tuple[str, ...] = ("degree_hours_total_kh", "total_cost_inr",
-                                   "worst_night_margin_k")
+    workers: int = Field(default=1, ge=1, le=32)
+    robust_top: int = Field(default=0, ge=0, le=20)
+    robust_keep: int = Field(default=3, ge=1, le=20)
+    objectives: tuple[str, ...] = ("night_degree_hours_below_kh", "heating_litres",
+                                   "imported_tonnes")
 
     @model_validator(mode="after")
     def _names_unique(self) -> "OptimisationSpec":
@@ -1242,6 +1423,20 @@ class ParetoPoint(Frozen):
     flags: tuple[str, ...] = ()
 
 
+class RobustnessRow(Frozen):
+    design_hash: str
+    knee_rank: int
+    metric: str
+    unit: str
+    nominal: float
+    best: float
+    worst: float
+    corner_runs: int
+    dominant_parameter: str | None = None
+    robust_rank: int
+    selected: bool = False
+
+
 class ParetoResult(Frozen):
     spec_hash: str
     site_id: str
@@ -1256,6 +1451,7 @@ class ParetoResult(Frozen):
     complete: bool = True
     warnings: tuple[EngineWarning, ...] = ()
     knee_hash: str | None = None
+    robustness: tuple[RobustnessRow, ...] = ()
 
 
 class CFDBoundarySurface(Frozen):
@@ -1280,6 +1476,201 @@ class CFDExport(Frozen):
     air_pressure_pa: float | None = None
     zone_volume_m3: float
     surfaces: tuple[CFDBoundarySurface, ...]
+    internal_convective_gain_w: float | None = None
+    infiltration_sensible_w: float | None = None
+    mixing_sensible_w: float | None = None
     units: str = "SI"
     notes: tuple[str, ...] = ()
     source_run: str | None = None
+
+    @property
+    def net_air_heat_source_w(self) -> float | None:
+        parts = [self.internal_convective_gain_w, self.infiltration_sensible_w,
+                 self.mixing_sensible_w]
+        if all(part is None for part in parts):
+            return None
+        return float(sum(part for part in parts if part is not None))
+
+
+class CFDSolverRecord(Frozen):
+    solver: str = Field(min_length=1)
+    version: str = Field(min_length=1)
+    turbulence_model: str = Field(min_length=1)
+    buoyancy_model: str = Field(min_length=1)
+    radiation_model: str = Field(min_length=1)
+    operating_pressure_pa: float = Field(gt=0.0)
+    cell_count: int = Field(gt=0)
+    iterations: int = Field(ge=0)
+    converged: bool
+    residuals: dict[str, float] = Field(default_factory=dict)
+    time_step_s: float | None = Field(default=None, gt=0.0)
+    averaging_s: float | None = Field(default=None, gt=0.0)
+
+    @model_validator(mode="after")
+    def _averaging_needs_a_step(self) -> "CFDSolverRecord":
+        if (self.time_step_s is None) != (self.averaging_s is None):
+            raise ValueError("a time averaged field records both its time step and its "
+                             "averaging period")
+        return self
+
+
+class CFDField(Frozen):
+    design_hash: str = Field(min_length=1)
+    zone: str
+    label: str = Field(min_length=1)
+    timestamp: str
+    boundary_hash: str = Field(min_length=1)
+    dims: tuple[int, int, int]
+    bounds_min: tuple[float, float, float]
+    bounds_max: tuple[float, float, float]
+    temperature_c: tuple[float | None, ...]
+    speed_m_s: tuple[float | None, ...] | None = None
+    min_c: float
+    max_c: float
+    mean_c: float
+    max_speed_m_s: float | None = None
+    energyplus_zone_air_c: float
+    solver: CFDSolverRecord
+    notes: tuple[str, ...] = ()
+    source: SourceRef
+    provenance: Literal[Provenance.CFD] = Provenance.CFD
+
+    @model_validator(mode="after")
+    def _consistent(self) -> "CFDField":
+        if min(self.dims) < 2:
+            raise ValueError("a field grid needs at least two points along every axis")
+        if any(high <= low for low, high in zip(self.bounds_min, self.bounds_max)):
+            raise ValueError("field bounds must have a positive extent on every axis")
+        count = self.dims[0] * self.dims[1] * self.dims[2]
+        if len(self.temperature_c) != count:
+            raise ValueError(f"temperature_c holds {len(self.temperature_c)} values for "
+                             f"a {self.dims} grid of {count} points")
+        if self.speed_m_s is not None and len(self.speed_m_s) != count:
+            raise ValueError(f"speed_m_s holds {len(self.speed_m_s)} values for a grid "
+                             f"of {count} points")
+        finite = [value for value in self.temperature_c if value is not None]
+        if not finite:
+            raise ValueError("a field with no temperature inside the air volume is not "
+                             "a result")
+        if not all(math.isfinite(value) for value in finite):
+            raise ValueError("temperature_c holds a non finite value")
+        if abs(min(finite) - self.min_c) > 1e-6 or abs(max(finite) - self.max_c) > 1e-6:
+            raise ValueError("min_c and max_c must match the sampled temperatures")
+        if not self.min_c - 1e-6 <= self.mean_c <= self.max_c + 1e-6:
+            raise ValueError("mean_c must lie between min_c and max_c")
+        if self.speed_m_s is not None:
+            speeds = [value for value in self.speed_m_s if value is not None]
+            if any(not math.isfinite(value) or value < 0.0 for value in speeds):
+                raise ValueError("speed_m_s must be finite and non negative")
+            peak = max(speeds) if speeds else None
+            if (peak is None) != (self.max_speed_m_s is None) or (
+                    peak is not None and abs(peak - self.max_speed_m_s) > 1e-6):
+                raise ValueError("max_speed_m_s must match the sampled speeds")
+        elif self.max_speed_m_s is not None:
+            raise ValueError("max_speed_m_s needs sampled speeds")
+        return self
+
+
+class MapdlFace(Frozen):
+    group: str = Field(min_length=1)
+    mapdl_kwh: float
+    energyplus_kwh: float | None = None
+    difference_percent: float | None = None
+
+
+class MapdlAgreement(Frozen):
+    hours: int = Field(gt=0)
+    mae_k: float = Field(ge=0.0)
+    rmse_k: float = Field(ge=0.0)
+    bias_k: float
+    max_abs_k: float = Field(ge=0.0)
+    target_rmse_k: float = Field(gt=0.0)
+    meets_target: bool
+    faces: tuple[MapdlFace, ...] = ()
+
+    @model_validator(mode="after")
+    def _consistent(self) -> "MapdlAgreement":
+        if self.meets_target != (self.rmse_k <= self.target_rmse_k):
+            raise ValueError("meets_target must follow from the RMSE and its target")
+        if self.mae_k > self.rmse_k + 1e-9 or self.rmse_k > self.max_abs_k + 1e-9:
+            raise ValueError("the errors must satisfy MAE <= RMSE <= max")
+        return self
+
+
+class MapdlLevel(Frozen):
+    level: str = Field(min_length=1)
+    node_count: int = Field(gt=0)
+    element_count: int = Field(gt=0)
+    substeps: int = Field(ge=1)
+    runtime_s: float = Field(ge=0.0)
+    mean_air_c: float
+    minimum_air_c: float
+    rmse_k: float = Field(ge=0.0)
+
+
+class MapdlConvergence(Frozen):
+    metric: str = Field(min_length=1)
+    refinement_ratio: float = Field(gt=1.0)
+    order: float | None = None
+    gci_fine_k: float | None = Field(default=None, ge=0.0)
+    extrapolated: float | None = None
+    time_step_difference_k: float | None = None
+
+
+class MapdlCheck(Frozen):
+    name: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    points: int = Field(gt=0)
+    max_abs_k: float = Field(ge=0.0)
+    tolerance_k: float = Field(gt=0.0)
+    passed: bool
+    runtime_s: float = Field(ge=0.0)
+
+    @model_validator(mode="after")
+    def _verdict(self) -> "MapdlCheck":
+        if self.passed != (self.max_abs_k <= self.tolerance_k):
+            raise ValueError("passed must follow from the error and its tolerance")
+        return self
+
+
+class MapdlReport(Frozen):
+    design_hash: str = Field(min_length=1)
+    label: str = Field(min_length=1)
+    site_id: str = Field(min_length=1)
+    engine_version: str = Field(min_length=1)
+    solver: str = Field(min_length=1)
+    version: str = Field(min_length=1)
+    level: str = Field(min_length=1)
+    cycles: int = Field(ge=1)
+    lead_days: int = Field(default=0, ge=0)
+    substeps: int = Field(ge=1)
+    node_count: int = Field(gt=0)
+    element_count: int = Field(gt=0)
+    runtime_s: float = Field(ge=0.0)
+    timestamps: tuple[str, ...]
+    outdoor_c: tuple[float, ...]
+    mapdl_air_c: tuple[float, ...]
+    energyplus_air_c: tuple[float, ...]
+    agreement: MapdlAgreement
+    levels: tuple[MapdlLevel, ...] = ()
+    convergence: MapdlConvergence | None = None
+    checks: tuple[MapdlCheck, ...] = ()
+    notes: tuple[str, ...] = ()
+    sources: tuple[SourceRef, ...] = ()
+    generated_at: datetime
+    provenance: Literal[Provenance.FEA] = Provenance.FEA
+
+    @model_validator(mode="after")
+    def _aligned(self) -> "MapdlReport":
+        count = len(self.timestamps)
+        if count == 0:
+            raise ValueError("a MAPDL report needs at least one hour")
+        for name in ("outdoor_c", "mapdl_air_c", "energyplus_air_c"):
+            values = getattr(self, name)
+            if len(values) != count:
+                raise ValueError(f"{name} holds {len(values)} values for {count} hours")
+            if not all(math.isfinite(value) for value in values):
+                raise ValueError(f"{name} holds a non finite value")
+        if self.agreement.hours != count:
+            raise ValueError("the agreement must cover the reported hours")
+        return self

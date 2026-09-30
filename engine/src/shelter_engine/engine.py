@@ -18,17 +18,23 @@ from .climate import summarise as summarise_climate
 from .comfort import ComfortCatalogue, comfort_bounds_frame, evaluate_comfort, load_catalogue
 from .config import SETTINGS, EngineSettings, EnergyPlusInstall, find_energyplus
 from .constructions import ConstructionSet, build_constructions
-from .costing import buildability, cost_breakdown, envelope_u_values, glazing_u_values
+from .costing import (buildability, cost_breakdown, envelope_u_values, glazing_u_values,
+                      material_mass_kg)
+from .endurance import (CUTOFF_HOUR, FLOOR_C, EnduranceResult, coast_down, cutoff_for,
+                        night_window, window_sum)
 from .errors import EngineError, SimulationFailed
 from .geometry import GeometryModel, ROOM, build_geometry
 from .hashing import stable_hash
 from .idf import IdfBundle, build_idf
+from .mapdl import Layer as MapdlLayer, MapdlCase, case_from_run
 from .materials import MaterialLibrary
 from .mesh import build_mesh
-from .metrics import (ZoneSeries, airflow_summary, condensation, energy_metrics,
+from .metrics import (HEATING_CANDIDATES as HEATING_ENERGY_CANDIDATES,
+                      HEATING_RATE_CANDIDATES, ZoneSeries,
+                      air_quality, airflow_summary, condensation, energy_metrics,
                       heat_balance, solar_gain_by_facade, surface_frames,
                       zone_series)
-from .optimize import Metrics, optimise
+from .optimize import HEATING_OBJECTIVES, Metrics, knee_scores, optimise
 from .programme import layout_for
 from .recommend import RecommendationInputs, generate_recommendations
 from .results import SimulationOutput, blocking
@@ -41,15 +47,18 @@ from .schema import (Arrangement, Assumption, BuildabilityMetrics, CFDExport,
                      ComparisonRow, ComparisonTable, CostBreakdown, DesignSpec,
                      EnergyMetrics, EngineWarning, Facade, FixedComfortTarget,
                      FuelModel, GeometryPayload, HeatBalanceBreakdown,
-                     HourlySeries, OptimisationSpec, ParetoResult, Provenance,
+                     HourlySeries, OptimisationSpec, ParetoPoint, ParetoResult,
+                     Provenance, RobustnessRow,
                      RunOptions, RunPeriod, Severity, SimulationResult, SiteSpec,
                      SourceRef, SourceStatus, SunPath, SurfaceResults,
                      SurfaceSeries, TerrainMesh, ThermalBridge, UncertaintyBand)
-from .uncertainty import select_parameters, uncertainty_band
+from .uncertainty import (UncertainParameter, select_parameters, uncertainty_band,
+                          weather_parameter)
 from .weather import WeatherFile, load_epw
 
-DEFAULT_COMFORT_MODEL = "imac_2016_nv"
-DEFAULT_FIXED_TARGET = "dihar_operational_target"
+DEFAULT_COMFORT_MODEL = "drdo_tot_band"
+CO2_MARGINAL_FRACTION = 0.05
+DEFAULT_FIXED_TARGET = "drdo_band_night"
 UNCERTAINTY_METRICS = (
     ("minimum_overnight_operative_c", "C", True),
     ("degree_hours_total_kh", "Kh", True),
@@ -82,7 +91,8 @@ class Engine:
                  cache: Cache | None = None,
                  settings: EngineSettings | None = None,
                  install: EnergyPlusInstall | None = None,
-                 weather: WeatherFile | None = None):
+                 weather: WeatherFile | None = None,
+                 alternate_weather: tuple[str, str] | None = None):
         self.site = site
         self.library = library
         self.settings = settings or SETTINGS
@@ -102,6 +112,8 @@ class Engine:
         self._metric_cache: Cache = LRUCache(maxsize=4096)
         self.weather = weather or load_epw(site.epw_path, site)
         self._nominal_year = int(self.weather.frame.index[0].year)
+        self.alternate_weather = alternate_weather
+        self._alternate: WeatherFile | None = None
 
     @property
     def install(self) -> EnergyPlusInstall:
@@ -128,6 +140,12 @@ class Engine:
         self._cache.set(key, payload)
         return payload
 
+    def idf_text(self, design: DesignSpec, options: RunOptions,
+                 conditioned: bool = True) -> str:
+        constructions, model = self._prepare(design)
+        return build_idf(design, self.site, model, constructions, options,
+                         conditioned=conditioned, install=self.install).text
+
     def _prepare(self, design: DesignSpec) -> tuple[ConstructionSet, GeometryModel]:
         constructions = build_constructions(design, self.library)
         model = build_geometry(design, constructions.names,
@@ -136,7 +154,7 @@ class Engine:
         return constructions, model
 
     def _run(self, design: DesignSpec, options: RunOptions,
-             conditioned: bool) -> _RunProducts:
+             conditioned: bool, clip: bool = True) -> _RunProducts:
         constructions, model = self._prepare(design)
         label = f"{design.name}_{'conditioned' if conditioned else 'free'}"
         started = time.perf_counter()
@@ -166,6 +184,12 @@ class Engine:
                                        nominal_year=self._nominal_year,
                                        settings=self.settings, install=self.install)
         runtime = time.perf_counter() - started
+        start = pd.Timestamp(self._in_nominal_year(options.period.start))
+        output = output.since(start) if clip else output
+        if output.since(start).is_empty:
+            raise SimulationFailed(
+                f"EnergyPlus ran {label} but reported nothing inside the requested period "
+                f"from {options.period.start}.")
         warnings: list[EngineWarning] = []
         series = zone_series(output, ROOM, warnings)
         bundle.warnings.extend(warnings)
@@ -173,10 +197,10 @@ class Engine:
                             constructions=constructions, bundle=bundle,
                             runtime_s=runtime)
 
-    def metrics_for(self, design: DesignSpec,
-                    options: RunOptions) -> Metrics:
+    def metrics_for(self, design: DesignSpec, options: RunOptions,
+                    with_heating: bool = False) -> Metrics:
         key = stable_hash("metrics", design, self.site, options, self.comfort_model.id,
-                          __version__)
+                          self.library.fingerprint, with_heating, __version__)
         cached = self._metric_cache.get(key)
         if cached is not None:
             return cached
@@ -187,11 +211,18 @@ class Engine:
         comfort = evaluate_comfort(
             products.series.operative_c, products.series.outdoor_c,
             self.comfort_model, light.period, design.occupancy, self.fixed_target,
-            design_day)
+            design_day, self._outdoor_history)
         condensation_metrics = condensation(products.output, products.model,
                                             products.series)
         cost = cost_breakdown(design, products.model, self.library)
+        imported_kg, total_kg = material_mass_kg(design, products.model, self.library)
+        breathing = air_quality(products.output, design, products.bundle.fresh_air,
+                                products.bundle.ventilation_design_l_s,
+                                products.bundle.infiltration_design_l_s,
+                                light.heating_hours)
         metrics: Metrics = {
+            "imported_tonnes": imported_kg / 1000.0,
+            "material_tonnes": total_kg / 1000.0,
             "degree_hours_total_kh": comfort.degree_hours_total_kh,
             "degree_hours_below_kh": comfort.degree_hours_below_kh,
             "degree_hours_above_kh": comfort.degree_hours_above_kh,
@@ -207,9 +238,25 @@ class Engine:
                              comfort.minimum_overnight_operative_c),
                             ("minimum_operative_c", comfort.minimum_operative_c),
                             ("minimum_on_design_day_c", comfort.minimum_on_design_day_c),
-                            ("time_lag_h", comfort.time_lag_h)):
+                            ("time_lag_h", comfort.time_lag_h),
+                            ("night_degree_hours_below_kh",
+                             comfort.fixed_target_degree_hours_below_kh),
+                            ("night_hours_below_target", comfort.fixed_target_hours_below),
+                            ("peak_night_co2_ppm",
+                             breathing.peak_night_co2_ppm if breathing else None),
+                            ("co2_limit_ppm",
+                             breathing.co2_limit_ppm if breathing else None)):
             if value is not None:
                 metrics[name] = float(value)
+        if with_heating:
+            heated = self._run(design, light, conditioned=True)
+            energy = energy_metrics(heated.output,
+                                    heated.bundle.conditioned_zone_names, self.fuel)
+            if energy.heating_demand_kwh is not None:
+                metrics["heating_demand_kwh"] = float(energy.heating_demand_kwh)
+            if energy.fuel_units is not None:
+                metrics["fuel_units"] = float(energy.fuel_units)
+                metrics["heating_litres"] = float(energy.fuel_units)
         self._metric_cache.set(key, metrics)
         return metrics
 
@@ -219,8 +266,9 @@ class Engine:
                  with_reference: bool = True) -> SimulationResult:
         key = self.design_hash(design, options, conditioned=options.conditioned_run)
         reference_key = reference.name if isinstance(reference, DesignSpec)             else (reference or self.references.default_name)
-        cache_key = stable_hash("simulate", key, with_uncertainty,
-                                with_reference, reference_key if with_reference else "")
+        cache_key = stable_hash("simulate", key, with_uncertainty, with_reference,
+                                self.library.fingerprint,
+                                reference_key if with_reference else "")
         cached = self._cache.get(cache_key)
         if cached is not None:
             return cached.model_copy(update={"cached": True})
@@ -234,13 +282,19 @@ class Engine:
         comfort = evaluate_comfort(
             products.series.operative_c, products.series.outdoor_c,
             self.comfort_model, options.period, design.occupancy, self.fixed_target,
-            design_day)
+            design_day, self._outdoor_history)
+        warnings.extend(self._applicability_warnings(comfort))
         breakdown = heat_balance(products.output, products.model, design,
                                  products.series, self.thermal_bridges)
         condensation_metrics = condensation(products.output, products.model,
                                             products.series)
         cost = cost_breakdown(design, products.model, self.library)
         build = buildability(design, products.model, self.library)
+        breathing = air_quality(products.output, design, products.bundle.fresh_air,
+                                products.bundle.ventilation_design_l_s,
+                                products.bundle.infiltration_design_l_s,
+                                options.heating_hours)
+        warnings.extend(self._air_quality_warnings(breathing))
 
         energy = None
         if options.conditioned_run:
@@ -292,6 +346,7 @@ class Engine:
             headline_metric=self._headline_metric(),
             comfort=comfort, energy=energy, breakdown=breakdown,
             condensation=condensation_metrics, cost=cost, buildability=build,
+            air_quality=breathing,
             hourly=tuple(hourly),
             airflow=airflow_summary(products.output, products.model),
             surfaces=surfaces,
@@ -326,7 +381,8 @@ class Engine:
 
     def _comfort_lower_bound(self, series: ZoneSeries) -> float | None:
         try:
-            frame = comfort_bounds_frame(series.outdoor_c, self.comfort_model)
+            frame = comfort_bounds_frame(series.outdoor_c, self.comfort_model,
+                                         self._outdoor_history)
         except EngineError:
             return None
         if frame.empty:
@@ -335,7 +391,8 @@ class Engine:
 
     def _hourly_series(self, series: ZoneSeries) -> tuple[HourlySeries, ...]:
         stamps = tuple(value.isoformat() for value in series.operative_c.index)
-        bounds = comfort_bounds_frame(series.outdoor_c, self.comfort_model)
+        bounds = comfort_bounds_frame(series.outdoor_c, self.comfort_model,
+                                      self._outdoor_history)
         aligned = bounds.reindex(series.operative_c.index).ffill().bfill()
         output = [
             HourlySeries(name="operative_temperature_c", unit="C", timestamps=stamps,
@@ -377,7 +434,7 @@ class Engine:
         start = pd.Timestamp(date(self._nominal_year, window.start.month,
                                   window.start.day))
         end = pd.Timestamp(date(self._nominal_year, window.end.month,
-                                window.end.day)) + pd.Timedelta(1, unit="D")
+                                window.end.day)) + pd.to_timedelta(1, unit="D")
         clipped = {name: frame.loc[(frame.index >= start) & (frame.index < end)]
                    for name, frame in frames.items()}
         clipped = {name: frame for name, frame in clipped.items() if not frame.empty}
@@ -409,9 +466,35 @@ class Engine:
         return SurfaceResults(timestamps=stamps, period=window,
                               surfaces=tuple(series))
 
+    def _weather_parameter(self) -> UncertainParameter | None:
+        if self.alternate_weather is None:
+            return None
+        label, path = self.alternate_weather
+        if Path(path).resolve() == Path(self.site.epw_path).resolve():
+            return None
+        return weather_parameter(label, path)
+
+    def _probe(self, library: MaterialLibrary, weather_path: str | None) -> "Engine":
+        site, weather = self.site, self.weather
+        if weather_path is not None:
+            site = self.site.model_copy(update={"epw_path": weather_path})
+            if self._alternate is None:
+                self._alternate = load_epw(weather_path, site)
+            weather = self._alternate
+        probe = Engine(site, library,
+                       comfort_model_id=self.comfort_model.id,
+                       fixed_target_id=self.fixed_target.id if self.fixed_target else None,
+                       fuel=self.fuel, thermal_bridges=self.thermal_bridges,
+                       references=self.references, catalogue=self.catalogue,
+                       cache=self._cache, settings=self.settings,
+                       install=self.install, weather=weather)
+        probe._metric_cache = self._metric_cache
+        return probe
+
     def _uncertainty(self, design: DesignSpec, options: RunOptions,
                      comfort) -> list[UncertaintyBand]:
-        parameters = select_parameters(design, self.library)
+        parameters = select_parameters(design, self.library,
+                                       weather=self._weather_parameter())
         if not parameters:
             return []
         light = options.model_copy(update={"surface_output": False,
@@ -423,17 +506,8 @@ class Engine:
                 continue
 
             def evaluate(variant: DesignSpec, library: MaterialLibrary,
-                         _metric: str = metric) -> float:
-                probe = Engine(self.site, library,
-                               comfort_model_id=self.comfort_model.id,
-                               fixed_target_id=self.fixed_target.id
-                               if self.fixed_target else None,
-                               fuel=self.fuel, thermal_bridges=self.thermal_bridges,
-                               references=self.references, catalogue=self.catalogue,
-                               cache=self._cache, settings=self.settings,
-                               install=self.install, weather=self.weather)
-                probe._metric_cache = self._metric_cache
-                metrics = probe.metrics_for(variant, light)
+                         weather_path: str | None = None, _metric: str = metric) -> float:
+                metrics = self._probe(library, weather_path).metrics_for(variant, light)
                 value = metrics.get(_metric)
                 if value is None:
                     raise EngineError(
@@ -444,6 +518,52 @@ class Engine:
                 evaluate, design, self.library, parameters, metric, unit,
                 nominal_value=float(nominal)))
         return bands
+
+    def _corner_band(self, design: DesignSpec, options: RunOptions, metric: str,
+                     unit: str, nominal: float | None = None) -> UncertaintyBand:
+        light = options.model_copy(update={"surface_output": False,
+                                           "conditioned_run": False})
+        parameters = select_parameters(design, self.library,
+                                       weather=self._weather_parameter())
+
+        def evaluate(variant: DesignSpec, library: MaterialLibrary,
+                     weather_path: str | None = None) -> float:
+            value = self._probe(library, weather_path).metrics_for(variant, light).get(metric)
+            if value is None:
+                raise EngineError(f"the corner run produced no {metric}")
+            return float(value)
+
+        return uncertainty_band(evaluate, design, self.library, parameters, metric, unit,
+                                nominal_value=nominal)
+
+    def robustness(self, result: ParetoResult, options: RunOptions, top: int = 5,
+                   keep: int = 3, metric: str = "night_degree_hours_below_kh",
+                   unit: str = "Kh", workers: int = 1) -> tuple[RobustnessRow, ...]:
+        pool = [point for point in result.front if point.feasible] or list(result.front)
+        if not pool or top <= 0:
+            return ()
+        scores = knee_scores(pool, result.objectives)
+        ranked = [pool[index] for index in np.argsort(scores)[::-1][:top]]
+
+        def band_for(point: ParetoPoint) -> UncertaintyBand:
+            return self._corner_band(point.design, options, metric, unit,
+                                     point.metrics.get(metric))
+
+        if workers > 1 and len(ranked) > 1:
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=min(workers, len(ranked))) as executor:
+                bands = list(executor.map(band_for, ranked))
+        else:
+            bands = [band_for(point) for point in ranked]
+        order = sorted(range(len(ranked)), key=lambda index: bands[index].high)
+        robust_rank = {index: position + 1 for position, index in enumerate(order)}
+        return tuple(RobustnessRow(
+            design_hash=point.design_hash, knee_rank=index + 1, metric=metric, unit=unit,
+            nominal=bands[index].nominal, best=bands[index].low, worst=bands[index].high,
+            corner_runs=bands[index].runs,
+            dominant_parameter=bands[index].dominant_parameter,
+            robust_rank=robust_rank[index], selected=robust_rank[index] <= keep)
+            for index, point in enumerate(ranked))
 
     def _reference_result(self, reference: str | DesignSpec | None,
                           options: RunOptions,
@@ -503,6 +623,109 @@ class Engine:
                 name=f"thermal_bridge_{bridge.id}", value=bridge.psi_w_mk,
                 unit="W/mK", source=bridge.source, provenance=bridge.provenance))
         return assumptions
+
+    @property
+    def _outdoor_history(self):
+        return self.weather.frame["dry_bulb_c"]
+
+    def endurance(self, design: DesignSpec, night_of: date, period: RunPeriod,
+                  floor_c: float = FLOOR_C,
+                  cutoff_hour: int = CUTOFF_HOUR) -> EnduranceResult:
+        cutoff = cutoff_for(night_of, cutoff_hour)
+        base = RunOptions(period=period, surface_output=False, conditioned_run=True)
+        cut = base.model_copy(update={"heating_cutoff": cutoff})
+        key = stable_hash("endurance", design, self.site, base, cutoff, floor_c,
+                          self.library.fingerprint, __version__)
+        cached = self._cache.get(key)
+        if cached is not None:
+            return cached
+        heated = self._run(design, base, conditioned=True)
+        coasting = self._run(design, cut, conditioned=True)
+        nominal = self._in_nominal_year(night_of)
+        reached, hours, start, lowest, lowest_at, span = coast_down(
+            coasting.series.operative_c, cutoff_for(nominal, cutoff_hour), floor_c)
+        lowest_at = lowest_at.replace(year=lowest_at.year + night_of.year - nominal.year) \
+            if night_of.month != 2 or night_of.day != 29 else lowest_at
+        night_start, night_end = night_window(nominal)
+        joules = pd.Series(dtype=float)
+        for name in HEATING_ENERGY_CANDIDATES:
+            wide = heated.output.wide(name)
+            if not wide.empty:
+                joules = wide.sum(axis=1)
+                break
+        night_kwh = window_sum(joules, night_start, night_end) / 3_600_000.0
+        peak = None
+        for name in HEATING_RATE_CANDIDATES:
+            wide = heated.output.wide(name)
+            if not wide.empty:
+                rate = wide.sum(axis=1)
+                window = rate[(rate.index >= pd.Timestamp(night_start))
+                              & (rate.index < pd.Timestamp(night_end))]
+                peak = float(window.max()) if not window.empty else None
+                break
+        result = EnduranceResult(
+            night_of=night_of, cutoff=cutoff, floor_c=floor_c, reached_floor=reached,
+            hours_above_floor=hours, operative_at_cutoff_c=start,
+            minimum_after_cutoff_c=lowest, minimum_at=lowest_at,
+            hours_simulated_after_cutoff=span, night_heating_kwh=night_kwh,
+            night_peak_w=peak,
+            night_fuel_units=self.fuel.units_for(night_kwh) if self.fuel else None,
+            fuel_unit_name=self.fuel.unit if self.fuel else None,
+            fuel=self.fuel.fuel if self.fuel else None)
+        self._cache.set(key, result)
+        return result
+
+    def mapdl_case(self, design: DesignSpec, period: RunPeriod,
+                   label: str = "week") -> MapdlCase:
+        from .idf import KIVA_SOIL
+
+        options = RunOptions(period=period, surface_output=True, conditioned_run=False)
+        products = self._run(design, options, conditioned=False, clip=False)
+        soil = MapdlLayer("soil", 1.0, KIVA_SOIL["conductivity_w_mk"],
+                          KIVA_SOIL["density_kg_m3"], KIVA_SOIL["specific_heat_j_kgk"])
+        return case_from_run(label, stable_hash(design), design, self.site, self.library,
+                             self.weather, products.output, products.model, soil,
+                             compare_from=pd.Timestamp(self._in_nominal_year(period.start)))
+
+    def _in_nominal_year(self, day: date) -> date:
+        if day.month == 2 and day.day == 29:
+            return date(self._nominal_year, 2, 28)
+        return day.replace(year=self._nominal_year)
+
+    def _air_quality_warnings(self, breathing) -> list[EngineWarning]:
+        if breathing is None or breathing.night_hours_above_limit <= 0.0:
+            return []
+        peak = breathing.peak_night_co2_ppm or breathing.co2_limit_ppm
+        marginal = peak <= breathing.co2_limit_ppm * (1.0 + CO2_MARGINAL_FRACTION)
+        return [EngineWarning(
+            code="night_co2_above_limit",
+            severity=Severity.WARNING if marginal else Severity.SEVERE, origin="engine",
+            count=int(breathing.night_hours_above_limit),
+            message=(f"CO2 in the room passed {breathing.co2_limit_ppm:.0f} ppm for "
+                     f"{breathing.night_hours_above_limit:.0f} night hours, peaking at "
+                     f"{breathing.peak_night_co2_ppm:.0f} ppm. At "
+                     f"{breathing.site_pressure_kpa:.1f} kPa each occupant needs "
+                     f"{breathing.fresh_air_l_s_per_person:.1f} L/s of fresh air to hold "
+                     "the limit, which this design does not supply."))]
+
+    def _applicability_warnings(self, comfort) -> list[EngineWarning]:
+        model = self.comfort_model
+        if comfort.hours_outside_applicability <= 0.0 or model.is_fixed_band:
+            return []
+        span = model.outdoor_applicability_c
+        days = model.running_mean_days
+        mean = f"{days} day" if days else "exponentially weighted"
+        return [EngineWarning(
+            code="comfort_model_outside_applicability", severity=Severity.SEVERE,
+            origin="engine", count=int(comfort.hours_outside_applicability),
+            message=(f"{model.name} is only defined for a {mean} outdoor running mean "
+                     f"between {span.low:g} and {span.high:g} C. Here it ran from "
+                     f"{comfort.running_mean_min_c:.1f} to "
+                     f"{comfort.running_mean_max_c:.1f} C, so for "
+                     f"{comfort.hours_outside_applicability:.0f} hours the band was held "
+                     "at the edge of its range rather than computed. Those hours are "
+                     "judged against a band the model does not define; read them against "
+                     "the DRDO 17 plus or minus 3 C band instead."))]
 
     def _integrity_warnings(self) -> list[EngineWarning]:
         warnings: list[EngineWarning] = []
@@ -665,10 +888,17 @@ class Engine:
     def optimise(self, spec: OptimisationSpec, options: RunOptions,
                  on_stage: Callable[[ParetoResult], None] | None = None
                  ) -> ParetoResult:
+        heated = bool(HEATING_OBJECTIVES & set(spec.objectives))
+
         def evaluate(design: DesignSpec) -> Metrics:
-            return self.metrics_for(design, options)
-        return optimise(spec, evaluate, site_id=self.site.id,
-                        cache=LRUCache(maxsize=8192), on_stage=on_stage)
+            return self.metrics_for(design, options, with_heating=heated)
+        result = optimise(spec, evaluate, site_id=self.site.id,
+                          cache=LRUCache(maxsize=8192), on_stage=on_stage)
+        if spec.robust_top <= 0:
+            return result
+        rows = self.robustness(result, options, spec.robust_top, spec.robust_keep,
+                               workers=spec.workers)
+        return result.model_copy(update={"robustness": rows})
 
     def cfd_export(self, design: DesignSpec, options: RunOptions
                    ) -> tuple[CFDExport, ...]:

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import io
+import threading
 from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
+from .air_quality import (LIMIT_SOURCE, OUTDOOR_CO2_SOURCE, PERSILY_SOURCE,
+                          PRESSURE_SOURCE, FreshAirSizing, size_fresh_air)
 from .config import EnergyPlusInstall, find_energyplus
 from .constructions import INTERNAL_MASS_SOURCE, ConstructionSet
 from .errors import ConfigurationError, EngineError
@@ -33,6 +37,8 @@ COOLING_SETPOINT_SCHEDULE = "COOLING_SETPOINT"
 CONTROL_TYPE_SCHEDULE = "THERMOSTAT_CONTROL_TYPE"
 SHUTTER_SCHEDULE_PREFIX = "SHUTTER_CLOSED_"
 MOISTURE_SCHEDULE = "ADDED_MOISTURE_FRACTION"
+OUTDOOR_CO2_SCHEDULE = "OUTDOOR_CO2_PPM"
+PPM_LIMITS = "CONCENTRATION PPM"
 LATENT_HEAT_OF_VAPORISATION_J_KG = 2_450_000.0
 
 DAY_ORDER = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
@@ -42,6 +48,16 @@ CONDFD_TIMESTEP_PER_HOUR = 20
 DEFAULT_WARMUP_DAYS = 7
 IDEAL_LOADS_MAX_SUPPLY_C = 50.0
 IDEAL_LOADS_MIN_SUPPLY_C = 13.0
+HEATING_OFF_C = -60.0
+_EPPY_LOCK = threading.RLock()
+KIVA_FOUNDATION = "SLAB_ON_GRADE"
+KIVA_SOIL = {"conductivity_w_mk": 1.731, "density_kg_m3": 1842.3,
+             "specific_heat_j_kgk": 418.7}
+KIVA_MIN_CELL_M = 0.2
+KIVA_CELL_GROWTH = 3.0
+KIVA_DEEP_GROUND_M = 40.0
+KIVA_FAR_FIELD_M = 40.0
+EDGE_TOLERANCE_M = 1e-4
 
 SURFACE_VARIABLES = (
     "Surface Inside Face Temperature",
@@ -70,12 +86,16 @@ ZONE_VARIABLES = (
     "Zone Windows Total Transmitted Solar Radiation Energy",
     "Enclosure Windows Total Transmitted Solar Radiation Energy",
     "Zone Total Internal Total Heating Energy",
+    "Zone Total Internal Convective Heating Rate",
+    "Zone Total Internal Radiant Heating Rate",
+    "Zone Total Internal Visible Radiation Heating Rate",
     "Zone Infiltration Air Change Rate",
     "Zone Infiltration Standard Density Volume Flow Rate",
     "Zone Ventilation Air Change Rate",
     "Zone Ventilation Standard Density Volume Flow Rate",
     "Zone Mixing Current Density Volume Flow Rate",
     "Zone Mixing Mass Flow Rate",
+    "Zone Air CO2 Concentration",
 )
 SITE_VARIABLES = (
     "Site Outdoor Air Drybulb Temperature",
@@ -84,6 +104,7 @@ SITE_VARIABLES = (
     "Site Wind Speed",
     "Site Direct Solar Radiation Rate per Area",
     "Site Diffuse Solar Radiation Rate per Area",
+    "Site Sky Temperature",
 )
 IDEAL_LOADS_VARIABLES = (
     "Zone Ideal Loads Supply Air Total Heating Energy",
@@ -92,10 +113,13 @@ IDEAL_LOADS_VARIABLES = (
 )
 
 SETPOINT_SOURCE = SourceRef(
-    citation="Heating setpoint taken from the run options; the conditioned run exists "
-             "only to size remaining heating demand and does not affect the free "
+    citation="Heating runs only in the night window and only up to the lower edge of the "
+             "DRDO 17 plus or minus 3 C band, so the demand reported is the least heat "
+             "that keeps the occupied night at 14 C; outside the window the heater is off. "
+             "The conditioned run sizes that remaining demand and does not affect the free "
              "floating comfort result",
-    status=SourceStatus.DERIVED)
+    status=SourceStatus.DERIVED,
+    url="https://drdo.gov.in/drdo/sites/default/files/tot/DOSTTbSfSHoSiCC11022025_0.pdf")
 COUPLING_SOURCE = SourceRef(
     citation="Inter zone air exchange modelled as a scheduled cross mixing flow rather "
              "than a full airflow network; the assumed rate is recorded here",
@@ -111,6 +135,14 @@ MOISTURE_SOURCE = SourceRef(
              "entered as a latent gain on top of what the occupants exhale; occupant "
              "respiration is already carried by the EnergyPlus People model",
     status=SourceStatus.ASSUMED)
+KIVA_SOURCE = SourceRef(
+    citation="EnergyPlus Foundation:Kiva two dimensional ground heat transfer under the "
+             "real floor, with the soil properties, far field width, deep ground depth and "
+             "mesh settings of the ZoneCoupledKivaSlab example shipped with EnergyPlus 24.2",
+    status=SourceStatus.DERIVED,
+    note=("Replaces the monthly ground temperature boundary, which the EnergyPlus "
+          "documentation warns against for floor losses. The soil properties are the "
+          "EnergyPlus defaults, not a Ladakh soil survey."))
 LATENT_SOURCE = SourceRef(
     citation="Occupant latent heat and moisture release follow the EnergyPlus People "
              "model driven by the activity level schedule",
@@ -127,6 +159,9 @@ class IdfBundle:
     timestep_per_hour: int
     assumptions: list[Assumption] = field(default_factory=list)
     warnings: list[EngineWarning] = field(default_factory=list)
+    fresh_air: FreshAirSizing | None = None
+    ventilation_design_l_s: float = 0.0
+    infiltration_design_l_s: float = 0.0
 
     def write(self, path: str | Path) -> Path:
         target = Path(path)
@@ -179,7 +214,7 @@ def _field_text(value: Any) -> str:
     if isinstance(value, float):
         if value == int(value) and abs(value) < 1e15:
             return str(int(value))
-        return repr(round(value, 8))
+        return format(value, ".10g")
     return str(value).strip()
 
 
@@ -224,6 +259,9 @@ def _schedule_type_limits(idf) -> None:
          Unit_Type="ActivityLevel")
     _new(idf, "ScheduleTypeLimits", Name=CONTROL_LIMITS, Lower_Limit_Value=0,
          Upper_Limit_Value=4, Numeric_Type="Discrete", Unit_Type="Control")
+    _new(idf, "ScheduleTypeLimits", Name=PPM_LIMITS, Lower_Limit_Value=0.0,
+         Upper_Limit_Value=100000.0, Numeric_Type="Continuous",
+         Unit_Type="Dimensionless")
 
 
 def _constant_schedule(idf, name: str, value: float, limits: str) -> str:
@@ -273,6 +311,52 @@ def _all_days_schedule(idf, name: str, active_hours: Sequence[int],
     return _compact_schedule(idf, name, limits,
                              [(("AllDays",), _hour_profile(active_hours, on_value,
                                                            off_value))])
+
+
+def spin_up_start(options: RunOptions) -> date:
+    period = options.period
+    days = min(options.spin_up_days, max(0, 365 - period.days))
+    return period.start - timedelta(days=days)
+
+
+def _heating_schedule(idf, name: str, active_hours: Sequence[int], on_value: float,
+                      off_value: float, cutoff: datetime | None,
+                      lead_start: date | None = None) -> str:
+    if cutoff is None:
+        return _all_days_schedule(idf, name, active_hours, on_value, off_value,
+                                  TEMPERATURE_LIMITS)
+    obj = _new(idf, "Schedule:Compact", Name=name,
+               Schedule_Type_Limits_Name=TEMPERATURE_LIMITS)
+    fields: list[Any] = []
+
+    def block(through: str, steps: Sequence[tuple[int, float]]) -> None:
+        fields.append(f"Through: {through}")
+        fields.append("For: AllDays")
+        last = 0
+        for until_hour, value in steps:
+            if until_hour <= last and until_hour != 24:
+                continue
+            fields.append(f"Until: {until_hour:02d}:00")
+            fields.append(value)
+            last = until_hour
+
+    day = cutoff.date()
+    before = day - timedelta(days=1)
+    if day.month != 1 or day.day != 1:
+        block(f"{before.month}/{before.day}",
+              _hour_profile(active_hours, on_value, off_value))
+    last_hours = [hour for hour in active_hours if hour < cutoff.hour]
+    block(f"{day.month}/{day.day}", _hour_profile(last_hours, on_value, off_value))
+    wraps = lead_start is not None and lead_start.year < day.year
+    if wraps:
+        eve = lead_start - timedelta(days=1)
+        if (eve.month, eve.day) > (day.month, day.day):
+            block(f"{eve.month}/{eve.day}", [(24, off_value)])
+        block("12/31", _hour_profile(active_hours, on_value, off_value))
+    elif day.month != 12 or day.day != 31:
+        block("12/31", [(24, off_value)])
+    _append_extensible(obj, fields)
+    return name
 
 
 def _compliance_days(compliance: float) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -346,7 +430,42 @@ def _add_zone(idf, zone: ZoneModel) -> None:
     _new(idf, "Zone", **fields)
 
 
-def _add_surface(idf, polygon: Polygon) -> None:
+def _edge_overlap(a: tuple[tuple[float, float], tuple[float, float]],
+                  b: tuple[tuple[float, float], tuple[float, float]]) -> float:
+    (ax, ay), (bx, by) = a
+    dx, dy = bx - ax, by - ay
+    length = (dx * dx + dy * dy) ** 0.5
+    if length <= EDGE_TOLERANCE_M:
+        return 0.0
+    ux, uy = dx / length, dy / length
+    projections = []
+    for px, py in b:
+        rx, ry = px - ax, py - ay
+        if abs(rx * uy - ry * ux) > EDGE_TOLERANCE_M * 10:
+            return 0.0
+        projections.append(rx * ux + ry * uy)
+    low, high = sorted(projections)
+    return max(0.0, min(high, length) - max(low, 0.0))
+
+
+def _edges(polygon: Polygon) -> list[tuple[tuple[float, float], tuple[float, float]]]:
+    points = [(float(x), float(y)) for x, y, _ in polygon.vertices]
+    return [(points[i], points[(i + 1) % len(points)]) for i in range(len(points))]
+
+
+def exposed_perimeter_m(floor: Polygon, floors: Sequence[Polygon]) -> float:
+    total = 0.0
+    for edge in _edges(floor):
+        (ax, ay), (bx, by) = edge
+        length = ((bx - ax) ** 2 + (by - ay) ** 2) ** 0.5
+        shared = sum(_edge_overlap(edge, other_edge)
+                     for other in floors if other is not floor
+                     for other_edge in _edges(other))
+        total += max(0.0, length - min(shared, length))
+    return total
+
+
+def _add_surface(idf, polygon: Polygon, foundation: str | None = None) -> None:
     surface_type = {
         "wall": "Wall", "partition": "Wall", "roof": "Roof",
         "ceiling": "Ceiling", "floor": "Floor",
@@ -354,13 +473,15 @@ def _add_surface(idf, polygon: Polygon) -> None:
     if polygon.kind.value == "roof" and polygon.outside_boundary != "Outdoors":
         surface_type = "Ceiling"
     outside = polygon.outside_boundary
+    on_foundation = foundation is not None and outside == "Ground"
     obj = _new(
         idf, "BuildingSurface:Detailed",
         Name=polygon.name, Surface_Type=surface_type,
         Construction_Name=polygon.construction, Zone_Name=polygon.zone,
-        Outside_Boundary_Condition=outside,
-        Outside_Boundary_Condition_Object=(polygon.boundary_object
-                                           if outside == "Surface" else ""),
+        Outside_Boundary_Condition="Foundation" if on_foundation else outside,
+        Outside_Boundary_Condition_Object=(
+            foundation if on_foundation
+            else polygon.boundary_object if outside == "Surface" else ""),
         Sun_Exposure="SunExposed" if polygon.sun_exposed else "NoSun",
         Wind_Exposure="WindExposed" if polygon.wind_exposed else "NoWind",
         View_Factor_to_Ground="autocalculate",
@@ -434,7 +555,8 @@ def _add_internal_mass(idf, design: DesignSpec, model: GeometryModel,
 
 
 def _add_internal_gains(idf, design: DesignSpec, model: GeometryModel,
-                        assumptions: list[Assumption]) -> None:
+                        assumptions: list[Assumption],
+                        fresh_air: FreshAirSizing | None) -> None:
     occupancy = design.occupancy
     room = model.zone("ROOM")
     if occupancy.unoccupied or occupancy.occupants == 0:
@@ -444,7 +566,9 @@ def _add_internal_gains(idf, design: DesignSpec, model: GeometryModel,
                   Number_of_People_Calculation_Method="People",
                   Number_of_People=occupancy.occupants,
                   Fraction_Radiant=0.3,
-                  Activity_Level_Schedule_Name=ACTIVITY_SCHEDULE)
+                  Activity_Level_Schedule_Name=ACTIVITY_SCHEDULE,
+                  Carbon_Dioxide_Generation_Rate=(fresh_air.co2_m3_s_per_w
+                                                  if fresh_air else None))
     _set_first(people, ZONE_FIELD_ALIASES, room.name)
 
     if occupancy.lighting_w > 0.0:
@@ -469,12 +593,11 @@ def _add_internal_gains(idf, design: DesignSpec, model: GeometryModel,
 
 
 def _add_airflow(idf, design: DesignSpec, model: GeometryModel,
-                 assumptions: list[Assumption]) -> None:
+                 assumptions: list[Assumption],
+                 fresh_air: FreshAirSizing | None) -> tuple[float, float]:
     ventilation = design.ventilation
     for zone in model.zones:
         rate = ventilation.infiltration_ach
-        if not zone.conditioned:
-            rate = max(rate, ventilation.infiltration_ach)
         infiltration = _new(
             idf, "ZoneInfiltration:DesignFlowRate",
             Name=f"{zone.name}_INFILTRATION",
@@ -486,22 +609,48 @@ def _add_airflow(idf, design: DesignSpec, model: GeometryModel,
         _set_first(infiltration, ZONE_FIELD_ALIASES, zone.name)
 
     room = model.zone("ROOM")
-    fresh_air = max(0.0, ventilation.minimum_fresh_air_ach - ventilation.infiltration_ach)
-    if fresh_air > 0.0:
+    infiltration_l_s = ventilation.infiltration_ach * room.volume_m3 / 3.6
+    floor_l_s = ventilation.minimum_fresh_air_ach * room.volume_m3 / 3.6
+    people = 0 if design.occupancy.unoccupied else design.occupancy.occupants
+    per_person = (ventilation.fresh_air_l_s_per_person
+                  or (fresh_air.fresh_air_l_s_per_person if fresh_air else 0.0))
+    required_l_s = max(floor_l_s, people * per_person)
+    top_up_l_s = max(0.0, required_l_s - infiltration_l_s)
+    if top_up_l_s > 0.0:
         fresh = _new(idf, "ZoneVentilation:DesignFlowRate", Name="ROOM_FRESH_AIR",
-                     Schedule_Name=FRESH_AIR_SCHEDULE,
-                     Design_Flow_Rate_Calculation_Method="AirChanges/Hour",
-                     Air_Changes_per_Hour=fresh_air, Ventilation_Type="Natural",
+                     Schedule_Name=OCCUPANCY_SCHEDULE if people else FRESH_AIR_SCHEDULE,
+                     Design_Flow_Rate_Calculation_Method="Flow/Zone",
+                     Design_Flow_Rate=round(top_up_l_s / 1000.0, 6),
+                     Ventilation_Type="Natural",
                      Constant_Term_Coefficient=1.0,
                      Temperature_Term_Coefficient=0.0,
                      Velocity_Term_Coefficient=0.0,
                      Velocity_Squared_Term_Coefficient=0.0)
         _set_first(fresh, ZONE_FIELD_ALIASES, room.name)
+    if people and per_person > 0.0:
+        chosen = ventilation.fresh_air_l_s_per_person is not None
+        assumptions.append(Assumption(
+            name="fresh_air_l_s_per_person", value=round(per_person, 2),
+            unit="L/s per person",
+            source=(SourceRef(citation="Fresh air per person set on the design",
+                              status=SourceStatus.ASSUMED) if chosen else PERSILY_SOURCE),
+            provenance=Provenance.ASSUMED if chosen else Provenance.DERIVED))
+        assumptions.append(Assumption(
+            name="fresh_air_top_up_l_s", value=round(top_up_l_s, 2), unit="L/s",
+            source=SourceRef(
+                citation=(f"{people} occupants at {per_person:.1f} L/s each need "
+                          f"{people * per_person:.1f} L/s of outdoor air; leakage supplies "
+                          f"{infiltration_l_s:.1f} L/s, so ventilation adds the rest while "
+                          "the shelter is occupied. Air that leaks in already counts as "
+                          "fresh, so sealing the shelter below this does not make it "
+                          "warmer at night: the ventilation makes up the difference."),
+                status=SourceStatus.DERIVED), provenance=Provenance.DERIVED))
+    if floor_l_s > people * per_person and floor_l_s > 0.0:
         assumptions.append(Assumption(
             name="minimum_fresh_air_ach", value=ventilation.minimum_fresh_air_ach,
             unit="air changes per hour", source=SourceRef(
-                citation="Minimum fresh air rate enforced as a health constraint so the "
-                         "search cannot recommend a sealed shelter",
+                citation="Minimum air change rate set on the design, which here asks for "
+                         "more air than the occupants' CO2 does",
                 status=SourceStatus.ASSUMED), provenance=Provenance.ASSUMED))
     if ventilation.night_ventilation and ventilation.night_ventilation_ach > 0.0:
         night = _new(idf, "ZoneVentilation:DesignFlowRate",
@@ -523,16 +672,91 @@ def _add_airflow(idf, design: DesignSpec, model: GeometryModel,
     if partner and params.coupling_ach > 0.0:
         volume = min(room.volume_m3, model.zone(partner).volume_m3)
         flow = params.coupling_ach * volume / 3600.0
+        gated = design.arrangement in (Arrangement.SUNSPACE, Arrangement.TROMBE_WALL)
+        delta = params.coupling_delta_t_k if gated else 0.0
         mixing = _new(idf, "ZoneCrossMixing", Name=f"ROOM_{partner}_COUPLING",
                       Schedule_Name=COUPLING_SCHEDULE,
                       Design_Flow_Rate_Calculation_Method="Flow/Zone",
-                      Design_Flow_Rate=flow, Delta_Temperature=0.0)
+                      Design_Flow_Rate=flow, Delta_Temperature=delta)
         _set_first(mixing, ZONE_FIELD_ALIASES, room.name)
         _set_first(mixing, ("Source_Zone_or_Space_Name", "Source_Zone_Name"), partner)
         assumptions.append(Assumption(
             name="interzone_coupling_ach", value=params.coupling_ach,
             unit="air changes per hour", source=params.coupling_source or COUPLING_SOURCE,
             provenance=Provenance.ASSUMED))
+        if gated:
+            assumptions.append(Assumption(
+                name="interzone_coupling_gate_k", value=delta, unit="K",
+                source=SourceRef(
+                    citation=(f"Air moves between the room and the {partner.lower()} only "
+                              f"while the {partner.lower()} is at least {delta:g} K warmer, "
+                              "as a door or vent that is opened when it brings heat in and "
+                              "shut when it would let heat out"),
+                    status=SourceStatus.ASSUMED), provenance=Provenance.ASSUMED))
+    return top_up_l_s, infiltration_l_s
+
+
+def _add_foundation(idf, model: GeometryModel,
+                    assumptions: list[Assumption]) -> str | None:
+    floors = [polygon for polygon in model.opaque
+              if polygon.kind.value == "floor" and polygon.outside_boundary == "Ground"]
+    if not floors:
+        return None
+    _new(idf, "Foundation:Kiva:Settings",
+         Soil_Conductivity=KIVA_SOIL["conductivity_w_mk"],
+         Soil_Density=KIVA_SOIL["density_kg_m3"],
+         Soil_Specific_Heat=KIVA_SOIL["specific_heat_j_kgk"],
+         Ground_Solar_Absorptivity=0.9, Ground_Thermal_Absorptivity=0.9,
+         Ground_Surface_Roughness=0.03, FarField_Width=KIVA_FAR_FIELD_M,
+         DeepGround_Boundary_Condition="ZeroFlux",
+         DeepGround_Depth=KIVA_DEEP_GROUND_M,
+         Minimum_Cell_Dimension=KIVA_MIN_CELL_M,
+         Maximum_Cell_Growth_Coefficient=KIVA_CELL_GROWTH,
+         Simulation_Timestep="Hourly")
+    _new(idf, "Foundation:Kiva", Name=KIVA_FOUNDATION,
+         Wall_Height_Above_Grade=0.0, Wall_Depth_Below_Slab=0.0)
+    exposed_total = 0.0
+    for floor in floors:
+        exposed = exposed_perimeter_m(floor, floors)
+        exposed_total += exposed
+        _new(idf, "SurfaceProperty:ExposedFoundationPerimeter", Surface_Name=floor.name,
+             Exposed_Perimeter_Calculation_Method="TotalExposedPerimeter",
+             Total_Exposed_Perimeter=round(max(exposed, 0.01), 4))
+    assumptions.append(Assumption(
+        name="ground_model", value="Foundation:Kiva", source=KIVA_SOURCE,
+        provenance=Provenance.DERIVED))
+    assumptions.append(Assumption(
+        name="exposed_floor_perimeter_m", value=round(exposed_total, 2), unit="m",
+        source=SourceRef(citation="Floor edges on the outside of the building, with every "
+                                  "edge shared with a sunspace, gap or vestibule floor "
+                                  "taken off", status=SourceStatus.DERIVED),
+        provenance=Provenance.DERIVED))
+    return KIVA_FOUNDATION
+
+
+def _add_contaminant_balance(idf, design: DesignSpec, site: SiteSpec,
+                             assumptions: list[Assumption]) -> FreshAirSizing | None:
+    occupancy = design.occupancy
+    if (occupancy.unoccupied or occupancy.occupants == 0
+            or occupancy.metabolic_w_per_person <= 0.0):
+        return None
+    sizing = size_fresh_air(site.elevation_m, occupancy.metabolic_w_per_person,
+                            design.ventilation.co2_limit_ppm)
+    _constant_schedule(idf, OUTDOOR_CO2_SCHEDULE, round(sizing.outdoor_ppm, 2),
+                       PPM_LIMITS)
+    _new(idf, "ZoneAirContaminantBalance", Carbon_Dioxide_Concentration="Yes",
+         Outdoor_Carbon_Dioxide_Schedule_Name=OUTDOOR_CO2_SCHEDULE)
+    assumptions.extend((
+        Assumption(name="co2_generation_m3_s_per_w",
+                   value=float(f"{sizing.co2_m3_s_per_w:.4e}"), unit="m3/s per W",
+                   source=PERSILY_SOURCE, provenance=Provenance.DERIVED),
+        Assumption(name="site_pressure_kpa", value=round(sizing.site_pressure_kpa, 2),
+                   unit="kPa", source=PRESSURE_SOURCE, provenance=Provenance.DERIVED),
+        Assumption(name="outdoor_co2_ppm", value=sizing.outdoor_ppm, unit="ppm",
+                   source=OUTDOOR_CO2_SOURCE, provenance=Provenance.LITERATURE),
+        Assumption(name="co2_limit_ppm", value=sizing.limit_ppm, unit="ppm",
+                   source=LIMIT_SOURCE, provenance=Provenance.ASSUMED)))
+    return sizing
 
 
 def _add_overhangs(idf, design: DesignSpec, model: GeometryModel) -> int:
@@ -684,6 +908,15 @@ def build_idf(design: DesignSpec, site: SiteSpec, model: GeometryModel,
               conditioned: bool = False,
               install: EnergyPlusInstall | None = None,
               force_finite_difference: bool = False) -> IdfBundle:
+    with _EPPY_LOCK:
+        return _build_idf(design, site, model, constructions, options, conditioned,
+                          install, force_finite_difference)
+
+
+def _build_idf(design: DesignSpec, site: SiteSpec, model: GeometryModel,
+               constructions: ConstructionSet, options: RunOptions,
+               conditioned: bool, install: EnergyPlusInstall | None,
+               force_finite_difference: bool) -> IdfBundle:
     install = install or find_energyplus()
     IDF = _idf_class(install)
     idf = IDF(io.StringIO(""))
@@ -740,7 +973,8 @@ def build_idf(design: DesignSpec, site: SiteSpec, model: GeometryModel,
          Latitude=site.latitude_deg, Longitude=site.longitude_deg,
          Time_Zone=site.time_zone_h, Elevation=site.elevation_m)
 
-    if site.ground is not None:
+    kiva = options.ground_model == "kiva"
+    if not kiva and site.ground is not None:
         ground = _new(idf, "Site:GroundTemperature:BuildingSurface")
         months = ("January", "February", "March", "April", "May", "June", "July",
                   "August", "September", "October", "November", "December")
@@ -749,7 +983,7 @@ def build_idf(design: DesignSpec, site: SiteSpec, model: GeometryModel,
         assumptions.append(Assumption(
             name="monthly_ground_temperature_c", value=list(site.ground.monthly_c),
             unit="C", source=site.ground.source, provenance=Provenance.DERIVED))
-    else:
+    elif not kiva:
         warnings.append(EngineWarning(
             code="ground_temperature_default", severity=Severity.SEVERE,
             origin="engine",
@@ -759,8 +993,9 @@ def build_idf(design: DesignSpec, site: SiteSpec, model: GeometryModel,
                      "Layer 0 must supply this before any reported result.")))
 
     period = options.period
+    begin = spin_up_start(options)
     _new(idf, "RunPeriod", Name=period.label,
-         Begin_Month=period.start.month, Begin_Day_of_Month=period.start.day,
+         Begin_Month=begin.month, Begin_Day_of_Month=begin.day,
          End_Month=period.end.month, End_Day_of_Month=period.end.day,
          Day_of_Week_for_Start_Day="Monday",
          Use_Weather_File_Holidays_and_Special_Days="Yes",
@@ -797,28 +1032,39 @@ def build_idf(design: DesignSpec, site: SiteSpec, model: GeometryModel,
         _all_days_schedule(idf, COUPLING_SCHEDULE,
                            design.arrangement_params.coupling_hours)
     if conditioned:
-        _constant_schedule(idf, HEATING_SETPOINT_SCHEDULE,
-                           options.heating_setpoint_c, TEMPERATURE_LIMITS)
+        heating_hours = () if occupancy.unoccupied else options.heating_hours
+        _heating_schedule(idf, HEATING_SETPOINT_SCHEDULE, heating_hours,
+                          options.heating_setpoint_c, HEATING_OFF_C,
+                          options.heating_cutoff, spin_up_start(options))
         _constant_schedule(idf, COOLING_SETPOINT_SCHEDULE,
                            options.cooling_setpoint_c, TEMPERATURE_LIMITS)
         _constant_schedule(idf, CONTROL_TYPE_SCHEDULE, 4, CONTROL_LIMITS)
         assumptions.append(Assumption(
             name="heating_setpoint_c", value=options.heating_setpoint_c, unit="C",
             source=SETPOINT_SOURCE, provenance=Provenance.DERIVED))
+        assumptions.append(Assumption(
+            name="heating_window",
+            value=(f"{options.heating_from_hour:02d}:00 to "
+                   f"{options.heating_until_hour:02d}:00"
+                   if heating_hours else "no heating, the shelter is unoccupied"),
+            source=SETPOINT_SOURCE, provenance=Provenance.DERIVED))
 
     _add_materials(idf, constructions)
     for zone in model.zones:
         _add_zone(idf, zone)
+    foundation = _add_foundation(idf, model, assumptions) if kiva else None
     for polygon in model.opaque:
-        _add_surface(idf, polygon)
+        _add_surface(idf, polygon, foundation)
     for polygon in model.windows:
         _add_window(idf, polygon)
     if options.include_horizon_shading:
         _add_shading(idf, model)
     _add_internal_mass(idf, design, model, constructions, assumptions)
-    _add_internal_gains(idf, design, model, assumptions)
+    fresh_air = _add_contaminant_balance(idf, design, site, assumptions)
+    _add_internal_gains(idf, design, model, assumptions, fresh_air)
     _add_added_moisture(idf, design, model, assumptions)
-    _add_airflow(idf, design, model, assumptions)
+    ventilation_l_s, infiltration_l_s = _add_airflow(idf, design, model, assumptions,
+                                                     fresh_air)
     _add_window_shading(idf, design, model, constructions, options)
     overhangs = _add_overhangs(idf, design, model)
     if overhangs:
@@ -840,4 +1086,7 @@ def build_idf(design: DesignSpec, site: SiteSpec, model: GeometryModel,
         surface_names=tuple(polygon.name for polygon in model.polygons),
         timestep_per_hour=timestep,
         assumptions=assumptions,
-        warnings=warnings)
+        warnings=warnings,
+        fresh_air=fresh_air,
+        ventilation_design_l_s=ventilation_l_s,
+        infiltration_design_l_s=infiltration_l_s)

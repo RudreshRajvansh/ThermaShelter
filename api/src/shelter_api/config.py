@@ -23,6 +23,8 @@ class Settings:
                                                          DEFAULT_DATA_DIR))
     database_path: Path | None = None
     cfd_dir: Path | None = None
+    mapdl_dir: Path | None = None
+    evidence_dir: Path | None = None
     validation_dir: Path | None = None
     materials_path: Path | None = None
     sites_dir: Path | None = None
@@ -30,14 +32,18 @@ class Settings:
         default_factory=lambda: os.environ.get("SHELTER_DEFAULT_SITE", "leh"))
     comfort_model_id: str = field(
         default_factory=lambda: os.environ.get("SHELTER_COMFORT_MODEL",
-                                               "imac_2016_nv"))
-    fuel: str = field(default_factory=lambda: os.environ.get("SHELTER_FUEL", "diesel"))
+                                               "drdo_tot_band"))
+    fuel: str = field(default_factory=lambda: os.environ.get("SHELTER_FUEL", "kerosene"))
     allow_origins: tuple[str, ...] = field(
         default_factory=lambda: tuple(
             item.strip() for item in os.environ.get(
                 "SHELTER_ALLOW_ORIGINS",
                 "http://localhost:5173,http://127.0.0.1:5173").split(",")
             if item.strip()))
+    web_dir: Path | None = field(default_factory=lambda: _path("SHELTER_WEB_DIR", None))
+    operate_at: str = field(default_factory=lambda: os.environ.get("SHELTER_OPERATE_AT", ""))
+    operate_lang: str = field(
+        default_factory=lambda: os.environ.get("SHELTER_OPERATE_LANG", "en"))
     optimisation_workers: int = field(
         default_factory=lambda: int(os.environ.get("SHELTER_OPTIMISATION_WORKERS", "1")))
 
@@ -52,6 +58,10 @@ class Settings:
                                    or self.data_dir / "runs.db")
         self.cfd_dir = _path("SHELTER_CFD_DIR", self.cfd_dir
                              or self.data_dir / "cfd")
+        self.mapdl_dir = _path("SHELTER_MAPDL_DIR", self.mapdl_dir
+                               or self.data_dir / "mapdl")
+        self.evidence_dir = _path("SHELTER_EVIDENCE_DIR", self.evidence_dir
+                                  or self.data_dir / "evidence")
         self.designs_dir = Path(self.designs_dir
                                 or self.data_dir / "designs")
         self.validation_dir = _path("SHELTER_VALIDATION_DIR",

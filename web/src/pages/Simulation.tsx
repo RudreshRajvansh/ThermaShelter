@@ -5,7 +5,7 @@ import { Failure, Loading, Panel, Stat, Tabs, Warnings } from "../components/Kit
 import { Scene3D } from "../components/Scene3D";
 import { PlanView, SectionView } from "../components/PlanView";
 import { ConstructionView } from "../components/Construction";
-import { activeDesign, useStore } from "../lib/store";
+import { activeDesign, useStore, type Preview } from "../lib/store";
 import { num } from "../lib/format";
 
 const VIEWS = ["3d view", "plan view", "sections", "construction"] as const;
@@ -16,7 +16,11 @@ export function Simulation({
   simulation,
   simulating,
   error,
+  viewportOnly = false,
+  preview = null,
 }: {
+  viewportOnly?: boolean;
+  preview?: Preview | null;
   geometry: GeometryPayload | undefined;
   simulation: SimulationResult | undefined;
   simulating: boolean;
@@ -53,6 +57,7 @@ export function Simulation({
 
   return (
     <div className="space-y-4">
+      {!viewportOnly && (
       <Panel
         title="Simulation setup"
         subtitle="EnergyPlus runs a free floating case for comfort and a conditioned case for remaining heating demand, then eight corner runs for the uncertainty band and one run of the reference design."
@@ -82,11 +87,35 @@ export function Simulation({
         </div>
         {error ? <div className="mt-3"><Failure error={error} /></div> : null}
       </Panel>
+      )}
 
+      {viewportOnly ? (
+        !geometry ? (
+          <div className="flex h-[70vh] items-center justify-center rounded-xl border border-[var(--color-line)] bg-[var(--color-night-2)]">
+            <Loading label="building geometry…" />
+          </div>
+        ) : (
+          <Scene3D
+            immersiveChrome
+            geometry={geometry}
+            surfaces={preview ? null : surfaces}
+            sunPath={sunPath.data}
+            terrain={terrain.data}
+            airflow={preview ? null : simulation?.airflow}
+            designOverride={preview?.design ?? null}
+            badge={preview?.label ?? null}
+            mode={preview ? "construction" : store.displayMode}
+            onModeChange={store.setDisplayMode}
+            hourIndex={index}
+            onHourChange={store.setHourIndex}
+          />
+        )
+      ) : (
       <Panel
         title="The geometry that was simulated"
         subtitle="Parametric, not a render. It rebuilds from your inputs, and the face names are the simulator's surface identifiers, so a painted value sits on the surface it belongs to."
         right={
+          view === "3d view" ? undefined : (
           <div className="flex gap-1">
             {(["construction", "surface_temperature", "incident_solar"] as const).map(
               (mode) => (
@@ -97,7 +126,7 @@ export function Simulation({
                   disabled={mode !== "construction" && !surfaces}
                   className={`rounded-md border px-2.5 py-1 text-[11px] transition ${
                     store.displayMode === mode
-                      ? "border-[var(--color-solar)] bg-[var(--color-solar)] text-[#0b1220]"
+                      ? "border-[var(--color-solar)] bg-[var(--color-solar)] text-white"
                       : "border-[var(--color-line)] text-[var(--color-ink-dim)] disabled:opacity-40"
                   }`}
                 >
@@ -110,6 +139,7 @@ export function Simulation({
               ),
             )}
           </div>
+          )
         }
       >
         <Tabs tabs={VIEWS} active={view} onChange={setView} />
@@ -146,7 +176,7 @@ export function Simulation({
                     onClick={() => setSectionAxis(item)}
                     className={`rounded-md border px-2.5 py-1 text-[11px] ${
                       sectionAxis === item
-                        ? "border-[var(--color-solar)] text-[var(--color-solar)]"
+                        ? "border-[var(--color-solar)] text-[var(--color-solar-ink)]"
                         : "border-[var(--color-line)] text-[var(--color-ink-dim)]"
                     }`}
                   >
@@ -183,8 +213,9 @@ export function Simulation({
           </div>
         )}
       </Panel>
+      )}
 
-      {simulation && simulation.warnings.length > 0 && (
+      {!viewportOnly && simulation && simulation.warnings.length > 0 && (
         <Panel
           title="What the simulation reported about itself"
           subtitle="Passed straight up from the EnergyPlus error file. A tool that reports its own problems is more credible than one that hides them."
@@ -193,16 +224,18 @@ export function Simulation({
         </Panel>
       )}
 
+      {!viewportOnly && (
       <div className="flex justify-end">
         <button
           type="button"
-          onClick={() => store.setStep("Results")}
+          onClick={() => store.open("performance")}
           disabled={!simulation}
-          className="rounded-md bg-[var(--color-solar)] px-4 py-2 text-sm font-medium text-[#0b1220] disabled:opacity-40"
+          className="rounded-md bg-[var(--color-solar)] px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
         >
           See the results →
         </button>
       </div>
+      )}
     </div>
   );
 }

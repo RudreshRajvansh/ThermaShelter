@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
-import type { Assumption, EngineWarning } from "../lib/api";
+import { ApiError, type Assumption, type EngineWarning } from "../lib/api";
 import { bySeverity, num } from "../lib/format";
 
 export function Panel({
@@ -127,6 +127,7 @@ export function Stat({
   unit,
   baseline,
   baselineLabel,
+  baselineGood = null,
   band,
   tone = "neutral",
   note,
@@ -137,6 +138,7 @@ export function Stat({
   unit?: string;
   baseline?: string;
   baselineLabel?: string;
+  baselineGood?: boolean | null;
   band?: string;
   tone?: "neutral" | "good" | "bad" | "solar";
   note?: string;
@@ -156,7 +158,7 @@ export function Stat({
       <div className="mt-1 flex items-baseline gap-1">
         <span
           className={`tnum font-semibold ${large ? "text-3xl" : "text-xl"} ${
-            tone === "solar" ? "text-[var(--color-solar)]" : ""
+            tone === "solar" ? "text-[var(--color-solar-ink)]" : ""
           }`}
         >
           {value}
@@ -166,7 +168,17 @@ export function Stat({
       {band && <div className="mt-1 text-[11px] text-[var(--color-ink-faint)]">{band}</div>}
       {baseline && (
         <div className="mt-1.5 border-t border-[var(--color-line-soft)] pt-1.5 text-[11px]">
-          <span className="text-[var(--color-diesel)]">{baseline}</span>
+          <span
+            className={
+              baselineGood === true
+                ? "font-medium text-[var(--color-good)]"
+                : baselineGood === false
+                  ? "font-medium text-[var(--color-danger-ink)]"
+                  : "text-[var(--color-ink-dim)]"
+            }
+          >
+            {baseline}
+          </span>
           <span className="ml-1 text-[var(--color-ink-faint)]">
             {baselineLabel ?? "current construction"}
           </span>
@@ -182,9 +194,9 @@ export function Stat({
 }
 
 const SEVERITY_STYLE: Record<string, string> = {
-  fatal: "border-[var(--color-diesel)] bg-[var(--color-diesel)]/10 text-[#ffb4ae]",
-  severe: "border-[var(--color-diesel)] bg-[var(--color-diesel)]/10 text-[#ffb4ae]",
-  warning: "border-[var(--color-solar)]/60 bg-[var(--color-solar)]/10 text-[#f6cf8f]",
+  fatal: "border-[var(--color-diesel)] bg-[var(--color-diesel)]/10 text-[var(--color-danger-ink)]",
+  severe: "border-[var(--color-diesel)] bg-[var(--color-diesel)]/10 text-[var(--color-danger-ink)]",
+  warning: "border-[var(--color-solar)]/60 bg-[var(--color-solar)]/10 text-[var(--color-warn-ink)]",
   info: "border-[var(--color-line)] bg-[var(--color-night-2)] text-[var(--color-ink-faint)]",
 };
 
@@ -259,7 +271,7 @@ export function AssumptionTable({ assumptions }: { assumptions: Assumption[] }) 
                     className={`rounded px-1.5 py-0.5 text-[10px] ${
                       item.source.status === "verified"
                         ? "bg-[var(--color-good)]/20 text-[var(--color-good)]"
-                        : "bg-[var(--color-solar)]/15 text-[var(--color-solar)]"
+                        : "bg-[var(--color-solar)]/15 text-[var(--color-solar-ink)]"
                     }`}
                   >
                     {item.source.status}
@@ -297,9 +309,14 @@ export function Loading({ label }: { label: string }) {
 
 export function Failure({ error }: { error: unknown }) {
   const message = error instanceof Error ? error.message : String(error);
+  const detail =
+    error instanceof ApiError && error.path
+      ? `${error.status} from ${error.path.split("?")[0]}`
+      : null;
   return (
-    <div className="rounded-md border border-[var(--color-diesel)] bg-[var(--color-diesel)]/10 p-3 text-sm text-[#ffb4ae]">
-      {message}
+    <div className="rounded-md border border-[var(--color-diesel)] bg-[var(--color-diesel)]/10 p-3 text-sm text-[var(--color-danger-ink)]">
+      <p>{message}</p>
+      {detail && <p className="tnum mt-1 text-[11px] opacity-80">{detail}</p>}
     </div>
   );
 }

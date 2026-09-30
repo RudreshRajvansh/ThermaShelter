@@ -130,6 +130,7 @@ not redefine them.
 | compare | `Engine.compare(designs, options, reference)` | `ComparisonTable` |
 | optimise | `Engine.optimise(spec, options)` | `ParetoResult` |
 | fluid dynamics export | `Engine.cfd_export(design, options)` | `tuple[CFDExport, ...]` |
+| solved fluid dynamics field | `build_cfd_field(export, centres, temperatures, solver)` | `CFDField` |
 | materials | `MaterialLibrary.materials` and friends | `Material`, `GlazingSystem`, `PhaseChangeMaterial` |
 | reference designs | `load_references()` | `ReferenceCatalogue` |
 | health | `Engine.self_check()` | `list[EngineWarning]` |
@@ -180,8 +181,18 @@ interzone surface; it never appears on a surface name.
 Two display modes are honest and both come straight from the simulation:
 `SurfaceSeries.inside_face_temperature_c` and `SurfaceSeries.incident_solar_w_m2`. There is
 no air temperature field and no velocity field in a `SimulationResult`, because EnergyPlus
-computes neither. Those come only from `CFDExport` and the ANSYS runs behind it, for the one
-recommended design, and every panel showing them must state the hour and the solver.
+computes neither. Those come only from a `CFDField` solved by ANSYS Fluent on the
+`CFDExport` boundary conditions, for the one recommended design, and every panel showing
+them must state the hour and the solver.
+
+`CFDExport` carries the inside face temperature of every surface plus the internal
+convective gain, infiltration and interzone mixing heat flows EnergyPlus reported for that
+hour, so the fluid dynamics run closes the same air heat balance. It is written as
+`<fingerprint>_<hour>.boundary.json`. `build_cfd_field` turns the solver's cell centres and
+values into a `CFDField` on a regular grid, each grid point taking the nearest cell and
+points outside the air left empty, and records `boundary_hash`. The API refuses a field
+whose boundary conditions have since changed, and a field is written as
+`<fingerprint>_<hour>.field.json`.
 
 ---
 
@@ -297,6 +308,85 @@ ENERGYPLUS_DIR=... .venv/Scripts/python -m pytest    # runs all of them
 Set `SHELTER_ENGINE_KEEP_RUNS=1` to keep the EnergyPlus working directories for inspection,
 `SHELTER_ENGINE_TIMEOUT` to change the per run timeout, and `SHELTER_ENGINE_WORKERS` to
 change how many runs go in parallel.
+
+---
+
+## Sites picked anywhere on the map
+
+Leh is the Layer 0 site with a station weather year. Any other point is built on demand by
+the API (`shelter_api.sites`), and the engine side of that lives in
+`shelter_engine.site_data`, which never touches the network:
+
+- **Elevation, horizon and terrain** come from AWS Terrain Tiles (Terrarium PNG, SRTM and
+  other open data). Zoom 12 tiles cover 6 km around the point and zoom 9 tiles reach
+  50 km. The 36 direction horizon takes 160 samples per direction with earth curvature
+  and standard refraction, and a 10 km terrain square is written as
+  `data/terrain/<site>.obj` for the 3D view. Tiles are cached under `data/terrain/tiles`.
+- **Weather** is one real year of ERA5 reanalysis from the Open-Meteo archive, downscaled
+  to the site elevation, interpolated onto local standard time hour ending stamps and
+  written as an EPW with ladybug. It is labelled as reanalysis, never as a typical year.
+- **Ground temperature** at 0.5 m follows from the monthly air means with the Kusuda and
+  Achenbach relation, and the climate objective from 18 °C degree days.
+- A failure part way removes every file written for that point, and a built site is
+  reused offline.
+
+Checked against real data at Leh: recomputing the horizon from the Layer 0 SRTM 1 arc second
+GeoTIFF agrees with the tile horizon to about 0.3° in almost every direction, and the
+Copernicus GLO-90 model agrees at the four directions sampled. The stored Layer 0 horizon
+table does not: it was computed at 34.16 N, 77.58 E rather than the site, several
+directions report blocking terrain 30 m away, and it differs by up to 6°. It has not been
+replaced, because every stored Leh result depends on it; that decision belongs to Layer 0.
+
+---
+
+## ANSYS Fluent for the air inside the room
+
+EnergyPlus ranks designs and gives one air temperature per room. For the chosen design,
+`shelter_engine.ansys.run_fluent` solves the air inside the room at the exported hours:
+
+1. `build_room_mesh` meshes the room as a structured hex grid, 1 cm at every surface and
+   growing to 20 cm inside, with grid lines placed exactly on every window and wall segment
+   edge so each exported surface gets its own faces. Rooms that are not boxes are refused.
+2. The mesh is written as NASTRAN bulk data and imported with Fluent's
+   `file/import/nastran/bulkdata`. The CGNS route was dropped: Fluent 2026 R1's CGNS reader
+   crashed on half the imports of the same file.
+3. Every wall zone is matched to its exported surface by its own vertex bounds, and held at
+   the EnergyPlus inside face temperature. The internal convective gain, infiltration and
+   mixing heat flows for the hour go in as one uniform volumetric source.
+4. Steady pressure based solver, k-omega SST, full buoyancy with incompressible ideal gas at
+   the site pressure, body force weighted pressure. No radiation model, because the surface
+   temperatures are fixed and air is transparent.
+5. Scaled residuals plateau for air moved only by surface temperature differences, so
+   convergence is judged on the solution: across two consecutive windows of four 50
+   iteration chunks the volume average air temperature must drift less than 0.02 K and
+   stay inside a 0.1 K band, and the wall heat averaged over the last window must balance
+   the air heat source to 5 percent. That air never sits perfectly still, so the test is
+   for a stationary state rather than a frozen one. The basis is written into the field's
+   notes, and an unconverged field says so.
+6. Some hours never settle. At peak sun the warm air arriving from a sunspace keeps the
+   room moving, and a steady solver swings without closing the heat balance. After 1000
+   steady iterations the driver switches to a transient run from where it stopped: 2 s
+   steps, 10 iterations each, 60 s of spin up, then a sample of every cell every 10 s. It
+   stops when the time averaged air temperature drifts less than 0.05 K between two 120 s
+   windows and the time averaged wall heat balances the air heat source, and the stored
+   field is the average over those 240 s. The record carries `time_step_s` and
+   `averaging_s`, and the interface says the field is a time average. A transient run costs
+   roughly five seconds of computer time per second of simulated flow on four cores.
+
+Every solve starts from the air at the EnergyPlus zone air temperature, which puts it close
+to the heat balance EnergyPlus already found.
+
+Install the extra and run it from the repository root once Fluent is installed:
+
+```bash
+.venv/Scripts/python -m pip install -e ".[cfd]"
+.venv/Scripts/python ../scripts/run_cfd.py --design 993f0edc --label coldest_night
+```
+
+Fluent is found from `SHELTER_ANSYS_ROOT`, then `AWP_ROOT261` and friends, then the Windows
+machine environment. Fields land in `data/cfd/<fingerprint>_<hour>.field.json`; Fluent's
+case and data files stay under `build/cfd_runs`. `SHELTER_RUN_FLUENT=1` enables the one
+test that launches Fluent.
 
 ---
 

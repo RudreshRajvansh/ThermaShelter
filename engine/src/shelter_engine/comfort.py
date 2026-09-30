@@ -82,18 +82,41 @@ def running_mean_series(daily_mean_c: pd.Series, alpha: float) -> pd.Series:
     return pd.Series(output, index=daily_mean_c.index, name="running_mean_c")
 
 
-def comfort_bounds_frame(outdoor_c: pd.Series, model: ComfortModel) -> pd.DataFrame:
+def trailing_mean_series(daily_mean_c: pd.Series, days: int) -> pd.Series:
+    if daily_mean_c.empty:
+        raise EngineError("cannot build a running mean from an empty daily series")
+    values = daily_mean_c.to_numpy(dtype=float)
+    count = len(values)
+    span = min(days, count)
+    wrapped = np.concatenate([values[count - span:], values])
+    cumulative = np.concatenate([[0.0], np.cumsum(wrapped)])
+    output = np.array([(cumulative[span + index] - cumulative[index]) / span
+                       for index in range(count)], dtype=float)
+    return pd.Series(output, index=daily_mean_c.index, name="running_mean_c")
+
+
+def comfort_bounds_frame(outdoor_c: pd.Series, model: ComfortModel,
+                         history_c: pd.Series | None = None) -> pd.DataFrame:
     if outdoor_c.empty:
         raise EngineError("cannot derive comfort bounds from an empty outdoor series")
-    daily = outdoor_c.resample("1D").mean().dropna()
-    running = running_mean_series(daily, model.running_mean_alpha)
-    hourly = running.reindex(outdoor_c.index, method="ffill").bfill()
-    bounds = [model.bounds(float(value)) for value in hourly.to_numpy(dtype=float)]
+    source = history_c.dropna() if history_c is not None and not history_c.empty         else outdoor_c
+    daily = source.resample("1D").mean().dropna()
+    if model.running_mean_days:
+        running = trailing_mean_series(daily, model.running_mean_days)
+    else:
+        running = running_mean_series(daily, model.running_mean_alpha)
+    days = pd.DatetimeIndex(outdoor_c.index.normalize())
+    matched = running.reindex(days)
+    if matched.isna().any():
+        matched = running.reindex(days, method="ffill").bfill()
+    hourly = matched.to_numpy(dtype=float)
+    bounds = [model.bounds(float(value)) for value in hourly]
     lower = np.array([item[0] for item in bounds], dtype=float)
     upper = np.array([item[1] for item in bounds], dtype=float)
-    return pd.DataFrame({"running_mean_c": hourly.to_numpy(dtype=float),
-                         "lower_c": lower, "upper_c": upper},
-                        index=outdoor_c.index)
+    clamped = np.array([model.outside_applicability(float(value)) for value in hourly],
+                       dtype=bool)
+    return pd.DataFrame({"running_mean_c": hourly, "lower_c": lower, "upper_c": upper,
+                         "clamped": clamped}, index=outdoor_c.index)
 
 
 def _to_hourly(series: pd.Series) -> pd.Series:
@@ -135,7 +158,8 @@ def evaluate_comfort(operative_c: pd.Series, outdoor_c: pd.Series,
                      model: ComfortModel, period: RunPeriod,
                      occupancy: OccupancySpec | None = None,
                      fixed_target: FixedComfortTarget | None = None,
-                     design_day: date | None = None) -> ComfortMetrics:
+                     design_day: date | None = None,
+                     outdoor_history_c: pd.Series | None = None) -> ComfortMetrics:
     operative = _to_hourly(operative_c.dropna())
     outdoor = _to_hourly(outdoor_c.dropna())
     if operative.empty:
@@ -146,7 +170,7 @@ def evaluate_comfort(operative_c: pd.Series, outdoor_c: pd.Series,
     operative = operative.loc[common]
     outdoor = outdoor.loc[common]
 
-    bounds = comfort_bounds_frame(outdoor, model)
+    bounds = comfort_bounds_frame(outdoor, model, outdoor_history_c)
     values = operative.to_numpy(dtype=float)
     lower = bounds["lower_c"].to_numpy(dtype=float)
     upper = bounds["upper_c"].to_numpy(dtype=float)
@@ -188,11 +212,14 @@ def evaluate_comfort(operative_c: pd.Series, outdoor_c: pd.Series,
             worst_margin = float(np.min(values[nightly] - lower[nightly]))
 
     fixed_below = None
+    fixed_degree_hours = None
     if fixed_target is not None:
         target_mask = np.isin(index.hour.to_numpy(),
                               np.asarray(fixed_target.hours, dtype=int))
         fixed_below = float(np.sum(np.logical_and(
             target_mask, values < fixed_target.lower_bound_c)))
+        shortfall = np.clip(fixed_target.lower_bound_c - values, 0.0, None)
+        fixed_degree_hours = float(np.sum(shortfall[target_mask]))
 
     indoor_swing = _daily_swing(operative)
     outdoor_swing = _daily_swing(outdoor)
@@ -219,8 +246,16 @@ def evaluate_comfort(operative_c: pd.Series, outdoor_c: pd.Series,
         degree_hours_total_kh=float(np.sum(deficit) + np.sum(excess)),
         occupied_hours_outside_band=float(np.sum(np.logical_and(outside, occupied_mask))),
         fixed_target_hours_below=fixed_below,
+        fixed_target_degree_hours_below_kh=fixed_degree_hours,
         fixed_target_id=fixed_target.id if fixed_target is not None else None,
         worst_night_margin_k=worst_margin,
+        band_lower_c=float(lower.min()),
+        band_upper_c=float(upper.max()),
+        running_mean_min_c=None if model.is_fixed_band
+        else float(bounds["running_mean_c"].min()),
+        running_mean_max_c=None if model.is_fixed_band
+        else float(bounds["running_mean_c"].max()),
+        hours_outside_applicability=float(bounds["clamped"].sum()),
         mean_operative_c=float(np.mean(values)),
         mean_daily_swing_k=float(indoor_swing.mean()) if not indoor_swing.empty else None,
         decrement_factor=decrement,
@@ -228,7 +263,8 @@ def evaluate_comfort(operative_c: pd.Series, outdoor_c: pd.Series,
     )
 
 
-def comfort_band_series(outdoor_c: pd.Series,
-                        model: ComfortModel) -> tuple[pd.Series, pd.Series]:
-    frame = comfort_bounds_frame(_to_hourly(outdoor_c.dropna()), model)
+def comfort_band_series(outdoor_c: pd.Series, model: ComfortModel,
+                        history_c: pd.Series | None = None
+                        ) -> tuple[pd.Series, pd.Series]:
+    frame = comfort_bounds_frame(_to_hourly(outdoor_c.dropna()), model, history_c)
     return frame["lower_c"], frame["upper_c"]

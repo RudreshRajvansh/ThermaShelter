@@ -319,3 +319,74 @@ def test_missing_reference_materials_are_listed():
     missing = check_library_covers_references(minimal)
     assert missing
     assert all(item.startswith(("material:", "glazing:")) for item in missing)
+
+
+def test_bill_of_quantities_matches_the_cost_and_the_mass(library):
+    from shelter_engine.costing import bill_of_quantities, material_mass_kg
+
+    for design in (fixtures.design(), fixtures.design(Arrangement.SUNSPACE),
+                   fixtures.design(pcm=PCMSpec(present=True, pcm_id="pcm_rt25",
+                                               thickness_m=0.02))):
+        built = build_constructions(design, library)
+        model = build_geometry(design, built.names)
+        bill = bill_of_quantities(design, model, library)
+        cost = cost_breakdown(design, model, library)
+        assert bill.total_cost_inr == pytest.approx(cost.total_inr)
+        imported, total = material_mass_kg(design, model, library)
+        materials = [line for line in bill.lines if line.kind == "material"]
+        assert sum(line.mass_kg for line in materials) == pytest.approx(total)
+        assert bill.imported_mass_kg == pytest.approx(imported)
+        assert len({line.item_id for line in materials}) == len(materials)
+        for line in materials:
+            assert line.volume_m3 > 0.0 and line.area_m2 > 0.0
+            assert line.mass_kg == pytest.approx(
+                line.volume_m3 * library.material(line.item_id).density_kg_m3)
+        glazing = [line for line in bill.lines if line.kind == "glazing"]
+        assert glazing and all(line.mass_kg is None for line in glazing)
+        assert all(line.name in bill.unweighed for line in glazing)
+        weighed = sum(line.mass_kg for line in bill.lines if line.mass_kg is not None)
+        assert bill.total_mass_kg == pytest.approx(weighed)
+    pcm = [line for line in bill.lines if line.kind == "pcm"]
+    assert len(pcm) == 1 and pcm[0].mass_kg > 0.0
+    shutters = [line for line in bill.lines if line.kind == "shutter"]
+    assert len(shutters) == 1 and shutters[0].mass_kg is None
+
+
+def test_eco_niwas_sheet_checks_the_cold_zone_limits(library):
+    from shelter_engine.compliance import (ENVELOPE_U_COLD_MAX, ROOF_U_MAX, eco_niwas_sheet,
+                                           minimum_vlt)
+    from shelter_engine.schema import ClimateObjective
+
+    site = fixtures.site("leh.epw")
+    design = fixtures.design()
+    model = _geometry(design, library)
+    sheet = eco_niwas_sheet(design, model, library, site)
+    assert sheet.assessed and sheet.climate_zone == "Cold"
+    items = {item.clause: item for item in sheet.items}
+    roof = items["5.2.1.3, 9.4"]
+    assert roof.value == pytest.approx(library.u_value(design.roof, "roof"))
+    assert roof.limit == ROOF_U_MAX and roof.passes
+    envelope = items["5.2.1.5, 9.7"]
+    assert library.u_value(design.wall, "wall") < envelope.value < 3.0
+    assert envelope.limit == ENVELOPE_U_COLD_MAX
+    assert items["5.2.1.1, 9.1"].value is None and items["5.2.1.1, 9.1"].passes is None
+    assert sheet.mandatory_pass is True
+
+    thin = ConstructionSpec(name="bare_sheet", layers=(
+        LayerSpec(material_id=design.roof.layers[0].material_id, thickness_m=0.002),))
+    leaky = design.variant(roof=thin)
+    failing = eco_niwas_sheet(leaky, _geometry(leaky, library), library, site)
+    assert failing.mandatory_pass is False
+
+    warm = site.model_copy(update={"climate_objective": ClimateObjective.COOLING_DOMINATED})
+    skipped = eco_niwas_sheet(design, model, library, warm)
+    assert not skipped.assessed and skipped.items == () and "RETV" in skipped.zone_basis
+
+    assert minimum_vlt(0.10) == 0.27
+    assert minimum_vlt(0.305) == 0.20
+    assert minimum_vlt(0.70) == 0.11
+    assert minimum_vlt(0.75) is None
+
+
+def _geometry(design, library):
+    return build_geometry(design, build_constructions(design, library).names)

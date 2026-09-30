@@ -157,6 +157,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/live-weather": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Live Weather */
+        get: operations["live_weather_api_live_weather_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/comfort-models": {
         parameters: {
             query?: never;
@@ -242,6 +259,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/endurance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Endurance */
+        post: operations["endurance_api_endurance_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/horizon-value": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Horizon Value */
+        post: operations["horizon_value_api_horizon_value_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/geometry": {
         parameters: {
             query?: never;
@@ -259,6 +310,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/bill-of-quantities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Quantities */
+        post: operations["quantities_api_bill_of_quantities_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bye-law-sheet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Bye Law Sheet */
+        post: operations["bye_law_sheet_api_bye_law_sheet_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/design-pack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Design Pack */
+        post: operations["design_pack_api_design_pack_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/simulate": {
         parameters: {
             query?: never;
@@ -270,6 +372,40 @@ export interface paths {
         put?: never;
         /** Simulate */
         post: operations["simulate_api_simulate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/evidence/{run_hash}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Evidence */
+        get: operations["evidence_api_evidence__run_hash__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/evidence/{run_hash}/zip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Evidence Zip */
+        get: operations["evidence_zip_api_evidence__run_hash__zip_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -446,6 +582,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/mapdl": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mapdl For Design */
+        post: operations["mapdl_for_design_api_mapdl_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mapdl/{design_hash}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mapdl */
+        get: operations["mapdl_api_mapdl__design_hash__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cfd/{design_hash}/boundary-conditions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Cfd Boundary Conditions */
+        get: operations["cfd_boundary_conditions_api_cfd__design_hash__boundary_conditions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/search-levers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Levers */
+        post: operations["levers_api_search_levers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/optimise": {
         parameters: {
             query?: never;
@@ -517,10 +721,248 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/places": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Places */
+        get: operations["places_api_places_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sites/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve Site */
+        post: operations["resolve_site_api_sites_resolve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sites/{site_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Site Detail */
+        get: operations["site_detail_api_sites__site_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sites/{site_id}/design-night": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Design Night */
+        get: operations["design_night_api_sites__site_id__design_night_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sites/{site_id}/siting-map": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Siting */
+        get: operations["siting_api_sites__site_id__siting_map_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sites/{site_id}/referee": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Weather Referee */
+        get: operations["weather_referee_api_sites__site_id__referee_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/posts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Posts */
+        get: operations["list_posts_api_posts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/posts/{post_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save Post */
+        put: operations["save_post_api_posts__post_id__put"];
+        post?: never;
+        /** Delete Post */
+        delete: operations["delete_post_api_posts__post_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/posts/cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cards For Every Post */
+        post: operations["cards_for_every_post_api_posts_cards_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/posts/{post_id}/card": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Last Card */
+        get: operations["last_card_api_posts__post_id__card_get"];
+        put?: never;
+        /** New Card */
+        post: operations["new_card_api_posts__post_id__card_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/posts/{post_id}/calibration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Calibrate Post */
+        post: operations["calibrate_post_api_posts__post_id__calibration_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AirQualityMetrics */
+        AirQualityMetrics: {
+            /** Co2 Limit Ppm */
+            co2_limit_ppm: number;
+            /** Outdoor Co2 Ppm */
+            outdoor_co2_ppm: number;
+            /** Site Pressure Kpa */
+            site_pressure_kpa: number;
+            /** Fresh Air L S Per Person */
+            fresh_air_l_s_per_person: number;
+            /** Sea Level Fresh Air L S Per Person */
+            sea_level_fresh_air_l_s_per_person: number;
+            /**
+             * Fresh Air Sized From Limit
+             * @default true
+             */
+            fresh_air_sized_from_limit: boolean;
+            /**
+             * Ventilation Design L S
+             * @default 0
+             */
+            ventilation_design_l_s: number;
+            /**
+             * Infiltration Design L S
+             * @default 0
+             */
+            infiltration_design_l_s: number;
+            /** Peak Night Co2 Ppm */
+            peak_night_co2_ppm?: number | null;
+            /** Mean Night Co2 Ppm */
+            mean_night_co2_ppm?: number | null;
+            /**
+             * Night Hours Above Limit
+             * @default 0
+             */
+            night_hours_above_limit: number;
+            /**
+             * Hours Above Limit
+             * @default 0
+             */
+            hours_above_limit: number;
+            /**
+             * Ventilation Heat Loss Kwh
+             * @default 0
+             */
+            ventilation_heat_loss_kwh: number;
+            /** @default simulated */
+            provenance: components["schemas"]["Provenance"];
+        };
         /** AirflowSummary */
         AirflowSummary: {
             /**
@@ -584,6 +1026,11 @@ export interface components {
              */
             coupling_ach: number;
             /**
+             * Coupling Delta T K
+             * @default 1
+             */
+            coupling_delta_t_k: number;
+            /**
              * Coupling From Hour
              * @default 10
              */
@@ -606,6 +1053,27 @@ export interface components {
             source: components["schemas"]["SourceRef"];
             /** @default derived */
             provenance: components["schemas"]["Provenance"];
+        };
+        /** BillOfQuantities */
+        BillOfQuantities: {
+            /** Lines */
+            lines: components["schemas"]["QuantityLine"][];
+            /** Total Mass Kg */
+            total_mass_kg: number;
+            /** Imported Mass Kg */
+            imported_mass_kg: number;
+            /** Total Cost Inr */
+            total_cost_inr: number;
+            /**
+             * Unweighed
+             * @default []
+             */
+            unweighed: string[];
+            /**
+             * Notes
+             * @default []
+             */
+            notes: string[];
         };
         /** BuildabilityMetrics */
         BuildabilityMetrics: {
@@ -643,6 +1111,19 @@ export interface components {
             design_hash: string;
             /** Reason */
             reason: string;
+            /** Boundary Labels */
+            boundary_labels?: string[];
+            /** Rejected */
+            rejected?: string[];
+        };
+        /** CFDBoundarySet */
+        CFDBoundarySet: {
+            /** Design Hash */
+            design_hash: string;
+            /** Exports */
+            exports: components["schemas"]["CFDExport"][];
+            /** Rejected */
+            rejected?: string[];
         };
         /** CFDBoundarySurface */
         CFDBoundarySurface: {
@@ -686,6 +1167,12 @@ export interface components {
             zone_volume_m3: number;
             /** Surfaces */
             surfaces: components["schemas"]["CFDBoundarySurface"][];
+            /** Internal Convective Gain W */
+            internal_convective_gain_w?: number | null;
+            /** Infiltration Sensible W */
+            infiltration_sensible_w?: number | null;
+            /** Mixing Sensible W */
+            mixing_sensible_w?: number | null;
             /**
              * Units
              * @default SI
@@ -698,6 +1185,127 @@ export interface components {
             notes: string[];
             /** Source Run */
             source_run?: string | null;
+        };
+        /** CFDField */
+        CFDField: {
+            /** Design Hash */
+            design_hash: string;
+            /** Zone */
+            zone: string;
+            /** Label */
+            label: string;
+            /** Timestamp */
+            timestamp: string;
+            /** Boundary Hash */
+            boundary_hash: string;
+            /** Dims */
+            dims: [
+                number,
+                number,
+                number
+            ];
+            /** Bounds Min */
+            bounds_min: [
+                number,
+                number,
+                number
+            ];
+            /** Bounds Max */
+            bounds_max: [
+                number,
+                number,
+                number
+            ];
+            /** Temperature C */
+            temperature_c: (number | null)[];
+            /** Speed M S */
+            speed_m_s?: (number | null)[] | null;
+            /** Min C */
+            min_c: number;
+            /** Max C */
+            max_c: number;
+            /** Mean C */
+            mean_c: number;
+            /** Max Speed M S */
+            max_speed_m_s?: number | null;
+            /** Energyplus Zone Air C */
+            energyplus_zone_air_c: number;
+            solver: components["schemas"]["CFDSolverRecord"];
+            /**
+             * Notes
+             * @default []
+             */
+            notes: string[];
+            source: components["schemas"]["SourceRef"];
+            /**
+             * Provenance
+             * @default cfd
+             * @constant
+             */
+            provenance: "cfd";
+        };
+        /** CFDFieldSet */
+        CFDFieldSet: {
+            /**
+             * Available
+             * @default true
+             * @constant
+             */
+            available: true;
+            /** Design Hash */
+            design_hash: string;
+            /** Fields */
+            fields: components["schemas"]["CFDField"][];
+            /** Boundary Labels */
+            boundary_labels?: string[];
+            /** Rejected */
+            rejected?: string[];
+        };
+        /** CFDSolverRecord */
+        CFDSolverRecord: {
+            /** Solver */
+            solver: string;
+            /** Version */
+            version: string;
+            /** Turbulence Model */
+            turbulence_model: string;
+            /** Buoyancy Model */
+            buoyancy_model: string;
+            /** Radiation Model */
+            radiation_model: string;
+            /** Operating Pressure Pa */
+            operating_pressure_pa: number;
+            /** Cell Count */
+            cell_count: number;
+            /** Iterations */
+            iterations: number;
+            /** Converged */
+            converged: boolean;
+            /** Residuals */
+            residuals?: {
+                [key: string]: number;
+            };
+            /** Time Step S */
+            time_step_s?: number | null;
+            /** Averaging S */
+            averaging_s?: number | null;
+        };
+        /** CardOrder */
+        CardOrder: {
+            /** Time */
+            time: string;
+            /** Key */
+            key: string;
+            /** Action */
+            action: string;
+        };
+        /** CardResult */
+        CardResult: {
+            /** Post Id */
+            post_id: string;
+            card?: components["schemas"]["CommanderCard"] | null;
+            /** Error */
+            error?: string | null;
         };
         /** ClimateMonth */
         ClimateMonth: {
@@ -888,10 +1496,25 @@ export interface components {
             occupied_hours_outside_band: number;
             /** Fixed Target Hours Below */
             fixed_target_hours_below?: number | null;
+            /** Fixed Target Degree Hours Below Kh */
+            fixed_target_degree_hours_below_kh?: number | null;
             /** Fixed Target Id */
             fixed_target_id?: string | null;
             /** Worst Night Margin K */
             worst_night_margin_k?: number | null;
+            /** Band Lower C */
+            band_lower_c?: number | null;
+            /** Band Upper C */
+            band_upper_c?: number | null;
+            /** Running Mean Min C */
+            running_mean_min_c?: number | null;
+            /** Running Mean Max C */
+            running_mean_max_c?: number | null;
+            /**
+             * Hours Outside Applicability
+             * @default 0
+             */
+            hours_outside_applicability: number;
             /** Mean Operative C */
             mean_operative_c?: number | null;
             /** Mean Daily Swing K */
@@ -918,12 +1541,86 @@ export interface components {
              * @default 0.8
              */
             running_mean_alpha: number;
+            /** Running Mean Days */
+            running_mean_days?: number | null;
             outdoor_applicability_c: components["schemas"]["UncertainRange"];
             /** Absolute Lower Bound C */
             absolute_lower_bound_c?: number | null;
             /** Absolute Upper Bound C */
             absolute_upper_bound_c?: number | null;
             source: components["schemas"]["SourceRef"];
+        };
+        /** CommanderCard */
+        CommanderCard: {
+            /** Post Id */
+            post_id: string;
+            /** Post Name */
+            post_name: string;
+            /**
+             * Night Of
+             * Format: date
+             */
+            night_of: string;
+            /**
+             * Issued At
+             * Format: date-time
+             */
+            issued_at: string;
+            /**
+             * Lang
+             * @enum {string}
+             */
+            lang: "en" | "hi";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "red" | "amber" | "green";
+            /** Outside Min C */
+            outside_min_c?: number | null;
+            /** Inside Min C */
+            inside_min_c: number;
+            /** Inside Min At */
+            inside_min_at: string;
+            /** Hours Below Target */
+            hours_below_target: number;
+            /** Target C */
+            target_c: number;
+            /** Sunset */
+            sunset?: string | null;
+            /** Orders */
+            orders: components["schemas"]["CardOrder"][];
+            /** Fuel */
+            fuel: string;
+            /** Fuel Unit */
+            fuel_unit: string;
+            /** Fuel Tonight Units */
+            fuel_tonight_units: number;
+            /** Stock Units */
+            stock_units?: number | null;
+            /** Fuel Out Hours */
+            fuel_out_hours?: number | null;
+            /** Fresh Air L S */
+            fresh_air_l_s: number;
+            /** Model Error K */
+            model_error_k?: number | null;
+            /** Calibrated On */
+            calibrated_on?: string | null;
+            /**
+             * Forecast Source
+             * @enum {string}
+             */
+            forecast_source: "forecast" | "cached forecast" | "climatology";
+            /** Forecast Age H */
+            forecast_age_h?: number | null;
+            /** Safety */
+            safety: string[];
+            /**
+             * Notes
+             * @default []
+             */
+            notes: string[];
+            target_source: components["schemas"]["SourceRef"];
         };
         /** CompareRequest */
         CompareRequest: {
@@ -1002,6 +1699,54 @@ export interface components {
              */
             warnings: components["schemas"]["EngineWarning"][];
         };
+        /** ComplianceItem */
+        ComplianceItem: {
+            /** Clause */
+            clause: string;
+            /** Title */
+            title: string;
+            /** Value */
+            value?: number | null;
+            /** Unit */
+            unit: string;
+            /** Limit */
+            limit?: number | null;
+            /**
+             * Comparison
+             * @enum {string}
+             */
+            comparison: "max" | "min" | "info";
+            /** Mandatory */
+            mandatory: boolean;
+            /** Passes */
+            passes?: boolean | null;
+            /** Note */
+            note?: string | null;
+        };
+        /** ComplianceSheet */
+        ComplianceSheet: {
+            /** Code */
+            code: string;
+            /** Climate Zone */
+            climate_zone?: string | null;
+            /** Zone Basis */
+            zone_basis: string;
+            /** Assessed */
+            assessed: boolean;
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["ComplianceItem"][];
+            /** Mandatory Pass */
+            mandatory_pass?: boolean | null;
+            /**
+             * Notes
+             * @default []
+             */
+            notes: string[];
+            source: components["schemas"]["SourceRef"];
+        };
         /** CondensationMetrics */
         CondensationMetrics: {
             /**
@@ -1068,6 +1813,56 @@ export interface components {
              */
             assumptions: components["schemas"]["Assumption"][];
         };
+        /** DesignNightPayload */
+        DesignNightPayload: {
+            /** Site Id */
+            site_id: string;
+            /** Night Of */
+            night_of: string;
+            /** Minimum C */
+            minimum_c: number;
+            /** Return Level C */
+            return_level_c: number;
+            /** Return Period Years */
+            return_period_years: number;
+            /** Gumbel Location C */
+            gumbel_location_c: number;
+            /** Gumbel Scale K */
+            gumbel_scale_k: number;
+            /** Winters */
+            winters: components["schemas"]["WinterMinimumPayload"][];
+            /** Source */
+            source: string;
+            /** Source Model */
+            source_model: string;
+            /** Source Note */
+            source_note: string;
+            /** Station */
+            station?: string | null;
+            /** Station Distance Km */
+            station_distance_km?: number | null;
+            /** Epw Path */
+            epw_path: string;
+            /** Run Start */
+            run_start: string;
+            /** Run End */
+            run_end: string;
+            /** Notes */
+            notes?: string[];
+        };
+        /** DesignPackRequest */
+        DesignPackRequest: {
+            design: components["schemas"]["DesignSpec"];
+            /** Site Id */
+            site_id?: string | null;
+            /** @default {
+             *       "start": "2019-01-01",
+             *       "end": "2019-01-31"
+             *     } */
+            period: components["schemas"]["Window"];
+            /** Run Hash */
+            run_hash?: string | null;
+        };
         /** DesignSpec */
         DesignSpec: {
             /**
@@ -1097,7 +1892,8 @@ export interface components {
             };
             /** @default {
              *       "infiltration_ach": 0.6,
-             *       "minimum_fresh_air_ach": 0.35,
+             *       "minimum_fresh_air_ach": 0,
+             *       "co2_limit_ppm": 1000,
              *       "night_ventilation": false,
              *       "night_ventilation_ach": 0,
              *       "night_ventilation_from_hour": 21,
@@ -1131,6 +1927,7 @@ export interface components {
              *       "vestibule_depth_m": 1.2,
              *       "vestibule_facade": "north",
              *       "coupling_ach": 2,
+             *       "coupling_delta_t_k": 1,
              *       "coupling_from_hour": 10,
              *       "coupling_until_hour": 17
              *     } */
@@ -1179,6 +1976,74 @@ export interface components {
             high?: number | null;
             /** Options */
             options?: string[] | null;
+        };
+        /** EndurancePayload */
+        EndurancePayload: {
+            /** Site Id */
+            site_id: string;
+            /** Night Of */
+            night_of: string;
+            /** Design Night Minimum C */
+            design_night_minimum_c: number;
+            /** Return Level C */
+            return_level_c: number;
+            /** Return Period Years */
+            return_period_years: number;
+            /** Cutoff */
+            cutoff: string;
+            /** Floor C */
+            floor_c: number;
+            floor_source: components["schemas"]["SourceRef"];
+            /** Reached Floor */
+            reached_floor: boolean;
+            /** Hours Above Floor */
+            hours_above_floor: number;
+            /** Hours Simulated After Cutoff */
+            hours_simulated_after_cutoff: number;
+            /** Operative At Cutoff C */
+            operative_at_cutoff_c: number;
+            /** Minimum After Cutoff C */
+            minimum_after_cutoff_c: number;
+            /** Minimum At */
+            minimum_at: string;
+            /** Night Heating Kwh */
+            night_heating_kwh: number;
+            /** Night Fuel Units */
+            night_fuel_units?: number | null;
+            /** Fuel */
+            fuel?: string | null;
+            /** Fuel Unit Name */
+            fuel_unit_name?: string | null;
+            /** Weather Source */
+            weather_source: string;
+            leftover_heat: components["schemas"]["LeftoverHeatPayload"];
+        };
+        /** EnduranceRequest */
+        EnduranceRequest: {
+            design: components["schemas"]["DesignSpec"];
+            /** Site Id */
+            site_id?: string | null;
+            /**
+             * Floor C
+             * @default 5
+             */
+            floor_c: number;
+            /**
+             * Cutoff Hour
+             * @default 18
+             */
+            cutoff_hour: number;
+            /**
+             * Extra Days
+             * @default 2
+             */
+            extra_days: number;
+            /**
+             * Fuel
+             * @default kerosene
+             * @enum {string}
+             */
+            fuel: "kerosene" | "diesel";
         };
         /** EnergyMetrics */
         EnergyMetrics: {
@@ -1342,6 +2207,17 @@ export interface components {
             source: components["schemas"]["SourceRef"];
             cost_source?: components["schemas"]["SourceRef"] | null;
         };
+        /** GroundTemperatures */
+        GroundTemperatures: {
+            /** Monthly C */
+            monthly_c: number[];
+            /**
+             * Depth M
+             * @default 0.5
+             */
+            depth_m: number;
+            source: components["schemas"]["SourceRef"];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1416,6 +2292,47 @@ export interface components {
             /** @default derived */
             thermal_bridge_provenance: components["schemas"]["Provenance"];
         };
+        /** HorizonCase */
+        HorizonCase: {
+            /** Minimum Overnight Operative C */
+            minimum_overnight_operative_c?: number | null;
+            /** Hours Below Band */
+            hours_below_band?: number | null;
+            /** Degree Hours Below Kh */
+            degree_hours_below_kh?: number | null;
+            /** Heating Kwh */
+            heating_kwh?: number | null;
+            /** Fuel Units */
+            fuel_units?: number | null;
+            /** Fuel Unit Name */
+            fuel_unit_name?: string | null;
+            /** Windows Solar Gain Kwh */
+            windows_solar_gain_kwh?: number | null;
+        };
+        /** HorizonProfile */
+        HorizonProfile: {
+            /** Azimuths Deg */
+            azimuths_deg: number[];
+            /** Blocked Altitude Deg */
+            blocked_altitude_deg: number[];
+            source: components["schemas"]["SourceRef"];
+        };
+        /** HorizonValuePayload */
+        HorizonValuePayload: {
+            /** Site Id */
+            site_id: string;
+            with_horizon: components["schemas"]["HorizonCase"];
+            flat: components["schemas"]["HorizonCase"];
+            /** Overnight Minimum Difference K */
+            overnight_minimum_difference_k?: number | null;
+            /** Heating Difference Kwh */
+            heating_difference_kwh?: number | null;
+            /** Fuel Difference Units */
+            fuel_difference_units?: number | null;
+            /** Max Blocked Altitude Deg */
+            max_blocked_altitude_deg: number;
+            horizon_source: components["schemas"]["SourceRef"];
+        };
         /** HourlySeries */
         HourlySeries: {
             /** Name */
@@ -1457,6 +2374,267 @@ export interface components {
              */
             notes: string[];
             source: components["schemas"]["SourceRef"];
+        };
+        /** LeftoverHeatPayload */
+        LeftoverHeatPayload: {
+            /** Night Heating Kwh */
+            night_heating_kwh: number;
+            /** Night Peak Kw */
+            night_peak_kw?: number | null;
+            /** Litres */
+            litres?: number | null;
+            /** Him Tapak Hours Low */
+            him_tapak_hours_low?: number | null;
+            /** Him Tapak Hours High */
+            him_tapak_hours_high?: number | null;
+            /** Him Tapak Fuel Input Kw */
+            him_tapak_fuel_input_kw?: number[] | null;
+            him_tapak_source: components["schemas"]["SourceRef"];
+            /** Solar Storage Kwh */
+            solar_storage_kwh: number;
+            solar_system_source: components["schemas"]["SourceRef"];
+            /** Notes */
+            notes?: string[];
+        };
+        /** LeverPayload */
+        LeverPayload: {
+            variable: components["schemas"]["DesignVariable"];
+            /** Label */
+            label: string;
+            /** Group */
+            group: string;
+        };
+        /** LeverRequest */
+        LeverRequest: {
+            design: components["schemas"]["DesignSpec"];
+            /** Site Id */
+            site_id?: string | null;
+        };
+        /** LiveObservation */
+        LiveObservation: {
+            /** Air Temperature C */
+            air_temperature_c?: number | null;
+            /** Apparent Temperature C */
+            apparent_temperature_c?: number | null;
+            /** Relative Humidity Pct */
+            relative_humidity_pct?: number | null;
+            /** Wind Speed M S */
+            wind_speed_m_s?: number | null;
+            /** Surface Pressure Pa */
+            surface_pressure_pa?: number | null;
+            /** Cloud Cover Pct */
+            cloud_cover_pct?: number | null;
+        };
+        /** LiveWeather */
+        LiveWeather: {
+            /** Site Id */
+            site_id: string;
+            /** Available */
+            available: boolean;
+            observation?: components["schemas"]["LiveObservation"] | null;
+            /** Observed At */
+            observed_at?: string | null;
+            /** Fetched At */
+            fetched_at?: string | null;
+            /** Location */
+            location?: string | null;
+            /** Provider Elevation M */
+            provider_elevation_m?: number | null;
+            /** Elevation Mismatch */
+            elevation_mismatch?: string | null;
+            /** Detail */
+            detail?: string | null;
+            /** Provider */
+            provider: string;
+            /** Note */
+            note: string;
+        };
+        /** MapdlAbsent */
+        MapdlAbsent: {
+            /**
+             * Available
+             * @default false
+             * @constant
+             */
+            available: false;
+            /** Design Hash */
+            design_hash: string;
+            /** Reason */
+            reason: string;
+            /** Rejected */
+            rejected?: string[];
+        };
+        /** MapdlAgreement */
+        MapdlAgreement: {
+            /** Hours */
+            hours: number;
+            /** Mae K */
+            mae_k: number;
+            /** Rmse K */
+            rmse_k: number;
+            /** Bias K */
+            bias_k: number;
+            /** Max Abs K */
+            max_abs_k: number;
+            /** Target Rmse K */
+            target_rmse_k: number;
+            /** Meets Target */
+            meets_target: boolean;
+            /**
+             * Faces
+             * @default []
+             */
+            faces: components["schemas"]["MapdlFace"][];
+        };
+        /** MapdlCheck */
+        MapdlCheck: {
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
+            /** Points */
+            points: number;
+            /** Max Abs K */
+            max_abs_k: number;
+            /** Tolerance K */
+            tolerance_k: number;
+            /** Passed */
+            passed: boolean;
+            /** Runtime S */
+            runtime_s: number;
+        };
+        /** MapdlConvergence */
+        MapdlConvergence: {
+            /** Metric */
+            metric: string;
+            /** Refinement Ratio */
+            refinement_ratio: number;
+            /** Order */
+            order?: number | null;
+            /** Gci Fine K */
+            gci_fine_k?: number | null;
+            /** Extrapolated */
+            extrapolated?: number | null;
+            /** Time Step Difference K */
+            time_step_difference_k?: number | null;
+        };
+        /** MapdlFace */
+        MapdlFace: {
+            /** Group */
+            group: string;
+            /** Mapdl Kwh */
+            mapdl_kwh: number;
+            /** Energyplus Kwh */
+            energyplus_kwh?: number | null;
+            /** Difference Percent */
+            difference_percent?: number | null;
+        };
+        /** MapdlLevel */
+        MapdlLevel: {
+            /** Level */
+            level: string;
+            /** Node Count */
+            node_count: number;
+            /** Element Count */
+            element_count: number;
+            /** Substeps */
+            substeps: number;
+            /** Runtime S */
+            runtime_s: number;
+            /** Mean Air C */
+            mean_air_c: number;
+            /** Minimum Air C */
+            minimum_air_c: number;
+            /** Rmse K */
+            rmse_k: number;
+        };
+        /** MapdlReport */
+        MapdlReport: {
+            /** Design Hash */
+            design_hash: string;
+            /** Label */
+            label: string;
+            /** Site Id */
+            site_id: string;
+            /** Engine Version */
+            engine_version: string;
+            /** Solver */
+            solver: string;
+            /** Version */
+            version: string;
+            /** Level */
+            level: string;
+            /** Cycles */
+            cycles: number;
+            /**
+             * Lead Days
+             * @default 0
+             */
+            lead_days: number;
+            /** Substeps */
+            substeps: number;
+            /** Node Count */
+            node_count: number;
+            /** Element Count */
+            element_count: number;
+            /** Runtime S */
+            runtime_s: number;
+            /** Timestamps */
+            timestamps: string[];
+            /** Outdoor C */
+            outdoor_c: number[];
+            /** Mapdl Air C */
+            mapdl_air_c: number[];
+            /** Energyplus Air C */
+            energyplus_air_c: number[];
+            agreement: components["schemas"]["MapdlAgreement"];
+            /**
+             * Levels
+             * @default []
+             */
+            levels: components["schemas"]["MapdlLevel"][];
+            convergence?: components["schemas"]["MapdlConvergence"] | null;
+            /**
+             * Checks
+             * @default []
+             */
+            checks: components["schemas"]["MapdlCheck"][];
+            /**
+             * Notes
+             * @default []
+             */
+            notes: string[];
+            /**
+             * Sources
+             * @default []
+             */
+            sources: components["schemas"]["SourceRef"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /**
+             * Provenance
+             * @default fea
+             * @constant
+             */
+            provenance: "fea";
+        };
+        /** MapdlSet */
+        MapdlSet: {
+            /**
+             * Available
+             * @default true
+             * @constant
+             */
+            available: true;
+            /** Design Hash */
+            design_hash: string;
+            /** Reports */
+            reports: components["schemas"]["MapdlReport"][];
+            /** Rejected */
+            rejected?: string[];
         };
         /** Material */
         Material: {
@@ -1598,6 +2776,19 @@ export interface components {
             /** Provenance Gaps */
             provenance_gaps: string[];
         };
+        /** MonthCheckPayload */
+        MonthCheckPayload: {
+            /** Month */
+            month: number;
+            /** File */
+            file: number;
+            /** Reference */
+            reference: number;
+            /** Difference */
+            difference: number;
+            /** Ratio */
+            ratio?: number | null;
+        };
         /** OccupancySpec */
         OccupancySpec: {
             /**
@@ -1656,9 +2847,19 @@ export interface components {
         OptimisationConstraints: {
             /**
              * Minimum Fresh Air Ach
-             * @default 0.35
+             * @default 0
              */
             minimum_fresh_air_ach: number;
+            /**
+             * Enforce Co2 Limit
+             * @default true
+             */
+            enforce_co2_limit: boolean;
+            /**
+             * Co2 Tolerance Fraction
+             * @default 0.05
+             */
+            co2_tolerance_fraction: number;
             /**
              * Max Wall Thickness M
              * @default 0.6
@@ -1710,7 +2911,9 @@ export interface components {
             /** Variables */
             variables: components["schemas"]["DesignVariable"][];
             /** @default {
-             *       "minimum_fresh_air_ach": 0.35,
+             *       "minimum_fresh_air_ach": 0,
+             *       "enforce_co2_limit": true,
+             *       "co2_tolerance_fraction": 0.05,
              *       "max_wall_thickness_m": 0.6,
              *       "max_condensation_hours": 50,
              *       "seismic_wall_thickness_flag_m": 0.45
@@ -1733,6 +2936,18 @@ export interface components {
              * @default 1
              */
             seed: number;
+            /** Workers */
+            workers?: number | null;
+            /**
+             * Robust Top
+             * @default 5
+             */
+            robust_top: number;
+            /**
+             * Robust Keep
+             * @default 3
+             */
+            robust_keep: number;
             /** Site Id */
             site_id?: string | null;
             /** @default {
@@ -1840,6 +3055,11 @@ export interface components {
             warnings: components["schemas"]["EngineWarning"][];
             /** Knee Hash */
             knee_hash?: string | null;
+            /**
+             * Robustness
+             * @default []
+             */
+            robustness: components["schemas"]["RobustnessRow"][];
         };
         /** PartitionPayload */
         PartitionPayload: {
@@ -1890,6 +3110,29 @@ export interface components {
             appearance: components["schemas"]["MaterialAppearance"];
             source: components["schemas"]["SourceRef"];
         };
+        /** PlaceResult */
+        PlaceResult: {
+            /** Name */
+            name: string;
+            /**
+             * Region
+             * @default
+             */
+            region: string;
+            /**
+             * Country
+             * @default
+             */
+            country: string;
+            /** Country Code */
+            country_code?: string | null;
+            /** Latitude Deg */
+            latitude_deg: number;
+            /** Longitude Deg */
+            longitude_deg: number;
+            /** Elevation M */
+            elevation_m?: number | null;
+        };
         /** PlanSpec */
         PlanSpec: {
             /** @default barrack */
@@ -1915,6 +3158,59 @@ export interface components {
              */
             azimuth_deg: number;
         };
+        /** Post */
+        Post: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Site Id */
+            site_id: string;
+            /** Latitude Deg */
+            latitude_deg: number;
+            /** Longitude Deg */
+            longitude_deg: number;
+            design: components["schemas"]["DesignSpec"];
+            /** Soldiers */
+            soldiers: number;
+            /**
+             * Fuel
+             * @default kerosene
+             * @enum {string}
+             */
+            fuel: "kerosene" | "diesel" | "lpg" | "wood" | "electricity";
+            /** Stock Units */
+            stock_units?: number | null;
+            calibration?: components["schemas"]["PostCalibration"] | null;
+        };
+        /** PostCalibration */
+        PostCalibration: {
+            /** Infiltration Ach */
+            infiltration_ach: number;
+            /**
+             * Mass Multiplier
+             * @default 1
+             */
+            mass_multiplier: number;
+            /** Rmse Before K */
+            rmse_before_k?: number | null;
+            /** Rmse After K */
+            rmse_after_k?: number | null;
+            /** Calibrated On */
+            calibrated_on?: string | null;
+            /** Hours */
+            hours?: number | null;
+        };
+        /** PostSummary */
+        PostSummary: {
+            post: components["schemas"]["Post"];
+            /** Status */
+            status?: ("red" | "amber" | "green") | null;
+            /** Night Of */
+            night_of?: string | null;
+            /** Issued At */
+            issued_at?: string | null;
+        };
         /** ProjectRequest */
         ProjectRequest: {
             /** Id */
@@ -1936,7 +3232,33 @@ export interface components {
          * Provenance
          * @enum {string}
          */
-        Provenance: "simulated" | "surrogate" | "cfd" | "measured" | "derived" | "literature" | "assumed";
+        Provenance: "simulated" | "surrogate" | "cfd" | "fea" | "measured" | "derived" | "literature" | "assumed";
+        /** QuantityLine */
+        QuantityLine: {
+            /** Item Id */
+            item_id: string;
+            /** Name */
+            name: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "material" | "glazing" | "shutter" | "pcm";
+            /** Used In */
+            used_in: string[];
+            /** Area M2 */
+            area_m2: number;
+            /** Volume M3 */
+            volume_m3?: number | null;
+            /** Mass Kg */
+            mass_kg?: number | null;
+            /** Locally Available */
+            locally_available?: boolean | null;
+            /** Cost Inr */
+            cost_inr: number;
+            /** Note */
+            note?: string | null;
+        };
         /** Recommendation */
         Recommendation: {
             /** Code */
@@ -1959,6 +3281,48 @@ export interface components {
             /** @default derived */
             provenance: components["schemas"]["Provenance"];
         };
+        /** RefereePayload */
+        RefereePayload: {
+            /** Site Id */
+            site_id: string;
+            /** Weather File */
+            weather_file: string;
+            /** Station */
+            station?: string | null;
+            /** Station Distance Km */
+            station_distance_km?: number | null;
+            /** Night Minimum */
+            night_minimum?: components["schemas"]["MonthCheckPayload"][];
+            /** Day Maximum */
+            day_maximum?: components["schemas"]["MonthCheckPayload"][];
+            /**
+             * Hours Below Record Low
+             * @default 0
+             */
+            hours_below_record_low: number;
+            /** Coldest Hour C */
+            coldest_hour_c?: number | null;
+            /** Record Low C */
+            record_low_c?: number | null;
+            /** Record Low Date */
+            record_low_date?: string | null;
+            /** Solar */
+            solar?: components["schemas"]["MonthCheckPayload"][];
+            /** Annual Solar File Kwh M2 */
+            annual_solar_file_kwh_m2?: number | null;
+            /** Annual Solar Reference Kwh M2 */
+            annual_solar_reference_kwh_m2?: number | null;
+            /** Solar Source */
+            solar_source?: string | null;
+            /** Solar Factors */
+            solar_factors?: {
+                [key: string]: number;
+            };
+            /** Flags */
+            flags?: string[];
+            /** Notes */
+            notes?: string[];
+        };
         /** ReferenceComparison */
         ReferenceComparison: {
             /** Reference Name */
@@ -1968,8 +3332,12 @@ export interface components {
             citation?: components["schemas"]["SourceRef"] | null;
             /** Delta Minimum Overnight K */
             delta_minimum_overnight_k?: number | null;
+            /** Delta Maximum Daytime K */
+            delta_maximum_daytime_k?: number | null;
             /** Delta Degree Hours Kh */
             delta_degree_hours_kh?: number | null;
+            /** Delta Hours Below Band H */
+            delta_hours_below_band_h?: number | null;
             /** Delta Heating Demand Kwh */
             delta_heating_demand_kwh?: number | null;
             /** Fuel Saved Units */
@@ -1980,6 +3348,43 @@ export interface components {
             rupees_saved_per_year?: number | null;
             /** Delta Cost Inr */
             delta_cost_inr?: number | null;
+        };
+        /** ResolveSiteRequest */
+        ResolveSiteRequest: {
+            /** Latitude Deg */
+            latitude_deg: number;
+            /** Longitude Deg */
+            longitude_deg: number;
+            /** Name */
+            name?: string | null;
+        };
+        /** RobustnessRow */
+        RobustnessRow: {
+            /** Design Hash */
+            design_hash: string;
+            /** Knee Rank */
+            knee_rank: number;
+            /** Metric */
+            metric: string;
+            /** Unit */
+            unit: string;
+            /** Nominal */
+            nominal: number;
+            /** Best */
+            best: number;
+            /** Worst */
+            worst: number;
+            /** Corner Runs */
+            corner_runs: number;
+            /** Dominant Parameter */
+            dominant_parameter?: string | null;
+            /** Robust Rank */
+            robust_rank: number;
+            /**
+             * Selected
+             * @default false
+             */
+            selected: boolean;
         };
         /** RoomPayload */
         RoomPayload: {
@@ -2151,6 +3556,7 @@ export interface components {
             condensation: components["schemas"]["CondensationMetrics"];
             cost: components["schemas"]["CostBreakdown"];
             buildability: components["schemas"]["BuildabilityMetrics"];
+            air_quality?: components["schemas"]["AirQualityMetrics"] | null;
             /**
              * Hourly
              * @default []
@@ -2202,6 +3608,98 @@ export interface components {
              */
             cached: boolean;
         };
+        /** SiteDetail */
+        SiteDetail: {
+            site: components["schemas"]["SiteSpec"];
+            summary: components["schemas"]["SiteSummary"];
+            provenance?: components["schemas"]["SiteProvenance"] | null;
+            /** Notes */
+            notes?: string[];
+            /** Warnings */
+            warnings?: components["schemas"]["EngineWarning"][];
+            /**
+             * Created
+             * @default false
+             */
+            created: boolean;
+            /** Requested Latitude Deg */
+            requested_latitude_deg?: number | null;
+            /** Requested Longitude Deg */
+            requested_longitude_deg?: number | null;
+            /** Substituted Km */
+            substituted_km?: number | null;
+        };
+        /** SiteProvenance */
+        SiteProvenance: {
+            /** Elevation Source */
+            elevation_source: string;
+            /** Horizon Source */
+            horizon_source: string;
+            /** Horizon Directions */
+            horizon_directions: number;
+            /** Horizon Max Distance Km */
+            horizon_max_distance_km: number;
+            /** Weather Provider */
+            weather_provider: string;
+            /** Weather Dataset */
+            weather_dataset: string;
+            /** Weather Model */
+            weather_model?: string | null;
+            /** Weather Year */
+            weather_year: number;
+            /** Grid Latitude Deg */
+            grid_latitude_deg?: number | null;
+            /** Grid Longitude Deg */
+            grid_longitude_deg?: number | null;
+            /** Grid Distance Km */
+            grid_distance_km?: number | null;
+            /** Time Zone */
+            time_zone?: string | null;
+            /** Utc Offset H */
+            utc_offset_h: number;
+            /** Heating Degree Days */
+            heating_degree_days: number;
+            /** Cooling Degree Days */
+            cooling_degree_days: number;
+            /** Annual Mean C */
+            annual_mean_c: number;
+            /** Coldest Month Mean C */
+            coldest_month_mean_c: number;
+            /** Warmest Month Mean C */
+            warmest_month_mean_c: number;
+            /** Place Name Source */
+            place_name_source?: string | null;
+            /** Country Code */
+            country_code?: string | null;
+        };
+        /** SiteSpec */
+        SiteSpec: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Latitude Deg */
+            latitude_deg: number;
+            /** Longitude Deg */
+            longitude_deg: number;
+            /** Elevation M */
+            elevation_m: number;
+            /** Time Zone H */
+            time_zone_h: number;
+            /** Epw Path */
+            epw_path: string;
+            /** @default heating_dominated */
+            climate_objective: components["schemas"]["ClimateObjective"];
+            /**
+             * Terrain
+             * @default Country
+             * @enum {string}
+             */
+            terrain: "Country" | "Suburbs" | "City" | "Ocean" | "Urban";
+            horizon?: components["schemas"]["HorizonProfile"] | null;
+            ground?: components["schemas"]["GroundTemperatures"] | null;
+            source?: components["schemas"]["SourceRef"] | null;
+        };
         /** SiteSummary */
         SiteSummary: {
             /** Id */
@@ -2223,6 +3721,61 @@ export interface components {
             has_ground_temperatures: boolean;
             /** Weather File */
             weather_file: string;
+        };
+        /** SitingCell */
+        SitingCell: {
+            /** East M */
+            east_m: number;
+            /** North M */
+            north_m: number;
+            /** Latitude Deg */
+            latitude_deg: number;
+            /** Longitude Deg */
+            longitude_deg: number;
+            /** Elevation M */
+            elevation_m: number;
+            /** Slope Deg */
+            slope_deg: number;
+            /** Aspect Deg */
+            aspect_deg: number;
+            /** Solstice Sun H */
+            solstice_sun_h: number;
+            /** Winter Sun H */
+            winter_sun_h: number;
+            /** Lost To Terrain H */
+            lost_to_terrain_h: number;
+        };
+        /** SitingMap */
+        SitingMap: {
+            /** Site Id */
+            site_id: string;
+            /** Half Width M */
+            half_width_m: number;
+            /** Step M */
+            step_m: number;
+            /** Columns */
+            columns: number;
+            /** Cells */
+            cells: components["schemas"]["SitingCell"][];
+            /** Best */
+            best: number[];
+            /** Site Cell */
+            site_cell: number;
+            /**
+             * Winter From
+             * Format: date
+             */
+            winter_from: string;
+            /**
+             * Winter To
+             * Format: date
+             */
+            winter_to: string;
+            /** Days Sampled */
+            days_sampled: number;
+            /** Flat Winter Sun H */
+            flat_winter_sun_h: number;
+            source: components["schemas"]["SourceRef"];
         };
         /** SolarNoon */
         SolarNoon: {
@@ -2512,9 +4065,16 @@ export interface components {
             infiltration_ach: number;
             /**
              * Minimum Fresh Air Ach
-             * @default 0.35
+             * @default 0
              */
             minimum_fresh_air_ach: number;
+            /**
+             * Co2 Limit Ppm
+             * @default 1000
+             */
+            co2_limit_ppm: number;
+            /** Fresh Air L S Per Person */
+            fresh_air_l_s_per_person?: number | null;
             /**
              * Night Ventilation
              * @default false
@@ -2582,6 +4142,17 @@ export interface components {
              * @default 0.1
              */
             overhang_offset_m: number;
+        };
+        /** WinterMinimumPayload */
+        WinterMinimumPayload: {
+            /** Winter */
+            winter: number;
+            /** Night Of */
+            night_of: string;
+            /** Minimum C */
+            minimum_c: number;
+            /** Observed C */
+            observed_c?: number | null;
         };
         /** ZoneAirflow */
         ZoneAirflow: {
@@ -2820,6 +4391,37 @@ export interface operations {
             };
         };
     };
+    live_weather_api_live_weather_get: {
+        parameters: {
+            query?: {
+                site_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveWeather"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     comfort_models_api_comfort_models_get: {
         parameters: {
             query?: never;
@@ -2920,6 +4522,72 @@ export interface operations {
             };
         };
     };
+    endurance_api_endurance_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnduranceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EndurancePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    horizon_value_api_horizon_value_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SimulateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HorizonValuePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     geometry_api_geometry_post: {
         parameters: {
             query?: never;
@@ -2953,6 +4621,106 @@ export interface operations {
             };
         };
     };
+    quantities_api_bill_of_quantities_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GeometryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillOfQuantities"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bye_law_sheet_api_bye_law_sheet_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GeometryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplianceSheet"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    design_pack_api_design_pack_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DesignPackRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "application/zip": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     simulate_api_simulate_post: {
         parameters: {
             query?: never;
@@ -2973,6 +4741,71 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SimulationResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    evidence_api_evidence__run_hash__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_hash: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    evidence_zip_api_evidence__run_hash__zip_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_hash: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "application/zip": unknown;
                 };
             };
             /** @description Validation Error */
@@ -3267,7 +5100,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CFDExport"] | components["schemas"]["CFDAbsent"];
+                    "application/json": components["schemas"]["CFDFieldSet"] | components["schemas"]["CFDAbsent"];
                 };
             };
             /** @description Validation Error */
@@ -3298,7 +5131,137 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CFDExport"] | components["schemas"]["CFDAbsent"];
+                    "application/json": components["schemas"]["CFDFieldSet"] | components["schemas"]["CFDAbsent"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mapdl_for_design_api_mapdl_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GeometryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapdlSet"] | components["schemas"]["MapdlAbsent"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mapdl_api_mapdl__design_hash__get: {
+        parameters: {
+            query?: {
+                site_id?: string | null;
+            };
+            header?: never;
+            path: {
+                design_hash: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapdlSet"] | components["schemas"]["MapdlAbsent"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cfd_boundary_conditions_api_cfd__design_hash__boundary_conditions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                design_hash: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CFDBoundarySet"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    levers_api_search_levers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeverRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeverPayload"][];
                 };
             };
             /** @description Validation Error */
@@ -3521,6 +5484,421 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    places_api_places_get: {
+        parameters: {
+            query: {
+                query: string;
+                count?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaceResult"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolve_site_api_sites_resolve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveSiteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    site_detail_api_sites__site_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    design_night_api_sites__site_id__design_night_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DesignNightPayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    siting_api_sites__site_id__siting_map_get: {
+        parameters: {
+            query?: {
+                half_width_m?: number;
+                step_m?: number;
+            };
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SitingMap"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    weather_referee_api_sites__site_id__referee_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefereePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_posts_api_posts_get: {
+        parameters: {
+            query?: {
+                lang?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostSummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_post_api_posts__post_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Post"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_post_api_posts__post_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cards_for_every_post_api_posts_cards_post: {
+        parameters: {
+            query?: {
+                lang?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardResult"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    last_card_api_posts__post_id__card_get: {
+        parameters: {
+            query?: {
+                lang?: string;
+            };
+            header?: never;
+            path: {
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommanderCard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    new_card_api_posts__post_id__card_post: {
+        parameters: {
+            query?: {
+                lang?: string;
+            };
+            header?: never;
+            path: {
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommanderCard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    calibrate_post_api_posts__post_id__calibration_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostCalibration"];
                 };
             };
             /** @description Validation Error */

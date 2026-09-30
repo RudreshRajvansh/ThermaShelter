@@ -1,7 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
-import { api, type MetaResponse, type SimulationResult } from "../lib/api";
+import { useState } from "react";
+import {
+  api,
+  designPack,
+  evidenceUrl,
+  type MetaResponse,
+  type SimulationResult,
+} from "../lib/api";
 import { AssumptionTable, Empty, Loading, Panel, Warnings } from "../components/Kit";
 import { PerformanceChart } from "../components/PerformanceChart";
+import { ByeLawSheet } from "../components/ByeLawSheet";
 import { activeDesign, useStore } from "../lib/store";
 import { num, rupees, signed } from "../lib/format";
 
@@ -23,6 +31,8 @@ export function Reports({
 }) {
   const store = useStore();
   const design = activeDesign(store);
+  const [packing, setPacking] = useState(false);
+  const [packError, setPackError] = useState<string | null>(null);
   const climate = useQuery({
     queryKey: ["climate", store.siteId],
     queryFn: () => api.climate(store.siteId),
@@ -44,6 +54,30 @@ export function Reports({
     );
   }
 
+  async function downloadPack() {
+    if (!simulation) return;
+    setPacking(true);
+    setPackError(null);
+    try {
+      const blob = await designPack({
+        design: simulation.design,
+        site_id: store.siteId,
+        period: store.period,
+        run_hash: simulation.design_hash,
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${simulation.design.name.replace(/[^a-z0-9_-]+/gi, "_")}_design_pack.zip`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setPackError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setPacking(false);
+    }
+  }
+
   const reference = simulation.reference;
   const cooling = simulation.headline_metric === "maximum_daytime_operative_c";
   const site = meta?.sites.find((item) => item.id === store.siteId);
@@ -58,13 +92,33 @@ export function Reports({
           Everything below is assembled from the completed run. Print to PDF from the
           browser; the layout switches to light for paper.
         </p>
-        <button
-          type="button"
-          onClick={() => window.print()}
-          className="rounded-md bg-[var(--color-solar)] px-3 py-1.5 text-xs font-medium text-[#0b1220]"
-        >
-          Print or save as PDF
-        </button>
+        <div className="flex items-center gap-2">
+          {packError && (
+            <span className="text-xs text-[var(--color-danger-ink)]">{packError}</span>
+          )}
+          <a
+            href={evidenceUrl(simulation.design_hash)}
+            download
+            className="rounded-md border border-[var(--color-line)] bg-[var(--color-night-2)] px-3 py-1.5 text-xs font-medium"
+          >
+            Evidence folder
+          </a>
+          <button
+            type="button"
+            disabled={packing}
+            onClick={downloadPack}
+            className="rounded-md border border-[var(--color-line)] bg-[var(--color-night-2)] px-3 py-1.5 text-xs font-medium disabled:opacity-60"
+          >
+            {packing ? "Building the pack…" : "Download design pack"}
+          </button>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="rounded-md bg-[var(--color-solar)] px-3 py-1.5 text-xs font-medium text-white"
+          >
+            Print or save as PDF
+          </button>
+        </div>
       </div>
 
       <Panel title="Executive summary">
@@ -75,20 +129,30 @@ export function Reports({
               {num(simulation.comfort.maximum_daytime_operative_c)} °C through the day.
             </>
           ) : (
-            <>
-              At {site?.name ?? store.siteId} the recommended design holds{" "}
-              {num(simulation.comfort.minimum_overnight_operative_c)} °C at its coldest
-              overnight against{" "}
-              {reference?.delta_minimum_overnight_k != null &&
-              simulation.comfort.minimum_overnight_operative_c != null
-                ? num(
-                    simulation.comfort.minimum_overnight_operative_c -
-                      reference.delta_minimum_overnight_k,
-                  )
-                : "—"}{" "}
-              °C for current construction, a difference of{" "}
-              {signed(reference?.delta_minimum_overnight_k)} K.
-            </>
+            simulation.design.name === reference?.reference_name ? (
+              <>
+                At {site?.name ?? store.siteId} current construction holds{" "}
+                {num(simulation.comfort.minimum_overnight_operative_c)} °C at its
+                coldest overnight. This report describes the baseline itself, so it
+                carries no improvement. Run a candidate design to report a difference
+                against it.
+              </>
+            ) : (
+              <>
+                At {site?.name ?? store.siteId} the recommended design holds{" "}
+                {num(simulation.comfort.minimum_overnight_operative_c)} °C at its coldest
+                overnight against{" "}
+                {reference?.delta_minimum_overnight_k != null &&
+                simulation.comfort.minimum_overnight_operative_c != null
+                  ? num(
+                      simulation.comfort.minimum_overnight_operative_c -
+                        reference.delta_minimum_overnight_k,
+                    )
+                  : "—"}{" "}
+                °C for current construction, a difference of{" "}
+                {signed(reference?.delta_minimum_overnight_k)} K.
+              </>
+            )
           )}{" "}
           {reference?.fuel_saved_units != null && reference.fuel_saved_units > 0 && (
             <>
@@ -250,11 +314,13 @@ export function Reports({
           </div>
         </div>
         {simulation.buildability.seismic_note && (
-          <p className="mt-3 rounded-md border border-[var(--color-diesel)] bg-[var(--color-diesel)]/10 p-3 text-xs text-[#ffb4ae]">
+          <p className="mt-3 rounded-md border border-[var(--color-diesel)] bg-[var(--color-diesel)]/10 p-3 text-xs text-[var(--color-danger-ink)]">
             {simulation.buildability.seismic_note}
           </p>
         )}
       </Panel>
+
+      <ByeLawSheet design={simulation.design} siteId={store.siteId} />
 
       <Panel
         title="Assumptions"

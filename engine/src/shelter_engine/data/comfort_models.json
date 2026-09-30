@@ -1,18 +1,41 @@
 {
   "adaptive_models": [
     {
+      "id": "drdo_tot_band",
+      "name": "DRDO habitable band, 17 plus or minus 3 C",
+      "intercept_c": 17.0,
+      "slope": 0.0,
+      "band_half_width_k": 3.0,
+      "running_mean_alpha": 0.8,
+      "outdoor_applicability_c": {
+        "low": -60.0,
+        "high": 60.0
+      },
+      "source": {
+        "citation": "DRDO transfer of technology document, Solar Thermal Technology based System for Space Heating of Shelter in Cold Condition, DIHAR: the stored heat is used to maintain the comfortable habitable temperature (17 plus or minus 3 C) inside the shelter",
+        "status": "verified",
+        "url": "https://drdo.gov.in/drdo/sites/default/files/tot/DOSTTbSfSHoSiCC11022025_0.pdf",
+        "note": "A fixed band of 14 to 20 C that does not move with the outdoor temperature. It is DRDO's own number for a shelter in cold conditions, so Output 1 is judged against it first."
+      }
+    },
+    {
       "id": "imac_2016_nv",
       "name": "India Model for Adaptive Comfort, naturally ventilated",
       "intercept_c": 12.83,
       "slope": 0.54,
       "band_half_width_k": 3.46,
       "running_mean_alpha": 0.8,
-      "outdoor_applicability_c": {"low": 13.0, "high": 38.0},
+      "outdoor_applicability_c": {
+        "low": 12.5,
+        "high": 31.0
+      },
       "source": {
-        "citation": "Manu, Shukla, Rawal, Thomas and de Dear, Field studies of thermal comfort across multiple climate zones for the subcontinent, India Model for Adaptive Comfort IMAC, Building and Environment 98 (2016) 55-70",
+        "citation": "Manu, Shukla, Rawal, Thomas and de Dear, Field studies of thermal comfort across multiple climate zones for the subcontinent: India Model for Adaptive Comfort (IMAC), Building and Environment 98 (2016) 55-70, with the corrigendum in Building and Environment 106 (2016) 422-426",
         "status": "pending",
-        "note": "Coefficients, band half width and the outdoor applicability range must be read off the paper and this record updated before any published result. Do not quote these values until status reads verified."
-      }
+        "url": "https://doi.org/10.1016/j.buildenv.2016.07.015",
+        "note": "Neutral temperature 0.54 times the 30 day outdoor running mean plus 12.83 C, defined for a running mean of 12.5 to 31 C. The corrigendum revised Table 11 and Figures 2, 5 and 6, and the acceptability band half width has not been read off the corrected table, so this record stays pending. A Ladakh winter running mean sits far below 12.5 C, so outside summer this band is held at its floor and must not lead a result."
+      },
+      "running_mean_days": 30
     },
     {
       "id": "imac_r_2022_nv",
@@ -21,7 +44,10 @@
       "slope": 0.54,
       "band_half_width_k": 3.46,
       "running_mean_alpha": 0.8,
-      "outdoor_applicability_c": {"low": 13.0, "high": 38.0},
+      "outdoor_applicability_c": {
+        "low": 13.0,
+        "high": 38.0
+      },
       "source": {
         "citation": "Rawal and others, India Model for Adaptive Comfort residential, IMAC-R, 2022",
         "status": "pending",
@@ -31,15 +57,17 @@
   ],
   "fixed_targets": [
     {
-      "id": "dihar_operational_target",
-      "name": "DIHAR operational target for occupied shelters",
-      "lower_bound_c": 20.0,
+      "id": "drdo_band_night",
+      "name": "DRDO band lower edge through the night",
+      "lower_bound_c": 14.0,
+      "upper_bound_c": 20.0,
       "from_hour": 18,
       "until_hour": 6,
       "source": {
-        "citation": "DIHAR operational target of 20 C held from 18:00 to 06:00, as stated in the project build guide",
-        "status": "pending",
-        "note": "Confirm against a DIHAR publication or the problem statement before quoting on screen."
+        "citation": "Lower edge of the DRDO habitable band of 17 plus or minus 3 C, held over the 18:00 to 06:00 window in which DIHAR's solar heated shelters were reported to be heated",
+        "status": "verified",
+        "url": "https://drdo.gov.in/drdo/sites/default/files/tot/DOSTTbSfSHoSiCC11022025_0.pdf",
+        "note": "The 14 C threshold is DRDO's; the 18:00 to 06:00 window is the operating window reported for the DIHAR system at Leh (Energetica India, 2025) and is the night the heating run and the night degree hours use."
       }
     },
     {
@@ -72,7 +100,7 @@
       "fuel": "kerosene",
       "unit": "litre",
       "lower_heating_value_kwh_per_unit": 9.5,
-      "appliance_efficiency": 0.70,
+      "appliance_efficiency": 0.7,
       "price_inr_per_unit": 0.0,
       "source": {
         "citation": "Kerosene lower heating value of 34.2 MJ per litre, standard fuel property tables",

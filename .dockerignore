@@ -10,3 +10,10 @@ web/dev.log
 tools
 data/runs.db
 .git
+data/evidence
+data/forecast
+data/siting
+build
+docs
+.claude
+pyfluent_watchdog.err

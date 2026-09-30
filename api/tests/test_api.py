@@ -18,10 +18,27 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.fixture(scope="module")
-def client(tmp_path_factory) -> TestClient:
+def cfd_dir(tmp_path_factory) -> Path:
+    import shutil
+    target = tmp_path_factory.mktemp("cfd")
+    for path in (DATA / "cfd").glob("*.boundary.json"):
+        shutil.copy2(path, target / path.name)
+    return target
+
+
+@pytest.fixture(scope="module")
+def mapdl_dir(tmp_path_factory) -> Path:
+    return tmp_path_factory.mktemp("mapdl")
+
+
+@pytest.fixture(scope="module")
+def client(tmp_path_factory, cfd_dir, mapdl_dir) -> TestClient:
     import os
+    os.environ["SHELTER_EVIDENCE_DIR"] = str(tmp_path_factory.mktemp("evidence"))
     os.environ["SHELTER_DATA_DIR"] = str(DATA)
     os.environ["SHELTER_DB"] = str(tmp_path_factory.mktemp("store") / "runs.db")
+    os.environ["SHELTER_CFD_DIR"] = str(cfd_dir)
+    os.environ["SHELTER_MAPDL_DIR"] = str(mapdl_dir)
     from shelter_api.config import get_settings
     from shelter_api.deps import get_context
     get_settings.cache_clear()
@@ -164,6 +181,16 @@ def test_the_comfort_model_can_be_chosen_per_request(client, design, meta):
         pytest.skip("EnergyPlus is not available")
     assert response.status_code == 200
     assert response.json()["comfort"]["comfort_model_id"] == other
+    run_hash = response.json()["design_hash"]
+    manifest = client.get(f"/api/evidence/{run_hash}").json()
+    files = {item["file"] for item in manifest["files"]}
+    assert {"design.json", "result.json", "warnings.json", "plots/temperatures.svg",
+            "energyplus/in.idf"} <= files
+    assert manifest["solvers"]["energyplus"]
+    assert manifest["weather"]["sha256"]
+    archive = client.get(f"/api/evidence/{run_hash}/zip")
+    assert archive.status_code == 200
+    assert archive.headers["content-type"] == "application/zip"
 
 
 def test_geometry_rejects_an_impossible_design(client, design):
@@ -262,16 +289,71 @@ def test_cfd_absence_is_stated_not_errored(client):
     assert "has not been run" in body["reason"]
 
 
-def test_cfd_is_served_when_it_exists(client):
-    exports = sorted((DATA / "cfd").glob("*_coldest_night.json"))
+def test_cfd_refuses_a_malformed_design_hash(client):
+    assert client.get("/api/cfd/not-a-hash").status_code == 422
+    assert client.get("/api/cfd/ABCDEF0123456789ABCDEF0123456789").status_code == 422
+    assert client.get(
+        "/api/cfd/not-a-hash/boundary-conditions").status_code == 422
+
+
+def test_boundary_conditions_are_served_as_inputs_not_as_a_field(client, cfd_dir):
+    exports = sorted(cfd_dir.glob("*_coldest_night.boundary.json"))
     if not exports:
-        pytest.skip("no precomputed fluid dynamics export")
+        pytest.skip("no precomputed fluid dynamics boundary conditions")
     design_hash = exports[0].name.split("_")[0]
     body = client.get(f"/api/cfd/{design_hash}").json()
-    assert body["surfaces"]
-    assert body["zone_air_temperature_c"] is not None
-    assert any("no air temperature field" in note.lower() or
-               "computes no air temperature" in note for note in body["notes"])
+    assert body["available"] is False
+    assert "coldest_night" in body["boundary_labels"]
+    assert "ANSYS Fluent has not been run" in body["reason"]
+    inputs = client.get(f"/api/cfd/{design_hash}/boundary-conditions").json()
+    assert inputs["exports"][0]["surfaces"]
+    assert any("computes no air temperature" in note
+               for note in inputs["exports"][0]["notes"])
+    missing = client.get("/api/cfd/" + "e" * 32 + "/boundary-conditions")
+    assert missing.status_code == 404
+
+
+def test_a_solved_field_is_served_and_a_stale_or_broken_one_is_refused(client, cfd_dir):
+    from cfd_fixtures import box_export, cell_cloud, solver_record
+    from shelter_engine.cfd import build_cfd_field, write_cfd_export, write_cfd_field
+
+    design_hash = "fedcba9876543210fedcba9876543210"
+    export = box_export(design_hash=design_hash)
+    write_cfd_export(export, cfd_dir)
+    centres, temperature, speed = cell_cloud()
+    write_cfd_field(build_cfd_field(export, centres, temperature, solver_record(),
+                                    speed, dims=(6, 5, 4)), cfd_dir)
+
+    body = client.get(f"/api/cfd/{design_hash}").json()
+    assert body["available"] is True
+    assert body["rejected"] == []
+    field = body["fields"][0]
+    assert field["provenance"] == "cfd"
+    assert field["solver"]["solver"] == "ANSYS Fluent"
+    assert len(field["temperature_c"]) == 6 * 5 * 4
+
+    (cfd_dir / f"{design_hash}_peak_solar.field.json").write_text("{", encoding="utf-8")
+    body = client.get(f"/api/cfd/{design_hash}").json()
+    assert body["available"] is True
+    assert any("could not be read" in item for item in body["rejected"])
+
+    write_cfd_export(box_export(design_hash=design_hash, air_c=9.0), cfd_dir)
+    body = client.get(f"/api/cfd/{design_hash}").json()
+    assert body["available"] is False
+    assert any("have since changed" in item for item in body["rejected"])
+
+    orphan = "abcdefabcdefabcdefabcdefabcdef12"
+    export = box_export(design_hash=orphan)
+    write_cfd_field(build_cfd_field(export, centres, temperature, solver_record(),
+                                    dims=(4, 4, 4)), cfd_dir)
+    body = client.get(f"/api/cfd/{orphan}").json()
+    assert body["available"] is False
+    assert any("no matching boundary conditions" in item for item in body["rejected"])
+
+
+def test_the_interpolated_thermal_field_endpoint_is_gone(client, design):
+    response = client.post("/api/thermal-field", json={"design": design})
+    assert response.status_code in (404, 405)
 
 
 def test_validation_reports_absence_honestly(client):
@@ -438,3 +520,199 @@ def test_an_unknown_design_names_what_the_library_holds(client):
     response = client.get("/api/designs/not_a_design")
     assert response.status_code == 404
     assert "single_room" in response.json()["detail"]
+
+
+def test_live_weather_never_raises_when_the_network_is_gone(client, monkeypatch):
+    import urllib.error
+
+    def unreachable(*args, **kwargs):
+        raise urllib.error.URLError("no route to host")
+
+    monkeypatch.setattr("shelter_api.live.urllib.request.urlopen", unreachable)
+    body = client.get("/api/live-weather").json()
+    assert body["available"] is False
+    assert body["observation"] is None
+    assert "URLError" in body["detail"]
+    assert "stored weather year" in body["detail"]
+
+
+def test_live_weather_says_it_is_not_a_simulation_input(client):
+    body = client.get("/api/live-weather").json()
+    assert "does not read this" in body["note"]
+    assert "IMD" in body["provider"]
+
+
+def test_live_weather_flags_an_elevation_mismatch(client, monkeypatch):
+    import json as _json
+
+    class Fake:
+        def read(self):
+            return _json.dumps({
+                "elevation": 4600.0,
+                "current": {"time": "2026-01-01T00:00", "temperature_2m": -5.0},
+            }).encode()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr("shelter_api.live.urllib.request.urlopen",
+                        lambda *a, **k: Fake())
+    body = client.get("/api/live-weather").json()
+    assert body["available"] is True
+    assert body["elevation_mismatch"]
+    assert "4600" in body["elevation_mismatch"]
+
+
+def test_horizon_value_compares_the_real_skyline_with_a_flat_one(client, design):
+    response = client.post("/api/horizon-value", json={"design": design, "period": WINDOW,
+                                                       "conditioned_run": True})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["max_blocked_altitude_deg"] > 0
+    assert body["with_horizon"]["windows_solar_gain_kwh"] <= \
+        body["flat"]["windows_solar_gain_kwh"] + 1e-6
+    assert body["heating_difference_kwh"] == pytest.approx(
+        body["with_horizon"]["heating_kwh"] - body["flat"]["heating_kwh"], abs=1e-3)
+
+
+def _mapdl_report(design_hash: str, site_id: str = "leh", engine_version: str | None = None):
+    from test_mapdl import make_case
+    from shelter_engine.mapdl import MapdlRun, build_report
+
+    case = make_case(hours=4, design_hash=design_hash, label="week",
+                     energyplus_air_c=(5.0, 6.0, 7.0, 6.0))
+    run = MapdlRun(level="coarse", hours=4, air_c=(5.5, 6.5, 6.5, 5.5),
+                   surface_c={group: (5.0,) * 4 for group in ("south", "north", "east",
+                                                             "west", "roof", "floor")},
+                   face_heat_w={group: (-10.0,) * 4 for group in ("south", "north", "east",
+                                                                 "west", "roof", "floor")},
+                   node_count=100, element_count=80, runtime_s=3.0, cycles=2)
+    report = build_report(case, run, site_id, "2026 R1", 2)
+    if engine_version is not None:
+        report = report.model_copy(update={"engine_version": engine_version})
+    return report
+
+
+def test_mapdl_absence_is_stated_not_errored(client):
+    body = client.get("/api/mapdl/" + "a" * 32).json()
+    assert body["available"] is False
+    assert "run_mapdl.py" in body["reason"]
+    assert client.get("/api/mapdl/not-a-hash").status_code == 422
+
+
+def test_a_stored_mapdl_report_is_served_and_stale_ones_are_refused(client, mapdl_dir):
+    from shelter_engine.mapdl import write_report
+
+    good = "b" * 32
+    write_report(_mapdl_report(good), mapdl_dir)
+    body = client.get(f"/api/mapdl/{good}").json()
+    assert body["available"] is True
+    report = body["reports"][0]
+    assert report["solver"] == "ANSYS Mechanical APDL"
+    assert report["provenance"] == "fea"
+    assert report["agreement"]["hours"] == 4
+    assert len(report["mapdl_air_c"]) == 4
+
+    old = "c" * 32
+    write_report(_mapdl_report(old, engine_version="0.0.1"), mapdl_dir)
+    body = client.get(f"/api/mapdl/{old}").json()
+    assert body["available"] is False
+    assert "run again" in body["rejected"][0]
+
+    elsewhere = "d" * 32
+    write_report(_mapdl_report(elsewhere, site_id="diskit"), mapdl_dir)
+    body = client.get(f"/api/mapdl/{elsewhere}").json()
+    assert body["available"] is False and "solved for diskit" in body["rejected"][0]
+
+    broken = "e" * 32
+    (mapdl_dir / f"{broken}_week_mapdl.json").write_text("{}", encoding="utf-8")
+    body = client.get(f"/api/mapdl/{broken}").json()
+    assert body["available"] is False and "could not be read" in body["rejected"][0]
+
+
+def test_bill_of_quantities_lists_every_material_by_weight(client):
+    design = json.loads((DATA / "designs" / "barrack_single_room.json").read_text(
+        encoding="utf-8"))
+    response = client.post("/api/bill-of-quantities", json={"design": design})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    materials = [line for line in body["lines"] if line["kind"] == "material"]
+    layer_ids = {layer["material_id"] for key in ("wall", "roof", "floor")
+                 for layer in design[key]["layers"]}
+    assert layer_ids <= {line["item_id"] for line in materials}
+    assert body["total_mass_kg"] == pytest.approx(
+        sum(line["mass_kg"] for line in body["lines"] if line["mass_kg"] is not None))
+    assert all(line["mass_kg"] is None for line in body["lines"] if line["kind"] == "glazing")
+
+
+def test_the_cached_design_year_becomes_the_alternate_weather(client, tmp_path):
+    from shelter_api.deps import get_context
+
+    context = get_context()
+    site = context.site("leh")
+    record = DATA / "design_nights" / "leh.json"
+    found = context.alternate_weather(site)
+    if record.is_file() and (DATA / json.loads(record.read_text(encoding="utf-8"))[
+            "epw_path"]).is_file():
+        label, path = found
+        assert "ECMWF IFS" in label and path.endswith(".epw")
+    else:
+        assert found is None
+    elsewhere = site.model_copy(update={"id": "nowhere_at_all"})
+    assert context.alternate_weather(elsewhere) is None
+
+
+def test_bye_law_sheet_reports_the_cold_zone_checks(client):
+    design = json.loads((DATA / "designs" / "barrack_single_room.json").read_text(
+        encoding="utf-8"))
+    body = client.post("/api/bye-law-sheet", json={"design": design}).json()
+    assert body["assessed"] is True and body["climate_zone"] == "Cold"
+    clauses = {item["clause"] for item in body["items"]}
+    assert {"5.2.1.3, 9.4", "5.2.1.5, 9.7"} <= clauses
+    assert body["source"]["status"] == "verified"
+
+
+def test_design_pack_is_a_zip_with_drawings_quantities_and_the_sheet(client, mapdl_dir):
+    import io
+    import zipfile
+
+    from shelter_engine.hashing import stable_hash
+    from shelter_engine.mapdl import write_report
+    from shelter_engine.schema import DesignSpec
+
+    design = json.loads((DATA / "designs" / "barrack_single_room.json").read_text(
+        encoding="utf-8"))
+    fingerprint = stable_hash(DesignSpec.model_validate(design))
+    write_report(_mapdl_report(fingerprint), mapdl_dir)
+    response = client.post("/api/design-pack", json={"design": design,
+                                                    "run_hash": "f" * 32})
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"] == "application/zip"
+    assert "attachment" in response.headers["content-disposition"]
+    archive = zipfile.ZipFile(io.BytesIO(response.content))
+    names = set(archive.namelist())
+    for expected in ("README.txt", "design.json", "bill_of_quantities.csv",
+                     "bye_law_sheet.json", "construction_layers.csv", "drawings/plan.svg",
+                     "drawings/elevation_south.svg", "drawings/section_wall.svg",
+                     f"ansys/mapdl/{fingerprint}_week_mapdl.json"):
+        assert expected in names
+    assert archive.read("drawings/plan.svg").startswith(b"<svg")
+    readme = archive.read("README.txt").decode("utf-8")
+    assert "not stored for this design" in readme
+    if any(name.startswith("energyplus/") for name in names):
+        assert "energyplus/shelter.idf" in names
+    else:
+        assert "No EnergyPlus input file is included" in readme
+    bad = client.post("/api/design-pack", json={"design": design, "run_hash": "nothex"})
+    assert bad.status_code == 422
+
+
+def test_missing_evidence_is_a_clear_404(client):
+    response = client.get("/api/evidence/" + "0" * 32)
+    assert response.status_code == 404
+    assert "No evidence folder" in response.json()["detail"]
+    assert client.get("/api/evidence/" + "0" * 32 + "/zip").status_code == 404
+    assert client.get("/api/evidence/not-a-hash").status_code == 422

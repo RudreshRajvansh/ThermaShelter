@@ -386,8 +386,13 @@ def test_cfd_export_carries_boundary_conditions(engine, tmp_path):
         assert export.zone_volume_m3 > 0.0
         for surface in export.surfaces:
             assert -60.0 < surface.inside_face_temperature_c < 80.0
+        assert export.internal_convective_gain_w is not None
+        assert export.internal_convective_gain_w >= 0.0
+        assert export.infiltration_sensible_w is not None
+        assert export.net_air_heat_source_w is not None
         path = write_cfd_export(export, tmp_path)
         assert path.is_file()
+        assert path.name.endswith(".boundary.json")
 
 
 def test_optimisation_runs_end_to_end(engine):

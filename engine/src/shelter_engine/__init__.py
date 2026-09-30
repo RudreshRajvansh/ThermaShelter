@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from .baseline import (ReferenceCatalogue, check_library_covers_references,
                        compare_to_reference, load_references)
@@ -23,8 +23,12 @@ from .optimize import (cold_climate_variables, hot_dry_variables, materialise,
                        optimise)
 from .solar import (daylight_lost_to_terrain_h, sun_path, sun_position,
                     terrain_mesh)
+from .cfd import (build_cfd_field, find_boundary_conditions, find_cfd_fields,
+                  load_cfd_export, load_cfd_field, sample_to_grid, write_cfd_export,
+                  write_cfd_field)
 from .schema import (Arrangement, ArrangementParams, Assumption,
-                     BuildabilityMetrics, CFDBoundarySurface, CFDExport,
+                     BuildabilityMetrics, CFDBoundarySurface, CFDExport, CFDField,
+                     CFDSolverRecord,
                      ClimateObjective, ComfortMetrics, ComfortModel,
                      ComparisonRow, ComparisonTable, CondensationMetrics,
                      ConstructionSpec, CostBreakdown, DesignSpec,
@@ -152,6 +156,16 @@ __all__ = [
     "SurfaceResults",
     "SurfaceSeries",
     "ThermalBridge",
+    "CFDField",
+    "CFDSolverRecord",
+    "build_cfd_field",
+    "find_boundary_conditions",
+    "find_cfd_fields",
+    "load_cfd_export",
+    "load_cfd_field",
+    "sample_to_grid",
+    "write_cfd_export",
+    "write_cfd_field",
     "SunPath",
     "SunPosition",
     "SolarNoon",

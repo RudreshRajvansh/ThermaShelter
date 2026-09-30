@@ -57,8 +57,8 @@ def _monthly(frame: pd.DataFrame, site: SiteSpec) -> tuple[ClimateMonth, ...]:
 
 def _window(frame: pd.DataFrame, centre: date, days: int) -> ClimateWindow:
     half = max(1, days // 2)
-    start = pd.Timestamp(centre) - pd.Timedelta(half, unit="D")
-    end = pd.Timestamp(centre) + pd.Timedelta(days - half, unit="D")
+    start = pd.Timestamp(centre) - pd.to_timedelta(half, unit="D")
+    end = pd.Timestamp(centre) + pd.to_timedelta(days - half, unit="D")
     block = frame.loc[(frame.index >= start) & (frame.index < end)]
     if block.empty:
         block = frame.iloc[: days * 24]

@@ -88,27 +88,28 @@ export function PerformanceChart({ result }: { result: SimulationResult }) {
     <div className="h-[340px] w-full">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={rows} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
-          <CartesianGrid stroke="#22334c" strokeDasharray="3 3" />
+          <CartesianGrid stroke="var(--color-line)" strokeDasharray="3 3" />
           <XAxis
             dataKey="label"
             ticks={ticks}
             interval={0}
             tickFormatter={tickDisplay}
             tick={{ fontSize: 11, fill: "var(--color-ink-faint)" }}
-            stroke="#22334c"
+            stroke="var(--color-line)"
           />
           <YAxis
             unit="°"
             width={52}
             tick={{ fontSize: 11, fill: "var(--color-ink-faint)" }}
-            stroke="#22334c"
+            stroke="var(--color-line)"
           />
           <Tooltip
             contentStyle={{
               fontSize: 12,
               borderRadius: 8,
-              background: "#0b1220",
-              border: "1px solid #22334c",
+              background: "var(--color-day)",
+                    color: "var(--color-ink)",
+              border: "1px solid var(--color-line)",
             }}
             labelFormatter={(_label, payload) => payload?.[0]?.payload?.t ?? ""}
             formatter={(value: unknown, name: string) => {
