@@ -20,6 +20,8 @@ TILE_SIZE = 256
 MERCATOR_LIMIT_DEG = 85.05112878
 TERRAIN_HALF_WIDTH_M = 5000.0
 TERRAIN_POINTS = 51
+TERRAIN_NEAR_M = 120.0
+TERRAIN_NEAR_STEP_M = 10.0
 MAX_BLOCKED_DEG = 89.9
 SOIL_DIFFUSIVITY_M2_DAY = 0.05
 GROUND_DEPTH_M = 0.5
@@ -168,6 +170,10 @@ def terrain_obj(latitude_deg: float, longitude_deg: float, site_elevation_m: flo
     if points < 2 or half_width_m <= 0.0:
         raise WeatherError("a terrain mesh needs at least two points and a positive width")
     offsets = np.linspace(-half_width_m, half_width_m, points)
+    near = np.arange(-TERRAIN_NEAR_M, TERRAIN_NEAR_M + TERRAIN_NEAR_STEP_M / 2,
+                     TERRAIN_NEAR_STEP_M)
+    near = near[np.abs(near) < half_width_m]
+    offsets = np.unique(np.round(np.concatenate([offsets, near]), 6))
     east, north = np.meshgrid(offsets, offsets)
     latitude = latitude_deg + np.degrees(north / EARTH_RADIUS_M)
     longitude = longitude_deg + np.degrees(
@@ -177,11 +183,12 @@ def terrain_obj(latitude_deg: float, longitude_deg: float, site_elevation_m: flo
         raise WeatherError("the elevation tiles do not cover the terrain square")
     lines = [f"v {x:.1f} {y:.1f} {z:.1f}"
              for x, y, z in zip(east.ravel(), north.ravel(), heights.ravel())]
-    for row in range(points - 1):
-        for column in range(points - 1):
-            a = row * points + column + 1
+    size = len(offsets)
+    for row in range(size - 1):
+        for column in range(size - 1):
+            a = row * size + column + 1
             b = a + 1
-            c = a + points
+            c = a + size
             d = c + 1
             lines.append(f"f {a} {c} {b}")
             lines.append(f"f {b} {c} {d}")

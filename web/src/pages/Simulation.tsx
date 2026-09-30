@@ -1,7 +1,19 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api, type GeometryPayload, type SimulationResult } from "../lib/api";
-import { Failure, Loading, Panel, Stat, Tabs, Warnings } from "../components/Kit";
+import {
+  api,
+  type GeometryPayload,
+  type SimulationResult,
+  type TerrainMesh,
+} from "../lib/api";
+import {
+  Failure,
+  Loading,
+  Panel,
+  Stat,
+  Tabs,
+  Warnings,
+} from "../components/Kit";
 import { Scene3D } from "../components/Scene3D";
 import { PlanView, SectionView } from "../components/PlanView";
 import { ConstructionView } from "../components/Construction";
@@ -58,35 +70,45 @@ export function Simulation({
   return (
     <div className="space-y-4">
       {!viewportOnly && (
-      <Panel
-        title="Simulation setup"
-        subtitle="EnergyPlus runs a free floating case for comfort and a conditioned case for remaining heating demand, then eight corner runs for the uncertainty band and one run of the reference design."
-      >
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat
-            label="Run period"
-            value={`${store.period.start} → ${store.period.end}`}
-            note="hourly, six timesteps per hour"
-          />
-          <Stat
-            label="Per surface output"
-            value={`${store.surfacePeriod.start} → ${store.surfacePeriod.end}`}
-            note="a representative window, not the whole period"
-          />
-          <Stat
-            label="Solver"
-            value={simulation ? `EnergyPlus ${simulation.energyplus_version}` : "EnergyPlus"}
-            note={simulation ? `${num(simulation.runtime_s, 1)} s` : "waiting"}
-          />
-          <Stat
-            label="Status"
-            value={simulating ? "running" : simulation ? "complete" : "idle"}
-            tone={simulating ? "solar" : simulation ? "good" : "neutral"}
-            note={simulation?.cached ? "served from cache" : undefined}
-          />
-        </div>
-        {error ? <div className="mt-3"><Failure error={error} /></div> : null}
-      </Panel>
+        <Panel
+          title="Simulation setup"
+          subtitle="EnergyPlus runs a free floating case for comfort and a conditioned case for remaining heating demand, then eight corner runs for the uncertainty band and one run of the reference design."
+        >
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Stat
+              label="Run period"
+              value={`${store.period.start} → ${store.period.end}`}
+              note="hourly, six timesteps per hour"
+            />
+            <Stat
+              label="Per surface output"
+              value={`${store.surfacePeriod.start} → ${store.surfacePeriod.end}`}
+              note="a representative window, not the whole period"
+            />
+            <Stat
+              label="Solver"
+              value={
+                simulation
+                  ? `EnergyPlus ${simulation.energyplus_version}`
+                  : "EnergyPlus"
+              }
+              note={
+                simulation ? `${num(simulation.runtime_s, 1)} s` : "waiting"
+              }
+            />
+            <Stat
+              label="Status"
+              value={simulating ? "running" : simulation ? "complete" : "idle"}
+              tone={simulating ? "solar" : simulation ? "good" : "neutral"}
+              note={simulation?.cached ? "served from cache" : undefined}
+            />
+          </div>
+          {error ? (
+            <div className="mt-3">
+              <Failure error={error} />
+            </div>
+          ) : null}
+        </Panel>
       )}
 
       {viewportOnly ? (
@@ -95,124 +117,136 @@ export function Simulation({
             <Loading label="building geometry…" />
           </div>
         ) : (
-          <Scene3D
-            immersiveChrome
-            geometry={geometry}
-            surfaces={preview ? null : surfaces}
-            sunPath={sunPath.data}
-            terrain={terrain.data}
-            airflow={preview ? null : simulation?.airflow}
-            designOverride={preview?.design ?? null}
-            badge={preview?.label ?? null}
-            mode={preview ? "construction" : store.displayMode}
-            onModeChange={store.setDisplayMode}
-            hourIndex={index}
-            onHourChange={store.setHourIndex}
-          />
-        )
-      ) : (
-      <Panel
-        title="The geometry that was simulated"
-        subtitle="Parametric, not a render. It rebuilds from your inputs, and the face names are the simulator's surface identifiers, so a painted value sits on the surface it belongs to."
-        right={
-          view === "3d view" ? undefined : (
-          <div className="flex gap-1">
-            {(["construction", "surface_temperature", "incident_solar"] as const).map(
-              (mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => store.setDisplayMode(mode)}
-                  disabled={mode !== "construction" && !surfaces}
-                  className={`rounded-md border px-2.5 py-1 text-[11px] transition ${
-                    store.displayMode === mode
-                      ? "border-[var(--color-solar)] bg-[var(--color-solar)] text-white"
-                      : "border-[var(--color-line)] text-[var(--color-ink-dim)] disabled:opacity-40"
-                  }`}
-                >
-                  {mode === "construction"
-                    ? "Construction"
-                    : mode === "surface_temperature"
-                      ? "Surface temp."
-                      : "Incident solar"}
-                </button>
-              ),
-            )}
-          </div>
-          )
-        }
-      >
-        <Tabs tabs={VIEWS} active={view} onChange={setView} />
-
-        <div className="mt-3">
-          {!geometry ? (
-            <Loading label="building geometry…" />
-          ) : view === "3d view" ? (
+          <>
             <Scene3D
+              immersiveChrome
               geometry={geometry}
-              surfaces={surfaces}
+              surfaces={preview ? null : surfaces}
               sunPath={sunPath.data}
               terrain={terrain.data}
-              airflow={simulation?.airflow}
-              mode={store.displayMode}
+              airflow={preview ? null : simulation?.airflow}
+              designOverride={preview?.design ?? null}
+              badge={preview?.label ?? null}
+              mode={preview ? "construction" : store.displayMode}
               onModeChange={store.setDisplayMode}
               hourIndex={index}
               onHourChange={store.setHourIndex}
             />
-          ) : view === "plan view" ? (
-            <PlanView
-              geometry={geometry}
-              surfaces={surfaces}
-              hourIndex={index}
-              mode={store.displayMode}
-            />
-          ) : view === "sections" ? (
-            <div className="space-y-2">
+            <GroundNote terrain={terrain.data} />
+          </>
+        )
+      ) : (
+        <Panel
+          title="The geometry that was simulated"
+          subtitle="Parametric, not a render. It rebuilds from your inputs, and the face names are the simulator's surface identifiers, so a painted value sits on the surface it belongs to."
+          right={
+            view === "3d view" ? undefined : (
               <div className="flex gap-1">
-                {(["north-south", "east-west"] as const).map((item) => (
+                {(
+                  [
+                    "construction",
+                    "surface_temperature",
+                    "incident_solar",
+                  ] as const
+                ).map((mode) => (
                   <button
-                    key={item}
+                    key={mode}
                     type="button"
-                    onClick={() => setSectionAxis(item)}
-                    className={`rounded-md border px-2.5 py-1 text-[11px] ${
-                      sectionAxis === item
-                        ? "border-[var(--color-solar)] text-[var(--color-solar-ink)]"
-                        : "border-[var(--color-line)] text-[var(--color-ink-dim)]"
+                    onClick={() => store.setDisplayMode(mode)}
+                    disabled={mode !== "construction" && !surfaces}
+                    className={`rounded-md border px-2.5 py-1 text-[11px] transition ${
+                      store.displayMode === mode
+                        ? "border-[var(--color-solar)] bg-[var(--color-solar)] text-white"
+                        : "border-[var(--color-line)] text-[var(--color-ink-dim)] disabled:opacity-40"
                     }`}
                   >
-                    Section {item === "north-south" ? "A–A" : "B–B"} ({item})
+                    {mode === "construction"
+                      ? "Construction"
+                      : mode === "surface_temperature"
+                        ? "Surface temp."
+                        : "Incident solar"}
                   </button>
                 ))}
               </div>
-              <SectionView
+            )
+          }
+        >
+          <Tabs tabs={VIEWS} active={view} onChange={setView} />
+
+          <div className="mt-3">
+            {!geometry ? (
+              <Loading label="building geometry…" />
+            ) : view === "3d view" ? (
+              <>
+                <Scene3D
+                  geometry={geometry}
+                  surfaces={surfaces}
+                  sunPath={sunPath.data}
+                  terrain={terrain.data}
+                  airflow={simulation?.airflow}
+                  mode={store.displayMode}
+                  onModeChange={store.setDisplayMode}
+                  hourIndex={index}
+                  onHourChange={store.setHourIndex}
+                />
+                <GroundNote terrain={terrain.data} />
+              </>
+            ) : view === "plan view" ? (
+              <PlanView
                 geometry={geometry}
                 surfaces={surfaces}
                 hourIndex={index}
                 mode={store.displayMode}
-                axis={sectionAxis}
               />
-            </div>
-          ) : design ? (
-            <ConstructionView design={design} materials={materials.data} />
-          ) : null}
-        </div>
-
-        {view !== "3d view" && hours.length > 0 && (
-          <div className="mt-3 flex items-center gap-3">
-            <input
-              type="range"
-              min={0}
-              max={hours.length - 1}
-              value={index}
-              onChange={(event) => store.setHourIndex(Number(event.target.value))}
-              className="flex-1"
-            />
-            <span className="tnum w-40 text-right text-xs text-[var(--color-ink-dim)]">
-              {hours[index]?.replace("T", " ")}
-            </span>
+            ) : view === "sections" ? (
+              <div className="space-y-2">
+                <div className="flex gap-1">
+                  {(["north-south", "east-west"] as const).map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => setSectionAxis(item)}
+                      className={`rounded-md border px-2.5 py-1 text-[11px] ${
+                        sectionAxis === item
+                          ? "border-[var(--color-solar)] text-[var(--color-solar-ink)]"
+                          : "border-[var(--color-line)] text-[var(--color-ink-dim)]"
+                      }`}
+                    >
+                      Section {item === "north-south" ? "A–A" : "B–B"} ({item})
+                    </button>
+                  ))}
+                </div>
+                <SectionView
+                  geometry={geometry}
+                  surfaces={surfaces}
+                  hourIndex={index}
+                  mode={store.displayMode}
+                  axis={sectionAxis}
+                />
+              </div>
+            ) : design ? (
+              <ConstructionView design={design} materials={materials.data} />
+            ) : null}
           </div>
-        )}
-      </Panel>
+
+          {view !== "3d view" && hours.length > 0 && (
+            <div className="mt-3 flex items-center gap-3">
+              <input
+                type="range"
+                min={0}
+                max={hours.length - 1}
+                value={index}
+                onChange={(event) =>
+                  store.setHourIndex(Number(event.target.value))
+                }
+                className="flex-1"
+              />
+              <span className="tnum w-40 text-right text-xs text-[var(--color-ink-dim)]">
+                {hours[index]?.replace("T", " ")}
+              </span>
+            </div>
+          )}
+        </Panel>
       )}
 
       {!viewportOnly && simulation && simulation.warnings.length > 0 && (
@@ -225,17 +259,41 @@ export function Simulation({
       )}
 
       {!viewportOnly && (
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={() => store.open("performance")}
-          disabled={!simulation}
-          className="rounded-md bg-[var(--color-solar)] px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
-        >
-          See the results →
-        </button>
-      </div>
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => store.open("performance")}
+            disabled={!simulation}
+            className="rounded-md bg-[var(--color-solar)] px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+          >
+            See the results →
+          </button>
+        </div>
       )}
     </div>
+  );
+}
+
+const STEEP_CUT_M = 3;
+
+function GroundNote({ terrain }: { terrain: TerrainMesh | undefined }) {
+  if (
+    !terrain ||
+    terrain.pad_cut_fill_m == null ||
+    terrain.ground_slope_deg == null
+  )
+    return null;
+  const steep = terrain.pad_cut_fill_m > STEEP_CUT_M;
+  return (
+    <p
+      className={`mt-2 text-xs ${steep ? "text-[var(--color-danger-ink)]" : "text-[var(--color-ink-faint)]"}`}
+    >
+      Ground slope {terrain.ground_slope_deg.toFixed(1)}° here. The shelter is
+      drawn on a levelled pad {terrain.pad_radius_m?.toFixed(0)} m round that
+      needs up to {terrain.pad_cut_fill_m.toFixed(1)} m of cut and fill.
+      {steep
+        ? " That is heavy earthwork on a steep spot; the siting map on the Climate tab shows flatter, sunnier ground nearby."
+        : ""}
+    </p>
   );
 }

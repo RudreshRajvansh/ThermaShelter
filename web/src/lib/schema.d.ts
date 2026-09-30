@@ -3970,6 +3970,14 @@ export interface components {
              * @default 0
              */
             vertex_count: number;
+            /** Pad Radius M */
+            pad_radius_m?: number | null;
+            /** Pad Blend M */
+            pad_blend_m?: number | null;
+            /** Pad Cut Fill M */
+            pad_cut_fill_m?: number | null;
+            /** Ground Slope Deg */
+            ground_slope_deg?: number | null;
         };
         /** UncertainRange */
         UncertainRange: {

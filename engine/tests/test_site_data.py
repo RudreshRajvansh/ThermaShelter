@@ -154,7 +154,11 @@ def test_terrain_obj_is_read_back_as_a_site_relative_mesh(tmp_path):
                     longitude_deg=77.547, elevation_m=3000.0, time_zone_h=5.5,
                     epw_path="weather/x.epw")
     mesh = load_terrain_obj(path, site)
-    assert mesh is not None and mesh.vertex_count == 51 * 51
+    assert mesh is not None and mesh.vertex_count > 51 * 51
+    points = np.asarray(mesh.positions).reshape(-1, 3)
+    corner = points[(points[:, 0] == -5000.0) & (points[:, 1] == -5000.0)]
+    original = [line for line in text.splitlines() if line.startswith("v -5000.0 -5000.0 ")]
+    assert corner[0, 2] == pytest.approx(float(original[0].split()[3]))
     assert mesh.derived_from_horizon is False
     assert mesh.elevation_min_m < 0.0 < mesh.elevation_max_m
     with pytest.raises(WeatherError):
@@ -246,3 +250,31 @@ def test_wind_direction_is_interpolated_through_north_not_south():
     back_speed, back_direction = wind_from_components(east, north)
     assert np.allclose(back_speed, 4.0)
     assert np.allclose(back_direction, [350.0, 10.0])
+
+
+def test_the_shelter_sits_on_a_levelled_pad_on_sloping_ground(tmp_path):
+    import math
+
+    import fixtures
+    from shelter_engine.terrain import PAD_BLEND_M, PAD_RADIUS_M, load_terrain_obj
+
+    offsets = np.linspace(-5000.0, 5000.0, 51)
+    east, north = np.meshgrid(offsets, offsets)
+    rise = 0.2 * north
+    lines = [f"v {x:.1f} {y:.1f} {z:.3f}" for x, y, z in zip(east.ravel(), north.ravel(),
+                                                             rise.ravel())]
+    for row in range(50):
+        for column in range(50):
+            a = row * 51 + column + 1
+            lines += [f"f {a} {a + 51} {a + 1}", f"f {a + 1} {a + 51} {a + 52}"]
+    path = tmp_path / "slope.obj"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    mesh = load_terrain_obj(path, fixtures.site("x.epw"))
+    points = np.asarray(mesh.positions).reshape(-1, 3)
+    distance = np.hypot(points[:, 0], points[:, 1])
+    assert np.allclose(points[distance <= PAD_RADIUS_M, 2], 0.0)
+    far = distance >= PAD_BLEND_M
+    assert np.allclose(points[far, 2], 0.2 * points[far, 1], atol=1e-6)
+    assert mesh.pad_cut_fill_m == pytest.approx(0.2 * PAD_RADIUS_M, rel=0.05)
+    assert mesh.ground_slope_deg == pytest.approx(math.degrees(math.atan(0.2)), abs=0.05)
+    assert mesh.vertex_count <= 40000 and "levelled pad" in mesh.note

@@ -751,6 +751,10 @@ class TerrainMesh(Frozen):
     site_elevation_m: float | None = None
     sample_spacing_m: float | None = None
     vertex_count: int = 0
+    pad_radius_m: float | None = None
+    pad_blend_m: float | None = None
+    pad_cut_fill_m: float | None = None
+    ground_slope_deg: float | None = None
 
 
 class ClimateMonth(Frozen):
