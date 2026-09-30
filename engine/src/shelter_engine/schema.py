@@ -1132,6 +1132,42 @@ class ComplianceSheet(Frozen):
     source: SourceRef
 
 
+class SitingCell(Frozen):
+    east_m: float
+    north_m: float
+    latitude_deg: float
+    longitude_deg: float
+    elevation_m: float
+    slope_deg: float = Field(ge=0.0, le=90.0)
+    aspect_deg: float = Field(ge=0.0, le=360.0)
+    solstice_sun_h: float = Field(ge=0.0, le=24.0)
+    winter_sun_h: float = Field(ge=0.0, le=24.0)
+    lost_to_terrain_h: float
+
+
+class SitingMap(Frozen):
+    site_id: str = Field(min_length=1)
+    half_width_m: float = Field(gt=0.0)
+    step_m: float = Field(gt=0.0)
+    columns: int = Field(ge=1)
+    cells: tuple[SitingCell, ...]
+    best: tuple[int, ...]
+    site_cell: int = Field(ge=0)
+    winter_from: date
+    winter_to: date
+    days_sampled: int = Field(ge=1)
+    flat_winter_sun_h: float = Field(ge=0.0)
+    source: SourceRef
+
+    @model_validator(mode="after")
+    def _grid(self) -> "SitingMap":
+        if len(self.cells) != self.columns * self.columns:
+            raise ValueError("the siting cells must fill a square grid")
+        if any(not 0 <= index < len(self.cells) for index in (*self.best, self.site_cell)):
+            raise ValueError("best spots and the site must be cells of the grid")
+        return self
+
+
 class BuildabilityMetrics(Frozen):
     wall_thickness_m: float
     surface_to_volume: float

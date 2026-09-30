@@ -19,6 +19,7 @@ import {
 import { api } from "../lib/api";
 import { Failure, Loading, Panel, Stat, Warnings } from "../components/Kit";
 import { DesignNight, WeatherReferee } from "../components/WeatherCheck";
+import { SitingMap } from "../components/SitingMap";
 import { useStore } from "../lib/store";
 import { num } from "../lib/format";
 
@@ -123,6 +124,7 @@ export function ClimateData() {
 
       {store.siteId && <WeatherReferee siteId={store.siteId} />}
       {store.siteId && <DesignNight siteId={store.siteId} />}
+      {store.siteId && <SitingMap siteId={store.siteId} />}
 
       <Panel
         title="Air pressure at altitude"

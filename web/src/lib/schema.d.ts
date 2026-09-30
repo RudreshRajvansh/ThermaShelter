@@ -755,6 +755,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sites/{site_id}/siting-map": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Siting */
+        get: operations["siting_api_sites__site_id__siting_map_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sites/{site_id}/referee": {
         parameters: {
             query?: never;
@@ -3442,6 +3459,61 @@ export interface components {
             /** Weather File */
             weather_file: string;
         };
+        /** SitingCell */
+        SitingCell: {
+            /** East M */
+            east_m: number;
+            /** North M */
+            north_m: number;
+            /** Latitude Deg */
+            latitude_deg: number;
+            /** Longitude Deg */
+            longitude_deg: number;
+            /** Elevation M */
+            elevation_m: number;
+            /** Slope Deg */
+            slope_deg: number;
+            /** Aspect Deg */
+            aspect_deg: number;
+            /** Solstice Sun H */
+            solstice_sun_h: number;
+            /** Winter Sun H */
+            winter_sun_h: number;
+            /** Lost To Terrain H */
+            lost_to_terrain_h: number;
+        };
+        /** SitingMap */
+        SitingMap: {
+            /** Site Id */
+            site_id: string;
+            /** Half Width M */
+            half_width_m: number;
+            /** Step M */
+            step_m: number;
+            /** Columns */
+            columns: number;
+            /** Cells */
+            cells: components["schemas"]["SitingCell"][];
+            /** Best */
+            best: number[];
+            /** Site Cell */
+            site_cell: number;
+            /**
+             * Winter From
+             * Format: date
+             */
+            winter_from: string;
+            /**
+             * Winter To
+             * Format: date
+             */
+            winter_to: string;
+            /** Days Sampled */
+            days_sampled: number;
+            /** Flat Winter Sun H */
+            flat_winter_sun_h: number;
+            source: components["schemas"]["SourceRef"];
+        };
         /** SolarNoon */
         SolarNoon: {
             /** Hour */
@@ -5211,6 +5283,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DesignNightPayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    siting_api_sites__site_id__siting_map_get: {
+        parameters: {
+            query?: {
+                half_width_m?: number;
+                step_m?: number;
+            };
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SitingMap"];
                 };
             };
             /** @description Validation Error */

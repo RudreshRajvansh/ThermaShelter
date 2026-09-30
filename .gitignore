@@ -33,3 +33,4 @@ data/solar_reference/n[0-9]*_*.json
 data/solar_reference/s[0-9]*_*.json
 data/weather/n[0-9]*_design_*.epw
 data/weather/s[0-9]*_design_*.epw
+data/siting/

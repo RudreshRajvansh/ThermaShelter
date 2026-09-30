@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from shelter_engine.errors import WeatherError
-from shelter_engine.schema import EngineWarning, Severity, SiteSpec
+from shelter_engine.schema import EngineWarning, Severity, SiteSpec, SitingMap
 from shelter_engine.weather import load_epw_cached
 
 from .. import sites as site_builder
@@ -134,6 +134,22 @@ def design_night(site_id: str,
             detail=(f"The design night for {site.name} is not on this machine and could "
                     f"not be built: {error}")) from error
     return DesignNightPayload.model_validate(payload)
+
+
+@router.get("/sites/{site_id}/siting-map", response_model=SitingMap, tags=["site"])
+def siting(site_id: str,
+           half_width_m: float = Query(default=1500.0, ge=250.0, le=4000.0),
+           step_m: float = Query(default=250.0, ge=50.0, le=1000.0),
+           context: Context = Depends(get_context)) -> SitingMap:
+    site = context.site(site_id)
+    try:
+        return site_builder.build_siting_map(site, Path(context.settings.data_dir),
+                                             half_width_m, step_m)
+    except site_builder.SiteUnavailable as error:
+        raise HTTPException(
+            status_code=503,
+            detail=(f"The siting map for {site.name} could not be built: {error}")) \
+            from error
 
 
 @router.get("/sites/{site_id}/referee", response_model=RefereePayload, tags=["site"])

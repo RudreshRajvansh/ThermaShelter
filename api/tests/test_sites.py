@@ -320,3 +320,21 @@ def test_a_site_outside_india_carries_the_comfort_model_caveat(world):
     finally:
         sites.fetch_json = fake_fetch
     assert any("DRDO" in note and "Outside India" in note for note in body["notes"])
+
+
+def test_siting_map_bounds_and_unavailable_terrain(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from shelter_api import sites as site_builder
+    from shelter_api.main import create_app
+
+    def unavailable(*args, **kwargs):
+        raise site_builder.SiteUnavailable("no elevation tiles on this machine")
+
+    monkeypatch.setattr(site_builder, "build_siting_map", unavailable)
+    with TestClient(create_app()) as client:
+        assert client.get("/api/sites/leh/siting-map?step_m=10").status_code == 422
+        assert client.get("/api/sites/leh/siting-map?half_width_m=9000").status_code == 422
+        response = client.get("/api/sites/leh/siting-map")
+        assert response.status_code == 503
+        assert "no elevation tiles" in response.json()["detail"]

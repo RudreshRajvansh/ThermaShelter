@@ -60,6 +60,7 @@ export type AirQualityMetrics = S["AirQualityMetrics"];
 export type MapdlReport = S["MapdlReport"];
 export type BillOfQuantities = S["BillOfQuantities"];
 export type ComplianceSheet = S["ComplianceSheet"];
+export type SitingMap = S["SitingMap"];
 export type MapdlSet = S["MapdlSet"];
 export type MapdlAbsent = S["MapdlAbsent"];
 export class ApiError extends Error {
@@ -217,6 +218,8 @@ export const api = {
     post<LeverPayload[]>("/api/search-levers", { design, site_id: siteId ?? null }),
   designNight: (siteId: string) =>
     get<DesignNightPayload>(`/api/sites/${encodeURIComponent(siteId)}/design-night`),
+  sitingMap: (siteId: string) =>
+    get<SitingMap>(`/api/sites/${encodeURIComponent(siteId)}/siting-map`),
   referee: (siteId: string) =>
     get<RefereePayload>(`/api/sites/${encodeURIComponent(siteId)}/referee`),
   endurance: (payload: { design: DesignSpec; site_id?: string | null; floor_c?: number }) =>

@@ -720,6 +720,31 @@ def build_design_night(site: SiteSpec, data_dir: Path, fetch: Fetcher | None = N
         return payload
 
 
+def build_siting_map(site: SiteSpec, data_dir: Path, half_width_m: float,
+                     step_m: float):
+    from shelter_engine.schema import SitingMap
+    from shelter_engine.siting import siting_map
+
+    data_dir = Path(data_dir)
+    target = data_dir / "siting" / f"{site.id}_{half_width_m:.0f}_{step_m:.0f}.json"
+    if target.is_file():
+        return SitingMap.model_validate_json(target.read_text(encoding="utf-8"))
+    with _lock_for(f"siting:{site.id}"):
+        if target.is_file():
+            return SitingMap.model_validate_json(target.read_text(encoding="utf-8"))
+        cache = data_dir / "terrain" / "tiles"
+        near = load_mosaic(site.latitude_deg, site.longitude_deg, NEAR_RADIUS_M, NEAR_ZOOM,
+                           cache)
+        far = load_mosaic(site.latitude_deg, site.longitude_deg, HORIZON_FARTHEST_M,
+                          FAR_ZOOM, cache)
+        try:
+            result = siting_map(site, near, far, NEAR_RADIUS_M, half_width_m, step_m)
+        except WeatherError as error:
+            raise SiteUnavailable(str(error)) from error
+        _write_text(target, result.model_dump_json(indent=1))
+        return result
+
+
 def build_referee(site: SiteSpec, data_dir: Path, fetch: Fetcher | None = None,
                   today: date | None = None) -> dict[str, Any]:
     from shelter_engine.referee import NASA_POWER_CITATION, NASA_POWER_NAME, referee
