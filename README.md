@@ -1,3 +1,5 @@
+© 2026 Rudresh Rajvansh and team. Licensed under AGPL-3.0.
+
 # Passive solar shelter design tool
 
 Takes a location and a candidate shelter, works out hour by hour what the temperature
